@@ -14,13 +14,61 @@
    - **ทำ** — สิ่งที่ต้องสร้างหรือแก้
    - **เข้าใจ** — concept และกลไกเบื้องหลังที่ต้องเข้าใจก่อนติ๊ก
    - **ตรวจ** — วิธีพิสูจน์ว่า step นี้ทำงานจริง
-3. เวลาให้ Claude ช่วย ให้สั่งทีละ step เช่น `ทำ Step 4.3` โดย Claude จะ
+3. แผนนี้ใช้ได้ทั้งเขียนเอง และใช้ AI coding agent ตัวไหนก็ได้ (เช่น Claude Code, GitHub Copilot, Cursor) ถ้าใช้ agent ให้สั่งทีละ step เช่น `ทำ Step 4.3 ตาม docs/learning-plan.md` และกำหนดให้ agent
    - อธิบายสิ่งที่จะทำและเหตุผลก่อนแก้โค้ด
    - implement **เฉพาะ step นั้น** ไม่ทำ step ถัดไปล่วงหน้า
    - อธิบายโค้ดที่เขียนทีละส่วน และบอกวิธีตรวจ
-4. ตรวจผ่านและเข้าใจแล้วจึงเปลี่ยน `- [ ]` เป็น `- [x]`
-5. ถ้ายังอธิบาย concept ของ step ด้วยคำพูดตัวเองไม่ได้ ให้ถามก่อนติ๊ก
-6. Commit ท้ายทุก Phase (มี step กำกับไว้)
+   - ใช้เวอร์ชันของ SDK และ library ที่ติดตั้งจริงในเครื่อง (ดูตาราง "เวอร์ชันที่ใช้จริง") ไม่เดาเวอร์ชันเอง
+4. **ห้ามเริ่ม Phase 1 จนกว่า Phase 0 ผ่านครบ** โดยเฉพาะการตรวจเครื่อง (0.3–0.10) เครื่องแต่ละคนมี OS, SDK และเวอร์ชัน library ต่างกัน คำสั่งหรือ API ในแผนอาจต้องปรับตามเครื่อง
+5. ตรวจผ่านและเข้าใจแล้วจึงเปลี่ยน `- [ ]` เป็น `- [x]`
+6. ถ้ายังอธิบาย concept ของ step ด้วยคำพูดตัวเองไม่ได้ ให้ถามก่อนติ๊ก
+7. Commit ท้ายทุก Phase (มี step กำกับไว้)
+
+### คำสั่งตั้งต้นสำหรับ AI agent (copy ไปใช้ได้)
+
+```text
+อ่าน docs/learning-plan.md, docs/demo-plan.md และ CONTEXT.md
+ก่อน implement ทุก step ให้ตรวจว่าเครื่องตรงกับ "Requirement ของเครื่อง" และตาราง "เวอร์ชันที่ใช้จริง"
+ถ้าไม่ตรง ให้หยุดและบอกฉันก่อน ห้ามติดตั้งหรืออัปเกรดอะไรเองโดยไม่ถาม
+ทำทีละ step เท่านั้น อธิบาย concept ก่อนเขียนโค้ด แล้วบอกวิธีตรวจผล
+ถ้า API ของ library ในเครื่องต่างจากที่แผนเขียน ให้ใช้ตามเวอร์ชันที่ติดตั้งและบอกฉันว่าต่างตรงไหน
+```
+
+## Requirement ของเครื่อง
+
+ตรวจทั้งหมดใน Phase 0 (step 0.3–0.10) ก่อนเริ่ม implement
+
+| รายการ | ต้องการ | คำสั่งตรวจ | หมายเหตุ |
+|---|---|---|---|
+| OS | Windows 10/11, macOS หรือ Linux | — | Script ใช้ PowerShell 7 ซึ่งรันได้ทุก OS |
+| .NET SDK | 10.0.x ขึ้นไป (major 10) | `dotnet --list-sdks` | ถ้ามีแค่ .NET 8/9 ต้องติดตั้ง .NET 10 หรือปรับ `TargetFramework` ทั้งแผน |
+| Docker Engine + Compose v2 | Docker Desktop หรือ Docker Engine ที่มี `docker compose` (ไม่ใช่ `docker-compose` แบบ v1) | `docker --version`, `docker compose version`, `docker info` | Docker ต้องเปิดอยู่ |
+| หน่วยความจำให้ Docker | อย่างน้อย 4 GB | `docker info` (ดู Total Memory) | Kafka + PostgreSQL + Kafka UI |
+| Port ว่าง | `5432`, `9092`, `8080` และ port ของ API | ดู step 0.6 | ถ้าชนให้เปลี่ยน port ฝั่งเครื่องใน compose |
+| Git | เวอร์ชันใดก็ได้ | `git --version` | |
+| PowerShell | 7.x (`pwsh`) | `pwsh --version` | ใช้กับ `scripts/*.ps1`; ถ้าไม่ใช้ให้เขียน script `.sh` แทน |
+| อินเทอร์เน็ต | เข้าถึง nuget.org และ Docker Hub | `dotnet nuget list source` | ถ้าอยู่หลัง proxy/บริษัท อาจต้องตั้ง NuGet source หรือ registry mirror |
+| Editor | VS Code, Visual Studio หรือ Rider | — | ต้องยิงไฟล์ `.http` ได้ หรือใช้ `curl` แทน |
+
+## เวอร์ชันที่ใช้จริง (กรอกระหว่างทำ)
+
+แผนนี้ไม่ตรึงเวอร์ชัน package ไว้ล่วงหน้า ให้ใช้เวอร์ชัน stable ล่าสุดที่รองรับ `net10.0` ณ วันที่ทำ แล้วบันทึกไว้ที่นี่ คนที่ทำตามภายหลังจะได้ผลเหมือนกัน
+
+| รายการ | กรอกใน step | เวอร์ชัน |
+|---|---|---|
+| .NET SDK | 0.3 | |
+| Docker / Compose | 0.4 | |
+| Image `postgres` | 2.1 | 17 |
+| Image `apache/kafka` | 2.6 | |
+| Image `kafbat/kafka-ui` | 2.10 | |
+| Npgsql | 3.1 | |
+| Dapper | 3.5 | |
+| Confluent.Kafka | 9.1 | |
+| CsvHelper | 11.1 | |
+| xUnit (จาก template) | 1.14 | |
+| Microsoft.AspNetCore.OpenApi (ถ้าใช้) | 5.10 | |
+
+ทุกครั้งที่เพิ่ม package ให้ดูเวอร์ชันด้วย `dotnet list package` แล้วกรอกตาราง ถ้า major version ต่างจากตัวที่เคยบันทึกไว้ ให้อ่าน release note ก่อน เพราะชื่อ method หรือ option อาจเปลี่ยน
 
 ## ความคืบหน้าราย Phase
 
@@ -74,7 +122,7 @@
 
 | เรื่อง | เลือก | เหตุผล |
 |---|---|---|
-| Runtime | .NET 10 SDK (เครื่องมี 10.0.401) | LTS ล่าสุด |
+| Runtime | .NET 10 SDK (10.0.x ขึ้นไป) | LTS ล่าสุด |
 | API | ASP.NET Core Web API (controllers) | รูปแบบมาตรฐานของ REST API ใน .NET: `[ApiController]`, routing ด้วย attribute, model binding |
 | Watcher / Worker | Worker Service template (`BackgroundService`) | รูปแบบมาตรฐานของ process ที่รันยาว |
 | Database | PostgreSQL 17 บน Docker | transactional DDL, `jsonb`, partial unique index |
@@ -150,15 +198,55 @@ mapping-demo/
   - เข้าใจ: ไฟล์หนึ่งไฟล์เดินทางผ่านอะไรบ้าง และตรงไหนที่ "ทำขนานกัน"
   - ตรวจ: วาด flow บนกระดาษจาก Input Folder ถึง Normalized Table ได้เอง
 
-- [ ] **0.3 ตรวจเครื่องมือ**
-  - ทำ: รัน `dotnet --list-sdks`, `docker --version`, `docker compose version`
-  - เข้าใจ: SDK ใช้ build/run, Docker ใช้รัน PostgreSQL กับ Kafka, Compose ใช้ประกาศหลาย container ในไฟล์เดียว
-  - ตรวจ: เห็น SDK 10.x และ Docker Desktop กำลังรันอยู่
+Step 0.3–0.10 คือการตรวจเครื่องตาม "Requirement ของเครื่อง" ถ้าข้อไหนไม่ผ่าน ให้แก้เครื่องหรือปรับแผนก่อน อย่าเริ่ม Phase 1
 
-- [ ] **0.4 เตรียม VS Code**
-  - ทำ: ติดตั้ง extension C# Dev Kit และ REST Client (ใช้ยิงไฟล์ `.http`)
-  - เข้าใจ: C# Dev Kit ให้ IntelliSense และ debugger; ไฟล์ `.http` เก็บ request ไว้ใน repo ทำซ้ำได้
-  - ตรวจ: เปิดไฟล์ `.cs` แล้วมี IntelliSense
+- [ ] **0.3 ตรวจ .NET SDK**
+  - ทำ: รัน `dotnet --list-sdks` และ `dotnet --info`
+  - เข้าใจ: SDK ใช้ build และ run; เครื่องหนึ่งมีได้หลาย SDK ส่วน `dotnet --info` บอก OS และ architecture (x64/arm64) ที่ใช้อยู่
+  - ตรวจ: มี SDK 10.0.x อย่างน้อยหนึ่งตัว; กรอกเวอร์ชันในตาราง "เวอร์ชันที่ใช้จริง"
+  - ถ้าไม่ผ่าน: ติดตั้ง .NET 10 SDK จาก dotnet.microsoft.com หรือตกลงกันว่าจะใช้ major อื่นแล้วเปลี่ยน `net10.0` ทั้งแผน
+
+- [ ] **0.4 ตรวจ Docker และ Compose**
+  - ทำ: รัน `docker --version`, `docker compose version` และ `docker info`
+  - เข้าใจ: Docker รัน PostgreSQL กับ Kafka เป็น container; Compose v2 ใช้คำสั่ง `docker compose` (มีช่องว่าง) ถ้ามีแค่ `docker-compose` แบบเก่า syntax บางอย่างในแผนจะใช้ไม่ได้
+  - ตรวจ: `docker info` ไม่ error (แปลว่า engine เปิดอยู่) และ Total Memory อย่างน้อย 4 GB
+  - ถ้าไม่ผ่าน: เปิด Docker Desktop หรือเพิ่ม memory ใน Settings → Resources
+
+- [ ] **0.5 ทดลองดึง image และรัน container**
+  - ทำ: `docker run --rm hello-world`
+  - เข้าใจ: ตรวจว่าเครื่องดึง image จาก Docker Hub ได้ ถ้าอยู่หลัง proxy ของบริษัทอาจดึงไม่ได้
+  - ตรวจ: เห็นข้อความ `Hello from Docker!`
+
+- [ ] **0.6 ตรวจ port ที่ต้องใช้**
+  - ทำ: ตรวจว่า `5432`, `9092`, `8080` ยังว่าง
+    - Windows: `Get-NetTCPConnection -LocalPort 5432,9092,8080 -ErrorAction SilentlyContinue`
+    - macOS/Linux: `lsof -i :5432 -i :9092 -i :8080`
+  - เข้าใจ: ถ้าเครื่องมี PostgreSQL ติดตั้งอยู่แล้ว port 5432 จะชน container เปิดไม่ขึ้น หรือ .NET จะต่อไปผิดตัวโดยไม่รู้ตัว
+  - ตรวจ: ไม่มีผลลัพธ์ (port ว่าง); ถ้าชนให้จด port ใหม่ที่จะใช้ เช่น `15432:5432` และใช้ port นั้นใน connection string ทั้งแผน
+
+- [ ] **0.7 ตรวจ Git และ PowerShell**
+  - ทำ: `git --version` และ `pwsh --version`
+  - เข้าใจ: script ในแผน (`scripts/*.ps1`) เขียนด้วย PowerShell 7 ที่รันได้ทุก OS; Windows PowerShell 5.1 (`powershell`) ไม่ใช่ตัวเดียวกัน
+  - ตรวจ: มีทั้งสองคำสั่ง หรือตกลงว่าจะเขียน script เป็น `.sh` แทน
+
+- [ ] **0.8 ตรวจการเข้าถึง NuGet**
+  - ทำ: `dotnet nuget list source` แล้วลองสร้าง project ทดสอบนอก repo และ `dotnet add package Dapper` แล้วลบทิ้ง
+  - เข้าใจ: package ทั้งหมดในแผนมาจาก nuget.org; เครื่องบริษัทบางที่ตั้ง source ภายในไว้ package อาจไม่มีหรือเวอร์ชันไม่ตรง
+  - ตรวจ: add package สำเร็จ
+
+- [ ] **0.9 ตรวจ template ที่แผนใช้**
+  - ทำ: `dotnet new list` ดูว่ามี `webapi`, `worker`, `classlib`, `xunit`, `sln`, `globaljson` และ `dotnet new webapi --help` ดูว่ามี option `--use-controllers` และ `--no-openapi`
+  - เข้าใจ: ชื่อ template และ option เปลี่ยนได้ระหว่างเวอร์ชัน SDK ตรวจก่อนจะได้ไม่ติดกลาง Phase 1
+  - ตรวจ: มีครบ; ถ้าไม่มี option ไหนให้จดไว้ และปรับคำสั่งใน Phase 1
+
+- [ ] **0.10 เตรียม editor**
+  - ทำ: ใช้ VS Code (ติดตั้ง C# Dev Kit และ REST Client), Visual Studio หรือ Rider ก็ได้
+  - เข้าใจ: ต้องมี IntelliSense, debugger และยิงไฟล์ `.http` ได้ ถ้า editor ยิง `.http` ไม่ได้ให้ใช้ `curl` แทน
+  - ตรวจ: เปิดไฟล์ `.cs` แล้วมี IntelliSense และตั้ง breakpoint ได้
+
+- [ ] **0.11 สรุปผลตรวจเครื่อง**
+  - ทำ: กรอกตาราง "เวอร์ชันที่ใช้จริง" ส่วนของ SDK/Docker และจดสิ่งที่ต่างจากแผน (เช่น port ที่เปลี่ยน, OS, script ที่ใช้ `.sh`)
+  - ตรวจ: ทุกข้อใน "Requirement ของเครื่อง" ผ่าน หรือมีทางแก้ที่ตกลงแล้ว
 
 ---
 
@@ -175,8 +263,8 @@ mapping-demo/
   - ตรวจ: เปิด `MappingDemo.slnx` แล้วเห็นว่ายังว่าง
 
 - [ ] **1.3 ตรึงเวอร์ชัน SDK ด้วย `global.json`**
-  - ทำ: `dotnet new globaljson --sdk-version 10.0.401 --roll-forward latestFeature`
-  - เข้าใจ: ถ้าเครื่องมีหลาย SDK ไฟล์นี้กำหนดว่า repo ใช้ตัวไหน `latestFeature` ยอมให้ใช้ patch/feature ที่ใหม่กว่าใน major เดียวกัน
+  - ทำ: `dotnet new globaljson --sdk-version <เวอร์ชันจาก 0.3 เช่น 10.0.100> --roll-forward latestFeature`
+  - เข้าใจ: ถ้าเครื่องมีหลาย SDK ไฟล์นี้กำหนดว่า repo ใช้ตัวไหน `latestFeature` ยอมให้ใช้ patch/feature ที่ใหม่กว่าใน major เดียวกัน ถ้าตั้งเวอร์ชันสูงกว่าที่เพื่อนร่วมทีมมี `dotnet` จะ error ทันที จึงควรใส่เวอร์ชันต่ำสุดที่ทุกคนมี (เช่น `10.0.100`)
   - ตรวจ: `dotnet --version` ที่ root แสดง 10.0.x
 
 - [ ] **1.4 สร้าง `Directory.Build.props`**
@@ -316,7 +404,7 @@ mapping-demo/
 ## Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 
 - [ ] **3.1 เพิ่ม Npgsql เข้า Shared**
-  - ทำ: `dotnet add src/MappingDemo.Shared package Npgsql`
+  - ทำ: `dotnet add src/MappingDemo.Shared package Npgsql` แล้วกรอกเวอร์ชันในตาราง "เวอร์ชันที่ใช้จริง" (ทำแบบเดียวกันทุกครั้งที่เพิ่ม package)
   - เข้าใจ: Npgsql คือ ADO.NET provider ของ PostgreSQL; `PackageReference` ใน Shared ถูกส่งต่อให้ project ที่อ้าง Shared (transitive)
   - ตรวจ: `dotnet build` ผ่าน
 
@@ -836,8 +924,8 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 - [ ] **12.6 ย้ายไม่ได้**
   - ทำ: retry 3 ครั้งพร้อมหน่วง แล้วตั้ง `ArchiveFailed`
-  - เข้าใจ: บน Windows ไฟล์ที่โปรแกรมอื่นเปิดอยู่ย้ายไม่ได้; สถานะ archive แยกจาก normalization จึงไม่กระทบงานแถว
-  - ตรวจ: เปิดไฟล์ค้างใน Excel ระหว่างนำเข้า ได้ `ArchiveFailed` แต่ normalize ยังเดินต่อ
+  - เข้าใจ: บน Windows ไฟล์ที่โปรแกรมอื่นเปิดล็อกไว้ย้ายไม่ได้ ส่วน macOS/Linux ปกติย้ายได้แม้ไฟล์เปิดอยู่; สถานะ archive แยกจาก normalization จึงไม่กระทบงานแถว
+  - ตรวจ: Windows — เปิดไฟล์ค้างใน Excel ระหว่างนำเข้า; macOS/Linux — ตั้ง `ArchiveRoot` ให้อยู่ในโฟลเดอร์ที่ไม่มีสิทธิ์เขียนชั่วคราว ได้ `ArchiveFailed` แต่ normalize ยังเดินต่อ
 
 - [ ] **12.7 Commit Phase 12**
   - ทำ: commit `feat(worker): archive imported files`
