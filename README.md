@@ -11,7 +11,7 @@
 - [คำศัพท์ของระบบ](CONTEXT.md)
 
 ดาวน์โหลดไฟล์ `.drawio` แล้วเปิดด้วย diagrams.net หรือ draw.io Desktop เพื่อดูและแก้ไข diagram
-หน้าแรกเริ่มจากรับไฟล์ โดย Import File Worker อยู่ซ้ายสุด ตามด้วย normalization, retry/reprocess และ configuration
+หน้า 01 Main Flow เรียง lifeline ซ้าย→ขวาตามลำดับงาน: Input Folder → Watcher → Kafka file → Import → Source/Outbox → Dispatcher → Kafka row → Normalize → Normalized → Archive; ตามด้วยหน้า retry/reprocess และ configuration
 
 ## Flow ที่ตกลงไว้
 
