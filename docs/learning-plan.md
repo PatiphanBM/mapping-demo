@@ -15,6 +15,8 @@
    - **เข้าใจ** — concept และกลไกเบื้องหลังที่ต้องเข้าใจก่อนติ๊ก
    - **ตรวจ** — วิธีพิสูจน์ว่า step นี้ทำงานจริง
 3. แผนนี้ใช้ได้ทั้งเขียนเอง และใช้ AI coding agent ตัวไหนก็ได้ (เช่น Claude Code, GitHub Copilot, Cursor) ถ้าใช้ agent ให้สั่งทีละ step เช่น `ทำ Step 4.3 ตาม docs/learning-plan.md` และกำหนดให้ agent
+   - ถ้าสั่งระดับ Phase เช่น `เริ่ม Phase 1` ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จของ Phase นั้น (เช่น 1.1) แล้วหยุด ไม่ทำทั้ง Phase ในคำสั่งเดียว
+   - ถ้าสั่ง Step ที่ระบุเลขไว้ ให้ทำเฉพาะ step นั้น เมื่ออธิบายและตรวจผลเสร็จ ให้รอคำสั่งใหม่ก่อนเริ่ม step ถัดไป
    - อธิบายสิ่งที่จะทำและเหตุผลก่อนแก้โค้ด
    - implement **เฉพาะ step นั้น** ไม่ทำ step ถัดไปล่วงหน้า
    - อธิบายโค้ดที่เขียนทีละส่วน และบอกวิธีตรวจ
@@ -22,7 +24,7 @@
 4. **ห้ามเริ่ม Phase 1 จนกว่า Phase 0 ผ่านครบ** โดยเฉพาะการตรวจเครื่อง (0.3–0.10) เครื่องแต่ละคนมี OS, SDK และเวอร์ชัน library ต่างกัน คำสั่งหรือ API ในแผนอาจต้องปรับตามเครื่อง
 5. ตรวจผ่านและเข้าใจแล้วจึงเปลี่ยน `- [ ]` เป็น `- [x]`
 6. ถ้ายังอธิบาย concept ของ step ด้วยคำพูดตัวเองไม่ได้ ให้ถามก่อนติ๊ก
-7. Commit ท้ายทุก Phase (มี step กำกับไว้)
+7. Step Commit ท้ายแต่ละ Phase เป็นงานที่ผู้ใช้ตัดสินใจและสั่งแยกต่างหาก **AI agent ห้ามสร้าง commit เองเด็ดขาด** คำสั่งให้เริ่ม Phase หรือทำ Step Commit ไม่ถือเป็นคำสั่งให้ agent รัน `git commit`; ให้สรุปสิ่งที่เปลี่ยนและรอคำสั่ง commit ที่ชัดเจนจากผู้ใช้
 
 ### คำสั่งตั้งต้นสำหรับ AI agent (copy ไปใช้ได้)
 
@@ -30,7 +32,9 @@
 อ่าน docs/learning-plan.md, docs/demo-plan.md และ CONTEXT.md
 ก่อน implement ทุก step ให้ตรวจว่าเครื่องตรงกับ "Requirement ของเครื่อง" และตาราง "เวอร์ชันที่ใช้จริง"
 ถ้าไม่ตรง ให้หยุดและบอกฉันก่อน ห้ามติดตั้งหรืออัปเกรดอะไรเองโดยไม่ถาม
-ทำทีละ step เท่านั้น อธิบาย concept ก่อนเขียนโค้ด แล้วบอกวิธีตรวจผล
+ถ้าฉันสั่งเริ่ม Phase ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จ แล้วหยุดรอคำสั่งใหม่ ห้ามทำทั้ง Phase ในครั้งเดียว
+ถ้าฉันสั่ง Step ที่ระบุเลข ให้ทำเฉพาะ step นั้น อธิบาย concept ก่อนเขียนโค้ด แล้วบอกวิธีตรวจผล
+ห้ามสร้าง git commit เอง แม้แผนมี Step Commit; รอให้ฉันสั่ง commit แยกต่างหากอย่างชัดเจน
 ถ้า API ของ library ในเครื่องต่างจากที่แผนเขียน ให้ใช้ตามเวอร์ชันที่ติดตั้งและบอกฉันว่าต่างตรงไหน
 ```
 
@@ -40,24 +44,26 @@
 
 | รายการ | ต้องการ | คำสั่งตรวจ | หมายเหตุ |
 |---|---|---|---|
-| OS | Windows 10/11, macOS หรือ Linux | — | Script ใช้ PowerShell 7 ซึ่งรันได้ทุก OS |
-| .NET SDK | 10.0.x ขึ้นไป (major 10) | `dotnet --list-sdks` | ถ้ามีแค่ .NET 8/9 ต้องติดตั้ง .NET 10 หรือปรับ `TargetFramework` ทั้งแผน |
-| Docker Engine + Compose v2 | Docker Desktop หรือ Docker Engine ที่มี `docker compose` (ไม่ใช่ `docker-compose` แบบ v1) | `docker --version`, `docker compose version`, `docker info` | Docker ต้องเปิดอยู่ |
+| OS | Windows 10/11 | — | เครื่องที่ใช้ทำแผนนี้รัน Windows และใช้ PowerShell 7 |
+| .NET SDK | 8.0.x (major 8) | `dotnet --list-sdks` | ใช้ `net8.0` ตาม SDK ที่มีในเครื่อง |
+| Docker Engine + Compose plugin | Docker Desktop หรือ Docker Engine ที่มี `docker compose` (ไม่ใช่ `docker-compose` แบบ v1) | `docker --version`, `docker compose version`, `docker info` | Docker ต้องเปิดอยู่ |
 | หน่วยความจำให้ Docker | อย่างน้อย 4 GB | `docker info` (ดู Total Memory) | Kafka + PostgreSQL + Kafka UI |
 | Port ว่าง | `5432`, `9092`, `8080` และ port ของ API | ดู step 0.6 | ถ้าชนให้เปลี่ยน port ฝั่งเครื่องใน compose |
 | Git | เวอร์ชันใดก็ได้ | `git --version` | |
-| PowerShell | 7.x (`pwsh`) | `pwsh --version` | ใช้กับ `scripts/*.ps1`; ถ้าไม่ใช้ให้เขียน script `.sh` แทน |
+| PowerShell | 7.x (`pwsh`) | `pwsh --version` | ใช้กับ `scripts/*.ps1` |
 | อินเทอร์เน็ต | เข้าถึง nuget.org และ Docker Hub | `dotnet nuget list source` | ถ้าอยู่หลัง proxy/บริษัท อาจต้องตั้ง NuGet source หรือ registry mirror |
 | Editor | VS Code, Visual Studio หรือ Rider | — | ต้องยิงไฟล์ `.http` ได้ หรือใช้ `curl` แทน |
 
 ## เวอร์ชันที่ใช้จริง (กรอกระหว่างทำ)
 
-แผนนี้ไม่ตรึงเวอร์ชัน package ไว้ล่วงหน้า ให้ใช้เวอร์ชัน stable ล่าสุดที่รองรับ `net10.0` ณ วันที่ทำ แล้วบันทึกไว้ที่นี่ คนที่ทำตามภายหลังจะได้ผลเหมือนกัน
+แผนนี้ไม่ตรึงเวอร์ชัน package ไว้ล่วงหน้า ให้ใช้เวอร์ชัน stable ล่าสุดที่รองรับ `net8.0` ณ วันที่ทำ แล้วบันทึกไว้ที่นี่ คนที่ทำตามภายหลังจะได้ผลเหมือนกัน
 
 | รายการ | กรอกใน step | เวอร์ชัน |
 |---|---|---|
-| .NET SDK | 0.3 | |
-| Docker / Compose | 0.4 | |
+| .NET SDK | 0.3 | 8.0.400 |
+| Docker / Compose | 0.4 | Docker Desktop 4.91.0; Engine/CLI 29.8.0; Compose v5.5.1 |
+| WSL | 0.4 | 2.7.14.0 (WSL 2) |
+| PowerShell | 0.7 | 7.6.6 |
 | Image `postgres` | 2.1 | 17 |
 | Image `apache/kafka` | 2.6 | |
 | Image `kafbat/kafka-ui` | 2.10 | |
@@ -69,6 +75,8 @@
 | Microsoft.AspNetCore.OpenApi (ถ้าใช้) | 5.10 | |
 
 ทุกครั้งที่เพิ่ม package ให้ดูเวอร์ชันด้วย `dotnet list package` แล้วกรอกตาราง ถ้า major version ต่างจากตัวที่เคยบันทึกไว้ ให้อ่าน release note ก่อน เพราะชื่อ method หรือ option อาจเปลี่ยน
+
+สถานะเครื่อง 2026-09-22: WSL 2.7.14 ติดตั้งแล้ว; `wsl --status` แสดง default version 2 และ `docker info` เชื่อม Engine 29.8.0 (Linux) ได้ โดยมีหน่วยความจำ 8,162,787,328 bytes (ประมาณ 7.6 GiB) Compose ที่ติดมากับ Docker Desktop เป็น v5.5.1 และใช้คำสั่ง `docker compose` ได้ จึงปรับ Requirement จากการระบุ v2 เป็น Compose plugin ตามความสามารถที่ต้องใช้จริง
 
 ## ความคืบหน้าราย Phase
 
@@ -122,7 +130,7 @@
 
 | เรื่อง | เลือก | เหตุผล |
 |---|---|---|
-| Runtime | .NET 10 SDK (10.0.x ขึ้นไป) | LTS ล่าสุด |
+| Runtime | .NET 8 SDK (8.0.400) | ใช้เวอร์ชันที่ติดตั้งอยู่ในเครื่องตามที่ตกลง |
 | API | ASP.NET Core Web API (controllers) | รูปแบบมาตรฐานของ REST API ใน .NET: `[ApiController]`, routing ด้วย attribute, model binding |
 | Watcher / Worker | Worker Service template (`BackgroundService`) | รูปแบบมาตรฐานของ process ที่รันยาว |
 | Database | PostgreSQL 17 บน Docker | transactional DDL, `jsonb`, partial unique index |
@@ -153,7 +161,7 @@ Infrastructure ทุกตัวรันเป็น container บนเคร
 
 ```text
 mapping-demo/
-├─ MappingDemo.slnx
+├─ MappingDemo.sln
 ├─ global.json
 ├─ Directory.Build.props
 ├─ docker-compose.yml
@@ -188,46 +196,46 @@ mapping-demo/
 
 ## Phase 0 — เตรียมความเข้าใจและเครื่อง
 
-- [ ] **0.1 อ่านคำศัพท์ของระบบ**
+- [x] **0.1 อ่านคำศัพท์ของระบบ**
   - ทำ: อ่าน [CONTEXT.md](../CONTEXT.md) ทั้งไฟล์
   - เข้าใจ: ความต่างของ Source Table กับ Normalized Table, File Import Job กับ Row Normalization Job, Retry กับ Reprocess
   - ตรวจ: อธิบายคู่คำทั้ง 3 คู่ด้วยคำพูดตัวเองได้ โดยไม่เปิดเอกสาร
 
-- [ ] **0.2 ไล่ flow หลักจาก sequence diagram**
+- [x] **0.2 ไล่ flow หลักจาก sequence diagram**
   - ทำ: เปิด [mapping-demo-sequence.drawio](diagrams/mapping-demo-sequence.drawio) หน้า 01 Main Flow แล้วอ่านคู่กับ "ผลต่อวงจรงาน" ใน demo-plan
   - เข้าใจ: ไฟล์หนึ่งไฟล์เดินทางผ่านอะไรบ้าง และตรงไหนที่ "ทำขนานกัน"
   - ตรวจ: วาด flow บนกระดาษจาก Input Folder ถึง Normalized Table ได้เอง
 
 Step 0.3–0.10 คือการตรวจเครื่องตาม "Requirement ของเครื่อง" ถ้าข้อไหนไม่ผ่าน ให้แก้เครื่องหรือปรับแผนก่อน อย่าเริ่ม Phase 1
 
-- [ ] **0.3 ตรวจ .NET SDK**
+- [x] **0.3 ตรวจ .NET SDK**
   - ทำ: รัน `dotnet --list-sdks` และ `dotnet --info`
   - เข้าใจ: SDK ใช้ build และ run; เครื่องหนึ่งมีได้หลาย SDK ส่วน `dotnet --info` บอก OS และ architecture (x64/arm64) ที่ใช้อยู่
-  - ตรวจ: มี SDK 10.0.x อย่างน้อยหนึ่งตัว; กรอกเวอร์ชันในตาราง "เวอร์ชันที่ใช้จริง"
-  - ถ้าไม่ผ่าน: ติดตั้ง .NET 10 SDK จาก dotnet.microsoft.com หรือตกลงกันว่าจะใช้ major อื่นแล้วเปลี่ยน `net10.0` ทั้งแผน
+  - ตรวจ: มี SDK 8.0.x อย่างน้อยหนึ่งตัว; กรอกเวอร์ชันในตาราง "เวอร์ชันที่ใช้จริง"
+  - ถ้าไม่ผ่าน: ติดตั้ง .NET 8 SDK จาก dotnet.microsoft.com หรือตกลงกันว่าจะใช้ major อื่นแล้วเปลี่ยน `net8.0` ทั้งแผน
 
-- [ ] **0.4 ตรวจ Docker และ Compose**
+- [x] **0.4 ตรวจ Docker และ Compose**
   - ทำ: รัน `docker --version`, `docker compose version` และ `docker info`
-  - เข้าใจ: Docker รัน PostgreSQL กับ Kafka เป็น container; Compose v2 ใช้คำสั่ง `docker compose` (มีช่องว่าง) ถ้ามีแค่ `docker-compose` แบบเก่า syntax บางอย่างในแผนจะใช้ไม่ได้
+  - เข้าใจ: Docker รัน PostgreSQL กับ Kafka เป็น container; Compose plugin ใช้คำสั่ง `docker compose` (มีช่องว่าง) ถ้ามีแค่ `docker-compose` แบบเก่า syntax บางอย่างในแผนจะใช้ไม่ได้
   - ตรวจ: `docker info` ไม่ error (แปลว่า engine เปิดอยู่) และ Total Memory อย่างน้อย 4 GB
   - ถ้าไม่ผ่าน: เปิด Docker Desktop หรือเพิ่ม memory ใน Settings → Resources
 
-- [ ] **0.5 ทดลองดึง image และรัน container**
+- [x] **0.5 ทดลองดึง image และรัน container**
   - ทำ: `docker run --rm hello-world`
   - เข้าใจ: ตรวจว่าเครื่องดึง image จาก Docker Hub ได้ ถ้าอยู่หลัง proxy ของบริษัทอาจดึงไม่ได้
   - ตรวจ: เห็นข้อความ `Hello from Docker!`
 
-- [ ] **0.6 ตรวจ port ที่ต้องใช้**
+- [x] **0.6 ตรวจ port ที่ต้องใช้**
   - ทำ: ตรวจว่า `5432`, `9092`, `8080` ยังว่าง
     - Windows: `Get-NetTCPConnection -LocalPort 5432,9092,8080 -ErrorAction SilentlyContinue`
     - macOS/Linux: `lsof -i :5432 -i :9092 -i :8080`
   - เข้าใจ: ถ้าเครื่องมี PostgreSQL ติดตั้งอยู่แล้ว port 5432 จะชน container เปิดไม่ขึ้น หรือ .NET จะต่อไปผิดตัวโดยไม่รู้ตัว
   - ตรวจ: ไม่มีผลลัพธ์ (port ว่าง); ถ้าชนให้จด port ใหม่ที่จะใช้ เช่น `15432:5432` และใช้ port นั้นใน connection string ทั้งแผน
 
-- [ ] **0.7 ตรวจ Git และ PowerShell**
+- [x] **0.7 ตรวจ Git และ PowerShell**
   - ทำ: `git --version` และ `pwsh --version`
-  - เข้าใจ: script ในแผน (`scripts/*.ps1`) เขียนด้วย PowerShell 7 ที่รันได้ทุก OS; Windows PowerShell 5.1 (`powershell`) ไม่ใช่ตัวเดียวกัน
-  - ตรวจ: มีทั้งสองคำสั่ง หรือตกลงว่าจะเขียน script เป็น `.sh` แทน
+  - เข้าใจ: script ในแผน (`scripts/*.ps1`) ใช้ PowerShell 7 (`pwsh`); Windows PowerShell 5.1 (`powershell`) เป็นอีกเวอร์ชันและอาจรองรับ syntax ต่างกัน
+  - ตรวจ: Git ใช้งานได้และ `pwsh --version` แสดง 7.x; ตรวจ script จริงเมื่อสร้างใน Phase ที่เกี่ยวข้อง
 
 - [ ] **0.8 ตรวจการเข้าถึง NuGet**
   - ทำ: `dotnet nuget list source` แล้วลองสร้าง project ทดสอบนอก repo และ `dotnet add package Dapper` แล้วลบทิ้ง
@@ -259,13 +267,13 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 - [ ] **1.2 สร้าง solution file**
   - ทำ: `dotnet new sln -n MappingDemo`
-  - เข้าใจ: solution ไม่มีโค้ด เป็นแค่รายการ project ที่ build ด้วยกัน .NET 10 สร้างไฟล์ `.slnx` (XML อ่านง่าย) แทน `.sln` แบบเก่า
-  - ตรวจ: เปิด `MappingDemo.slnx` แล้วเห็นว่ายังว่าง
+  - เข้าใจ: solution ไม่มีโค้ด เป็นแค่รายการ project ที่ build ด้วยกัน .NET 8 สร้างไฟล์ `.sln`
+  - ตรวจ: เปิด `MappingDemo.sln` แล้วเห็นว่ายังว่าง
 
 - [ ] **1.3 ตรึงเวอร์ชัน SDK ด้วย `global.json`**
-  - ทำ: `dotnet new globaljson --sdk-version <เวอร์ชันจาก 0.3 เช่น 10.0.100> --roll-forward latestFeature`
-  - เข้าใจ: ถ้าเครื่องมีหลาย SDK ไฟล์นี้กำหนดว่า repo ใช้ตัวไหน `latestFeature` ยอมให้ใช้ patch/feature ที่ใหม่กว่าใน major เดียวกัน ถ้าตั้งเวอร์ชันสูงกว่าที่เพื่อนร่วมทีมมี `dotnet` จะ error ทันที จึงควรใส่เวอร์ชันต่ำสุดที่ทุกคนมี (เช่น `10.0.100`)
-  - ตรวจ: `dotnet --version` ที่ root แสดง 10.0.x
+  - ทำ: `dotnet new globaljson --sdk-version <เวอร์ชันจาก 0.3 เช่น 8.0.400> --roll-forward latestFeature`
+  - เข้าใจ: ถ้าเครื่องมีหลาย SDK ไฟล์นี้กำหนดว่า repo ใช้ตัวไหน `latestFeature` ยอมให้ใช้ patch/feature ที่ใหม่กว่าใน major เดียวกัน ถ้าตั้งเวอร์ชันสูงกว่าที่เพื่อนร่วมทีมมี `dotnet` จะ error ทันที จึงควรใส่เวอร์ชันต่ำสุดที่ทุกคนมี (เช่น `8.0.400`)
+  - ตรวจ: `dotnet --version` ที่ root แสดง 8.0.x
 
 - [ ] **1.4 สร้าง `Directory.Build.props`**
   - ทำ: สร้างไฟล์ที่ root กำหนด `Nullable=enable` และ `ImplicitUsings=enable`
@@ -328,7 +336,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - ตรวจ: build ผ่าน 0 warning, `git status` ไม่เห็น `bin/` หรือ `obj/`
 
 - [ ] **1.16 Commit Phase 1**
-  - ทำ: commit ข้อความ `chore: scaffold solution and projects`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit ข้อความ `chore: scaffold solution and projects` เมื่อสั่งแยกต่างหาก
   - ตรวจ: `git log` เห็น commit
 
 ---
@@ -396,7 +404,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - ตรวจ: รัน script 2 ครั้งไม่ error และ Kafka UI เห็นทั้งสอง topic
 
 - [ ] **2.12 ลบ topic ทดสอบและ commit**
-  - ทำ: ลบ `demo.test` แล้ว commit `chore: add docker infrastructure`
+  - ทำ: ลบ `demo.test` สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `chore: add docker infrastructure` เมื่อสั่งแยกต่างหาก
   - ตรวจ: Kafka UI เหลือ 2 topic
 
 ---
@@ -454,7 +462,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - ตรวจ: เปิด API แล้ว `schema_migrations` ถูกสร้าง
 
 - [ ] **3.11 Commit Phase 3**
-  - ทำ: commit `feat: connect to postgres and add migration runner`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: connect to postgres and add migration runner` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -503,7 +511,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: unit test ครอบคลุมแต่ละกฎ
 
 - [ ] **4.9 Commit Phase 4**
-  - ทำ: commit `feat: add table definition model and DDL builder`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: add table definition model and DDL builder` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -559,7 +567,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: เปิด `/openapi/v1.json` เห็น `/tables`
 
 - [ ] **5.11 Commit Phase 5**
-  - ทำ: commit `feat(api): manage table definitions`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): manage table definitions` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -613,7 +621,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: `GET /mapping-configs/{id}` แสดง version 1 active
 
 - [ ] **6.11 Commit Phase 6**
-  - ทำ: commit `feat(api): manage mapping configs and versions`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): manage mapping configs and versions` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -648,7 +656,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: อ่าน signature แล้วอธิบายได้ว่าทำไมต้องรับ transaction
 
 - [ ] **7.6 Commit Phase 7**
-  - ทำ: commit `feat: add job tables and transactional outbox writer`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: add job tables and transactional outbox writer` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -724,7 +732,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: log อ่านแล้วรู้ว่าไฟล์ไหนได้ job อะไร
 
 - [ ] **8.15 Commit Phase 8**
-  - ทำ: commit `feat(watcher): detect csv files and create file import jobs`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(watcher): detect csv files and create file import jobs` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -765,7 +773,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: outbox ค้าง 2 แถวตอนปิด และถูกส่งหมดหลังเปิด
 
 - [ ] **9.8 Commit Phase 9**
-  - ทำ: commit `feat(worker): dispatch outbox messages to kafka`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): dispatch outbox messages to kafka` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -826,7 +834,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: `file_jobs.config_version_id` ยังเป็น version 1
 
 - [ ] **10.12 Commit Phase 10**
-  - ทำ: commit `feat(worker): consume file import jobs with delay and snapshot`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): consume file import jobs with delay and snapshot` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -892,7 +900,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: จำนวนแถวสุดท้ายเท่ากับ record ในไฟล์พอดี ไม่มีซ้ำ
 
 - [ ] **11.13 Commit Phase 11**
-  - ทำ: commit `feat(worker): import csv rows into source table`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): import csv rows into source table` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -928,7 +936,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ตรวจ: Windows — เปิดไฟล์ค้างใน Excel ระหว่างนำเข้า; macOS/Linux — ตั้ง `ArchiveRoot` ให้อยู่ในโฟลเดอร์ที่ไม่มีสิทธิ์เขียนชั่วคราว ได้ `ArchiveFailed` แต่ normalize ยังเดินต่อ
 
 - [ ] **12.7 Commit Phase 12**
-  - ทำ: commit `feat(worker): archive imported files`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): archive imported files` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -969,7 +977,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: test แถวที่ผิด 2 field ได้ 2 error
 
 - [ ] **13.8 Commit Phase 13**
-  - ทำ: commit `feat: add normalization conversion rules`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: add normalization conversion rules` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -1027,7 +1035,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: จำนวนแถวใน `norm_orders` ไม่เปลี่ยน
 
 - [ ] **14.12 Commit Phase 14**
-  - ทำ: commit `feat(worker): normalize source rows`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): normalize source rows` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -1053,7 +1061,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: แถวปกติมี 1 รายการ `Initial`
 
 - [ ] **15.5 Commit Phase 15**
-  - ทำ: commit `feat(api): query file job status and errors`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): query file job status and errors` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -1075,7 +1083,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: แถวที่ `Failed` จาก 14.8 เป็น `Done` และสถานะไฟล์คำนวณใหม่เป็น `Completed` หรือ `CompletedWithErrors` ตาม `Invalid` ที่เหลือ
 
 - [ ] **16.4 Commit Phase 16**
-  - ทำ: commit `feat: retry file import and row normalization`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: retry file import and row normalization` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -1110,7 +1118,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: ครั้งที่สองได้ 409
 
 - [ ] **17.7 Commit Phase 17**
-  - ทำ: commit `feat: reprocess file with selected config version`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: reprocess file with selected config version` เมื่อสั่งแยกต่างหาก
 
 ---
 
@@ -1131,7 +1139,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
   - ตรวจ: คนที่ไม่เคยเห็น repo ทำตาม README แล้วรันได้
 
 - [ ] **18.5 Commit สุดท้าย**
-  - ทำ: commit `docs: add demo scripts and run instructions`
+  - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `docs: add demo scripts and run instructions` เมื่อสั่งแยกต่างหาก
 
 ### เกณฑ์ตรวจรับ (จาก demo-plan)
 
