@@ -2,7 +2,7 @@
 
 โปรเจกต์สาธิตการนำข้อมูล CSV เข้า Source Table และแปลงเป็น Normalized Table ผ่าน Kafka
 
-**สถานะ:** มีแผนออกแบบและ sequence diagrams ยังไม่มี source code ของ service หรือ Docker Compose
+**สถานะ:** เริ่มสร้าง solution แล้ว โดย API มี Watcher เป็น hosted service; Worker และ Docker Compose ยังอยู่ในแผน
 
 ## เอกสารหลัก
 
@@ -30,9 +30,9 @@ Normalize เริ่มทำงานได้ตั้งแต่แต่�
 ## โครงสร้างที่วางแผน
 
 - **Config API:** ASP.NET Core Web API จัดการ mapping ทั้งสองขั้น รวมการสร้างตารางและเพิ่มคอลัมน์
-- **File Watcher:** เฝ้าดู folder ที่ผูกกับ mapping config และส่งงานไฟล์
+- **File Watcher:** hosted service ใน API เฝ้าดู folder ที่ผูกกับ mapping config และส่งงานไฟล์
 - **Mapping Worker:** import, outbox dispatcher และ normalize ภายใน process เดียว
-- **Infrastructure:** Kafka และ PostgreSQL บน Docker; .NET ทั้ง 3 process รันบนเครื่องเพื่อ debug
+- **Infrastructure:** Kafka และ PostgreSQL บน Docker; .NET ทั้ง 2 process (API และ Worker) รันบนเครื่องเพื่อ debug
 
 ใช้ config version ที่ตรึงเมื่อรับไฟล์ พร้อมป้องกันข้อมูลซ้ำ รองรับ retry ด้วย version เดิม และ reprocess ด้วย version ที่เลือก
 

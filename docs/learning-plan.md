@@ -64,6 +64,7 @@
 | Docker / Compose | 0.4 | Docker Desktop 4.91.0; Engine/CLI 29.8.0; Compose v5.5.1 |
 | WSL | 0.4 | 2.7.14.0 (WSL 2) |
 | PowerShell | 0.7 | 7.6.6 |
+| Microsoft.Extensions.Hosting (Worker template) | 1.11 | 8.0.0 |
 | Image `postgres` | 2.1 | 17 |
 | Image `apache/kafka` | 2.6 | |
 | Image `kafbat/kafka-ui` | 2.10 | |
@@ -71,7 +72,10 @@
 | Dapper | 3.5 | |
 | Confluent.Kafka | 9.1 | |
 | CsvHelper | 11.1 | |
-| xUnit (จาก template) | 1.14 | |
+| xUnit (จาก template) | 1.14 | 2.5.3 |
+| xunit.runner.visualstudio (จาก template) | 1.14 | 2.5.3 |
+| Microsoft.NET.Test.Sdk (จาก template) | 1.14 | 17.8.0 |
+| coverlet.collector (จาก template) | 1.14 | 6.0.0 |
 | Microsoft.AspNetCore.OpenApi (ถ้าใช้) | 5.10 | |
 
 ทุกครั้งที่เพิ่ม package ให้ดูเวอร์ชันด้วย `dotnet list package` แล้วกรอกตาราง ถ้า major version ต่างจากตัวที่เคยบันทึกไว้ ให้อ่าน release note ก่อน เพราะชื่อ method หรือ option อาจเปลี่ยน
@@ -105,23 +109,20 @@
 ## ภาพรวมระบบที่จะได้
 
 ```text
-                 ┌──────────────── PostgreSQL ────────────────┐
-                 │ metadata · file_jobs · row_jobs · outbox    │
-                 │ Source tables · Normalized tables · errors  │
-                 └───▲──────────────▲────────────────▲─────────┘
-                     │              │                │
-  HTTP ──► Config API│   input/ ──► │File Watcher    │ Mapping Worker
-          (ตาราง,     │   (partner)  │(job + outbox)  │ ├─ Outbox Dispatcher ──► Kafka
-           config,   │              │                │ ├─ File Import consumer ◄── mapping.file-import
-           retry)    │              │                │ └─ Normalize consumer   ◄── mapping.row-normalize
-                                                     │
-                                          data/staging/ (snapshot) · archive/
+  HTTP ──► API (Config + File Watcher) ──► PostgreSQL
+  input/ ──► File Watcher ใน API ───────► file_jobs + outbox
+                                            │
+             Mapping Worker ◄───────────────┘
+               ├─ Outbox Dispatcher ──► Kafka
+               ├─ File Import consumer ◄── mapping.file-import
+               └─ Normalize consumer   ◄── mapping.row-normalize
+                    │
+                    └─ PostgreSQL · data/staging/ (snapshot) · archive/
 ```
 
 | Process | คุยกับอะไร | ไม่คุยกับอะไร |
 |---|---|---|
-| Config API | PostgreSQL (รวมเขียน outbox สำหรับ retry/reprocess) | Kafka |
-| File Watcher | file system, PostgreSQL (file job + outbox) | Kafka |
+| API (Config + File Watcher) | PostgreSQL (รวม file job และ outbox), file system (input) | Kafka |
 | Mapping Worker | PostgreSQL, Kafka, file system (staging/archive) | — |
 
 จุดสำคัญที่จะเข้าใจตลอดแผน: **มีแค่ Worker ที่คุยกับ Kafka** เพราะทุกคำสั่งถูกบันทึกลง outbox ใน PostgreSQL ก่อน แล้ว dispatcher ใน Worker ค่อยส่งต่อ
@@ -132,7 +133,8 @@
 |---|---|---|
 | Runtime | .NET 8 SDK (8.0.400) | ใช้เวอร์ชันที่ติดตั้งอยู่ในเครื่องตามที่ตกลง |
 | API | ASP.NET Core Web API (controllers) | รูปแบบมาตรฐานของ REST API ใน .NET: `[ApiController]`, routing ด้วย attribute, model binding |
-| Watcher / Worker | Worker Service template (`BackgroundService`) | รูปแบบมาตรฐานของ process ที่รันยาว |
+| Watcher ใน API | `BackgroundService` ลงทะเบียนด้วย `AddHostedService` | เฝ้าไฟล์ใน process เดียวกับ API |
+| Worker | Worker Service template (`BackgroundService`) | process สำหรับ dispatcher, import และ normalize |
 | Database | PostgreSQL 17 บน Docker | transactional DDL, `jsonb`, partial unique index |
 | Queue | Kafka (image `apache/kafka`, โหมด KRaft) | ตามข้อกำหนด; เห็น partition และ consumer group |
 | ดู Kafka | Kafka UI (`kafbat/kafka-ui`) | ดู topic, partition, message ด้วยตา |
@@ -154,7 +156,7 @@ Infrastructure ทุกตัวรันเป็น container บนเคร
 - ใช้ image ทางการทั้งหมดจึงไม่ต้องเขียน `Dockerfile` สำหรับ infra; `docker-compose.yml` คือไฟล์เดียวที่ประกาศ container, port, volume และ healthcheck
 - ข้อมูล PostgreSQL อยู่ใน named volume จึงคงอยู่ข้ามการ restart; `docker compose down -v` คือการล้างเริ่มใหม่
 - คำสั่งหลัก: `docker compose up -d` (เปิด), `docker compose ps` (ดูสถานะ), `docker compose logs -f <service>` (ดู log), `docker compose down` (ปิด)
-- .NET ทั้ง 3 process (API, Watcher, Worker) **รันบนเครื่องด้วย `dotnet run` ไม่อยู่ใน Docker** ตามข้อตกลงใน demo-plan เพื่อให้ตั้ง breakpoint และ debug ได้ตรงๆ จึงต่อ infra ผ่าน `localhost`
+- .NET ทั้ง 2 process (API ที่มี Watcher, Worker) **รันบนเครื่องด้วย `dotnet run` ไม่อยู่ใน Docker** เพื่อให้ตั้ง breakpoint และ debug ได้ตรงๆ จึงต่อ infra ผ่าน `localhost`
 - สร้างทีละ service ใน Phase 2 และเรียนรู้แต่ละตัวก่อนเพิ่มตัวถัดไป
 
 ## โครงสร้าง repository เมื่อเสร็จ
@@ -168,8 +170,7 @@ mapping-demo/
 ├─ scripts/                 create-topics, generate-sample, reset-demo
 ├─ requests/                ไฟล์ .http สำหรับเรียก API
 ├─ src/
-│  ├─ MappingDemo.Api/
-│  ├─ MappingDemo.Watcher/
+│  ├─ MappingDemo.Api/       Config API และ FileWatcherService
 │  ├─ MappingDemo.Worker/
 │  └─ MappingDemo.Shared/   DB, migrations, contracts, กฎแปลงข้อมูล
 ├─ tests/
@@ -186,7 +187,7 @@ mapping-demo/
 |---|---|---|
 | A1 | ข้อมูลตัวอย่างเป็น `orders.csv`: `order_no`, `customer_name`, `order_date` (date), `amount` (decimal), `is_paid` (boolean), `note` (ไม่ required) | Phase 5–6, 18 |
 | A2 | Reprocess ทำทั้งไฟล์ (ทุก Source row ของ file job) ส่วนการเลือกบางแถวยังเปิดอยู่ใน demo-plan | Phase 17 |
-| A3 | API เป็นผู้รัน migration ตอนเริ่ม จึงต้องเปิด API ก่อน Watcher และ Worker | Phase 3 |
+| A3 | API เป็นผู้รัน migration ก่อนเริ่มรับ request และเริ่ม Watcher จึงต้องเปิด API ก่อน Worker | Phase 3 |
 | A4 | คอลัมน์ใน Normalized table เป็น nullable ใน DB; การบังคับ required ทำใน Worker | Phase 4 |
 | A5 | Scan ชดเชยข้าม path ที่ยังมี file job ค้าง (`Queued`/`Delaying`/`Importing`) เพื่อไม่ให้ไฟล์ที่ยังโตอยู่ได้ intake key ใหม่ | Phase 8 |
 | A6 | ทั้งสอง topic มี 3 partitions และ Worker เปิด consumer 3 ตัวต่อ topic | Phase 2, 10, 14 |
@@ -266,77 +267,78 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 ## Phase 1 — โครง solution เปล่า (ยังไม่มี dependency)
 
-- [ ] **1.1 สร้างโฟลเดอร์ `src` และ `tests`**
+- [x] **1.1 สร้างโฟลเดอร์ `src` และ `tests`**
   - ทำ: สร้างโฟลเดอร์ว่าง `src/` และ `tests/` ที่ root
   - เข้าใจ: แยกโค้ดที่ส่งขึ้นใช้งานออกจากโค้ดทดสอบ เป็น convention ของ .NET repo ส่วนใหญ่
   - ตรวจ: `ls` เห็นทั้งสองโฟลเดอร์
 
-- [ ] **1.2 สร้าง solution file**
+- [x] **1.2 สร้าง solution file**
   - ทำ: `dotnet new sln -n MappingDemo`
   - เข้าใจ: solution ไม่มีโค้ด เป็นแค่รายการ project ที่ build ด้วยกัน .NET 8 สร้างไฟล์ `.sln`
   - ตรวจ: เปิด `MappingDemo.sln` แล้วเห็นว่ายังว่าง
 
-- [ ] **1.3 ตรึงเวอร์ชัน SDK ด้วย `global.json`**
+- [x] **1.3 ตรึงเวอร์ชัน SDK ด้วย `global.json`**
   - ทำ: `dotnet new globaljson --sdk-version <เวอร์ชันจาก 0.3 เช่น 8.0.400> --roll-forward latestFeature`
   - เข้าใจ: ถ้าเครื่องมีหลาย SDK ไฟล์นี้กำหนดว่า repo ใช้ตัวไหน `latestFeature` ยอมให้ใช้ patch/feature ที่ใหม่กว่าใน major เดียวกัน ถ้าตั้งเวอร์ชันสูงกว่าที่เพื่อนร่วมทีมมี `dotnet` จะ error ทันที จึงควรใส่เวอร์ชันต่ำสุดที่ทุกคนมี (เช่น `8.0.400`)
   - ตรวจ: `dotnet --version` ที่ root แสดง 8.0.x
 
-- [ ] **1.4 สร้าง `Directory.Build.props`**
+- [x] **1.4 สร้าง `Directory.Build.props`**
   - ทำ: สร้างไฟล์ที่ root กำหนด `Nullable=enable` และ `ImplicitUsings=enable`
   - เข้าใจ: MSBuild อ่านไฟล์ชื่อนี้อัตโนมัติจากโฟลเดอร์แม่ของทุก project จึงตั้งค่ากลางได้ที่เดียว; Nullable ทำให้ compiler เตือนเมื่ออาจใช้ค่า `null`
   - ตรวจ: ยังไม่มี project ให้ตรวจ จะเห็นผลใน 1.5
 
-- [ ] **1.5 สร้าง ASP.NET Core Web API project ที่ไม่มี dependency**
+- [x] **1.5 สร้าง ASP.NET Core Web API project ที่ไม่มี dependency**
   - ทำ: `dotnet new webapi -n MappingDemo.Api -o src/MappingDemo.Api --use-controllers --no-openapi`
   - เข้าใจ: `--use-controllers` ได้โครงแบบ controller; `--no-openapi` ตัด package OpenAPI ออก project จึงไม่มี NuGet package เลย อ่าน `Program.cs` ทีละบรรทัด: `CreateBuilder` → `AddControllers` (ลงทะเบียน controller ใน DI) → `Build` → `MapControllers` (ผูก route จาก attribute) → `Run`
   - ตรวจ: เปิด `.csproj` แล้วไม่มี `PackageReference`
 
-- [ ] **1.6 เพิ่ม API เข้า solution**
+- [x] **1.6 เพิ่ม API เข้า solution**
   - ทำ: `dotnet sln add src/MappingDemo.Api`
   - เข้าใจ: การ add ทำให้ `dotnet build` ที่ root build project นี้ด้วย
   - ตรวจ: `dotnet sln list` เห็น project
 
-- [ ] **1.7 รัน API ครั้งแรกและอ่าน controller ตัวอย่าง**
+- [x] **1.7 รัน API ครั้งแรกและอ่าน controller ตัวอย่าง**
   - ทำ: `dotnet run --project src/MappingDemo.Api` แล้วเรียก `GET /weatherforecast`
   - เข้าใจ: Kestrel คือ web server ใน process; port มาจาก `Properties/launchSettings.json`; อ่าน `WeatherForecastController`: `[ApiController]`, `[Route("[controller]")]`, `[HttpGet]` และการที่ action คืน object แล้ว framework แปลงเป็น JSON ให้
   - ตรวจ: ได้ JSON รายการพยากรณ์อากาศ
 
-- [ ] **1.8 ลบตัวอย่างและสร้าง `HealthController`**
+- [x] **1.8 ลบตัวอย่างและสร้าง `HealthController`**
   - ทำ: ลบ `WeatherForecastController.cs` และ `WeatherForecast.cs` แล้วสร้าง `Controllers/HealthController.cs` ที่มี `[HttpGet]` คืน `Ok(new { status = "ok" })` ที่ route `health`
   - เข้าใจ: controller สืบทอด `ControllerBase` (ไม่ต้องใช้ `Controller` ที่มี view); `Ok(...)` คืน status 200; route มาจาก attribute ไม่ใช่ชื่อไฟล์
   - ตรวจ: `curl http://localhost:<port>/health` ได้ `{"status":"ok"}`
 
-- [ ] **1.9 สร้าง Watcher project**
-  - ทำ: `dotnet new worker -n MappingDemo.Watcher -o src/MappingDemo.Watcher` แล้ว `dotnet sln add`
-  - เข้าใจ: อ่าน `Program.cs` (Generic Host) และ `Worker.cs` (`BackgroundService.ExecuteAsync`) ว่า host เรียก `ExecuteAsync` ตอนเริ่มและยกเลิก `stoppingToken` ตอนหยุด
-  - ตรวจ: `dotnet build` ผ่าน
+- [x] **1.9 เพิ่ม Watcher เป็น hosted service ใน API**
+  - ทำ: สร้าง `Services/FileWatcherService.cs` จาก loop ของ Worker Service template แล้วลงทะเบียน `AddHostedService<FileWatcherService>()` ใน API; เอา project `MappingDemo.Watcher` ออกจาก solution
+  - เข้าใจ: WebApplication ใช้ Generic Host เช่นกัน จึงรัน `BackgroundService.ExecuteAsync` พร้อม HTTP server และยกเลิก `stoppingToken` เมื่อ API หยุด
+  - ตรวจ: `dotnet build` ผ่าน และ `dotnet sln list` ไม่มี Watcher project
 
-- [ ] **1.10 รัน Watcher และสังเกต graceful shutdown**
-  - ทำ: รัน Watcher แล้วกด Ctrl+C
-  - เข้าใจ: loop ใน `ExecuteAsync` ตรวจ `stoppingToken` และ `Task.Delay(..., stoppingToken)` ถูกยกเลิกทันทีเมื่อ shutdown นี่คือกลไกเดียวกับที่จะใช้ยกเลิกการหน่วง 30 วินาทีใน Phase 10
-  - ตรวจ: เห็น log ทุก 1 วินาที และ process หยุดทันทีเมื่อกด Ctrl+C
+- [x] **1.10 รัน API พร้อม Watcher และสังเกต graceful shutdown**
+  - ทำ: รัน API แล้วเรียก `/health` สังเกต log ของ `FileWatcherService` จากนั้นกด Ctrl+C
+  - เข้าใจ: API host เริ่ม HTTP server และ hosted service พร้อมกัน; loop ใน `ExecuteAsync` ตรวจ `stoppingToken` และ `Task.Delay(..., stoppingToken)` ถูกยกเลิกเมื่อ API หยุด
+  - ตรวจ: `/health` ตอบได้ขณะเห็น log ทุก 1 วินาที และ process หยุดเมื่อกด Ctrl+C
+  - ผลตรวจ 2026-09-22: `/health` ตอบ 200 พร้อม `{"status":"ok"}` ขณะเห็น log ทุก 1 วินาที; ผู้ใช้กด Ctrl+C ใน terminal แล้วกลับมารับคำสั่ง และ port 5181 ว่าง
 
-- [ ] **1.11 สร้าง Worker project**
+- [x] **1.11 สร้าง Worker project**
   - ทำ: `dotnet new worker -n MappingDemo.Worker -o src/MappingDemo.Worker` แล้ว `dotnet sln add`
-  - เข้าใจ: Watcher กับ Worker แยก process กันเพื่อ restart/debug แยกกันได้ และจำลองว่าในระบบจริงอยู่คนละเครื่องได้
-  - ตรวจ: `dotnet sln list` เห็น 3 project
+  - เข้าใจ: API (รวม Watcher) กับ Mapping Worker เป็นคนละ process; Worker คุยกับ Kafka ส่วน API ใช้ outbox
+  - ตรวจ: `dotnet sln list` เห็น 2 project และบันทึกเวอร์ชัน `Microsoft.Extensions.Hosting` จาก template
 
-- [ ] **1.12 สร้าง Shared class library**
+- [x] **1.12 สร้าง Shared class library**
   - ทำ: `dotnet new classlib -n MappingDemo.Shared -o src/MappingDemo.Shared` ลบ `Class1.cs` แล้ว `dotnet sln add`
   - เข้าใจ: โค้ดที่หลาย process ใช้ร่วมกัน (DB, message contract, กฎแปลงข้อมูล) อยู่ที่นี่
   - ตรวจ: build ผ่าน
 
-- [ ] **1.13 อ้างอิง Shared จากทั้ง 3 process**
-  - ทำ: `dotnet add src/MappingDemo.Api reference src/MappingDemo.Shared` และทำซ้ำกับ Watcher และ Worker
+- [x] **1.13 อ้างอิง Shared จากทั้ง 2 process**
+  - ทำ: `dotnet add src/MappingDemo.Api reference src/MappingDemo.Shared` และทำซ้ำกับ Worker
   - เข้าใจ: ทิศทาง dependency คือ app → Shared เท่านั้น ถ้า Shared อ้างกลับไปหา app จะเกิดวงวน
-  - ตรวจ: `.csproj` ของทั้ง 3 มี `ProjectReference`
+  - ตรวจ: `.csproj` ของ API และ Worker มี `ProjectReference`
 
-- [ ] **1.14 สร้าง test project**
+- [x] **1.14 สร้าง test project**
   - ทำ: `dotnet new xunit -n MappingDemo.Tests -o tests/MappingDemo.Tests`, add เข้า sln และ reference Shared
   - เข้าใจ: `[Fact]` คือ test หนึ่งกรณี; `dotnet test` หา test ทุกตัวใน solution
   - ตรวจ: `dotnet test` ผ่าน 1 test ตัวอย่าง
 
-- [ ] **1.15 Build ทั้ง solution**
+- [x] **1.15 Build ทั้ง solution**
   - ทำ: `dotnet build` ที่ root
   - เข้าใจ: `bin/` เก็บผล build, `obj/` เก็บไฟล์ระหว่างทาง ทั้งสองถูก ignore ใน `.gitignore` แล้ว
   - ตรวจ: build ผ่าน 0 warning, `git status` ไม่เห็น `bin/` หรือ `obj/`
@@ -464,7 +466,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 - [ ] **3.10 เรียก runner ตอน API เริ่ม (A3)**
   - ทำ: ใน `Program.cs` เรียก runner หลัง `Build()` ก่อน `Run()`
-  - เข้าใจ: ถ้า migration ล้ม API ต้องไม่เริ่มรับ request; ลำดับการเปิดระบบจึงเป็น Docker → API → Watcher → Worker
+  - เข้าใจ: ถ้า migration ล้ม API ต้องไม่เริ่มรับ request หรือเริ่ม Watcher; ลำดับการเปิดระบบจึงเป็น Docker → API → Worker
   - ตรวจ: เปิด API แล้ว `schema_migrations` ถูกสร้าง
 
 - [ ] **3.11 Commit Phase 3**
@@ -669,12 +671,12 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 ## Phase 8 — File Watcher
 
 - [ ] **8.1 เตรียม configuration ของ Watcher**
-  - ทำ: connection string, `Paths:InputRoot`, `Watcher:ConfigRefreshSeconds=10`, `Watcher:ScanIntervalSeconds=60` (A7) และเรียก `AddMappingDatabase`
-  - เข้าใจ: Watcher ใช้ extension จาก Shared ชุดเดียวกับ API จึงต่อ DB แบบเดียวกัน
-  - ตรวจ: Watcher เริ่มได้และ log ค่า options
+  - ทำ: เพิ่ม `Paths:InputRoot`, `Watcher:ConfigRefreshSeconds=10`, `Watcher:ScanIntervalSeconds=60` (A7) ใน configuration ของ API; ใช้ `AddMappingDatabase` ที่ API ลงทะเบียนไว้
+  - เข้าใจ: Watcher เป็น hosted service ใน API จึงใช้ configuration และ DB connection ของ API ชุดเดียวกัน
+  - ตรวจ: API เริ่มพร้อม Watcher และ log ค่า options
 
 - [ ] **8.2 ทดลอง `FileSystemWatcher` แบบดิบ**
-  - ทำ: ใน `Worker.cs` สร้าง watcher ที่โฟลเดอร์ `input/orders` log ทุก event (`Created`, `Changed`, `Renamed`, `Deleted`)
+  - ทำ: ใน `src/MappingDemo.Api/Services/FileWatcherService.cs` สร้าง watcher ที่โฟลเดอร์ `input/orders` log ทุก event (`Created`, `Changed`, `Renamed`, `Deleted`)
   - เข้าใจ: OS แจ้ง event ผ่าน callback บน thread pool ไม่ใช่ thread ของ `ExecuteAsync`
   - ตรวจ: สร้าง, แก้, rename, ลบไฟล์ แล้วเห็น event ตรงกัน
 
@@ -720,8 +722,8 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 - [ ] **8.11 Scan ตอนเริ่ม**
   - ทำ: ตอน Watcher เริ่ม ให้ enumerate `*.csv` ในทุกโฟลเดอร์ที่เฝ้าแล้วส่งเข้า channel เดียวกัน
-  - เข้าใจ: ไฟล์ที่มาถึงตอน Watcher ปิดอยู่ไม่มี event; ผ่าน intake ชุดเดียวกันจึงกันซ้ำด้วยกลไกเดิม
-  - ตรวจ: ปิด Watcher, drop ไฟล์, เปิดใหม่ แล้วเกิด job
+  - เข้าใจ: ไฟล์ที่มาถึงตอน API ปิดอยู่ไม่มี event; เมื่อ API เริ่มใหม่ Watcher ส่งไฟล์ผ่าน intake ชุดเดียวกันจึงกันซ้ำด้วยกลไกเดิม
+  - ตรวจ: ปิด API, drop ไฟล์, เปิด API ใหม่ แล้วเกิด job
 
 - [ ] **8.12 ข้าม path ที่ยังมีงานค้าง (A5)**
   - ทำ: ก่อน insert ตรวจว่ามี job ของ `config_id + original_path` ที่สถานะ `Queued`/`Delaying`/`Importing` หรือไม่ ถ้ามีให้ข้าม
@@ -746,7 +748,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 - [ ] **9.1 เพิ่ม Confluent.Kafka เฉพาะ Worker**
   - ทำ: `dotnet add src/MappingDemo.Worker package Confluent.Kafka` และตั้ง connection string + `Kafka:BootstrapServers=localhost:9092`
-  - เข้าใจ: Confluent.Kafka ห่อ librdkafka (native library) ไว้; ใส่ใน Worker เท่านั้นเพราะ API และ Watcher ไม่คุยกับ Kafka
+  - เข้าใจ: Confluent.Kafka ห่อ librdkafka (native library) ไว้; ใส่ใน Worker เท่านั้นเพราะ API ที่มี Watcher ไม่คุยกับ Kafka
   - ตรวจ: build ผ่าน
 
 - [ ] **9.2 ลงทะเบียน producer**
@@ -1141,7 +1143,7 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 - [ ] **18.3 ไล่เกณฑ์ตรวจรับครบทุกข้อ** (ตารางด้านล่าง)
 
 - [ ] **18.4 อัปเดต README**
-  - ทำ: เพิ่มวิธีรัน: ลำดับ Docker → API → Watcher → Worker และลิงก์แผนนี้
+  - ทำ: เพิ่มวิธีรัน: ลำดับ Docker → API (รวม Watcher) → Worker และลิงก์แผนนี้
   - ตรวจ: คนที่ไม่เคยเห็น repo ทำตาม README แล้วรันได้
 
 - [ ] **18.5 Commit สุดท้าย**

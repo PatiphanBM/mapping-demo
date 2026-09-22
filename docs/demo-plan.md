@@ -16,7 +16,8 @@ Sequence diagrams: [เปิดไฟล์ draw.io](diagrams/mapping-demo-sequ
 
 ## ข้อสรุปรอบที่ 1
 
-- ใช้ 3 process ใน solution เดียว: API, File Watcher และ Mapping Worker โดยต้องมี Kafka
+- ใช้ 2 process ใน solution เดียว: API (มี File Watcher เป็น hosted service) และ Mapping Worker โดยต้องมี Kafka
+- โปรเจกต์จริงรัน API หนึ่ง instance; เมื่อ API หยุด Watcher จะหยุดด้วย และการ scan ตอนเริ่มจะรับไฟล์ที่เข้ามาระหว่างหยุด
 - ไฟล์ข้อมูลเป็น CSV มี header และ encoding UTF-8
 - Pipeline: folder → watcher → Kafka → file-to-source mapping → Kafka → source-to-normalized mapping
 - ขั้นแรกมี API endpoint สำหรับ config การจับคู่ field จาก CSV ลง source table
@@ -32,7 +33,7 @@ Sequence diagrams: [เปิดไฟล์ draw.io](diagrams/mapping-demo-sequ
 - ต้องการแสดงแนวคิดการทำงานขนานและการเรียกทำงานแต่ละขั้นผ่าน Kafka; รายละเอียดตามข้อสรุปรอบที่ 3
 - ย้ายไฟล์ไป Archive folder หลังนำเข้า Source ครบ ตามข้อสรุปรอบที่ 4
 - เมื่อ normalize 100 แถวแล้วผิด 2 แถว ให้บันทึก 98 แถวที่ผ่าน ข้าม 2 แถวที่ผิด และบันทึก rownumber, field, สาเหตุ
-- รัน Kafka/PostgreSQL บน Docker และรัน .NET ทั้ง 3 process บนเครื่องเพื่อ debug
+- รัน Kafka/PostgreSQL บน Docker และรัน .NET ทั้ง 2 process บนเครื่องเพื่อ debug
 
 ## ข้อสรุปรอบที่ 3
 
@@ -121,7 +122,7 @@ flowchart LR
     C -.-> M2
 ```
 
-M1 และ M2 เป็นสองส่วนภายใน Mapping Worker process เดียวตามข้อจำกัด 3 process
+M1 และ M2 เป็นสองส่วนภายใน Mapping Worker process เดียว; API ที่มี File Watcher เป็นอีก process
 ทั้งสองขั้นใช้ config ที่จัดการผ่าน API
 topic คือ `mapping.file-import` และ `mapping.row-normalize` ตามข้อสรุปรอบที่ 6; ส่งต่อหลัง commit ผ่าน outbox
 
