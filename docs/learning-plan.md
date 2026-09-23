@@ -68,8 +68,10 @@
 | Image `postgres` | 2.1 | 17 |
 | Image `apache/kafka` | 2.6 | 4.3.1 |
 | Image `kafbat/kafka-ui` | 2.10 | 1.5.0 |
-| Npgsql | 3.1 | |
-| Dapper | 3.5 | |
+| Npgsql | 3.1 | 10.0.3 |
+| Microsoft.Extensions.Configuration.Abstractions | 3.3 | 8.0.0 |
+| Microsoft.Extensions.DependencyInjection.Abstractions | 3.3 | 8.0.2 |
+| Dapper | 3.5 | 2.1.89 |
 | Confluent.Kafka | 9.1 | |
 | CsvHelper | 11.1 | |
 | xUnit (จาก template) | 1.14 | 2.5.3 |
@@ -86,7 +88,7 @@
 
 - [x] Phase 0 — เตรียมความเข้าใจและเครื่อง (0.10–0.11 ข้ามตามคำสั่งผู้ใช้; ยังไม่ได้ยืนยันการใช้งาน editor)
 - [x] Phase 1 — โครง solution เปล่า
-- [ ] Phase 2 — Infrastructure บน Docker ที่ local (PostgreSQL + Kafka + Kafka UI)
+- [x] Phase 2 — Infrastructure บน Docker ที่ local (PostgreSQL + Kafka + Kafka UI)
 - [ ] Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 - [ ] Phase 4 — Table Definition และการสร้าง DDL
 - [ ] Phase 5 — API จัดการตาราง
@@ -411,7 +413,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - เข้าใจ: script ที่รันซ้ำได้ผลเดิม (idempotent) ใช้ตอน reset demo ได้; จำนวน partition คือเพดานของ consumer ที่ทำงานขนานใน group เดียว
   - ตรวจ: รัน script 2 ครั้งไม่ error และ Kafka UI เห็นทั้งสอง topic
 
-- [ ] **2.12 ลบ topic ทดสอบและ commit**
+- [x] **2.12 ลบ topic ทดสอบและ commit**
   - ทำ: ลบ `demo.test` สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `chore: add docker infrastructure` เมื่อสั่งแยกต่างหาก
   - ตรวจ: Kafka UI เหลือ 2 topic
 
@@ -419,52 +421,52 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 ## Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 
-- [ ] **3.1 เพิ่ม Npgsql เข้า Shared**
+- [x] **3.1 เพิ่ม Npgsql เข้า Shared**
   - ทำ: `dotnet add src/MappingDemo.Shared package Npgsql` แล้วกรอกเวอร์ชันในตาราง "เวอร์ชันที่ใช้จริง" (ทำแบบเดียวกันทุกครั้งที่เพิ่ม package)
   - เข้าใจ: Npgsql คือ ADO.NET provider ของ PostgreSQL; `PackageReference` ใน Shared ถูกส่งต่อให้ project ที่อ้าง Shared (transitive)
   - ตรวจ: `dotnet build` ผ่าน
 
-- [ ] **3.2 ใส่ connection string ใน configuration ของ API**
+- [x] **3.2 ใส่ connection string ใน configuration ของ API**
   - ทำ: เพิ่ม `ConnectionStrings:Mapping` ใน `appsettings.Development.json`
   - เข้าใจ: configuration ซ้อนเป็นชั้น (`appsettings.json` → `appsettings.{Environment}.json` → environment variable) ชั้นหลังทับชั้นก่อน; `ASPNETCORE_ENVIRONMENT` เลือกไฟล์
   - ตรวจ: อ่านค่าด้วย `builder.Configuration.GetConnectionString("Mapping")` แล้ว log ออกมาได้
 
-- [ ] **3.3 ลงทะเบียน `NpgsqlDataSource` ใน DI**
+- [x] **3.3 ลงทะเบียน `NpgsqlDataSource` ใน DI**
   - ทำ: เขียน extension method ใน Shared เช่น `AddMappingDatabase(configuration)` ที่ register `NpgsqlDataSource` แบบ singleton
   - เข้าใจ: DI lifetime (singleton, scoped, transient); data source ถือ connection pool จึงเป็น singleton ส่วน connection เปิดสั้นๆ แล้วคืน pool
   - ตรวจ: API เริ่มได้โดยไม่ error
 
-- [ ] **3.4 Action `GET /health/db`**
+- [x] **3.4 Action `GET /health/db`**
   - ทำ: ใน `HealthController` รับ `NpgsqlDataSource` ผ่าน constructor แล้วเพิ่ม action `[HttpGet("db")]` ที่เปิด connection และรัน `SELECT 1`
   - เข้าใจ: DI ส่ง dependency เข้า constructor ของ controller ทุก request; `await using` คืน connection ให้ pool เมื่อจบ scope; ถ้า DB ปิด จะเห็น exception จริงจาก Npgsql
   - ตรวจ: ได้ 200 เมื่อ DB เปิด และได้ error เมื่อ `docker compose stop postgres`
 
-- [ ] **3.5 เพิ่ม Dapper**
+- [x] **3.5 เพิ่ม Dapper**
   - ทำ: `dotnet add src/MappingDemo.Shared package Dapper` แล้วเขียน query ใน 3.4 ใหม่ด้วย `ExecuteScalarAsync`
   - เข้าใจ: Dapper เป็น extension บน `DbConnection` ที่ map ผลลัพธ์เข้า object และส่ง parameter (`@name`) แยกจาก SQL จึงกัน SQL injection ของค่าข้อมูลได้
   - ตรวจ: `/health/db` ยังได้ผลเดิม
 
-- [ ] **3.6 ออกแบบ migration runner**
+- [x] **3.6 ออกแบบ migration runner**
   - ทำ: สร้าง `MigrationRunner` ใน Shared ที่สร้างตาราง `schema_migrations(version text primary key, applied_at timestamptz)` ถ้ายังไม่มี
   - เข้าใจ: migration คือไฟล์ SQL เรียงลำดับ แต่ละไฟล์รันครั้งเดียว ตาราง `schema_migrations` จำว่ารันไฟล์ไหนแล้ว
   - ตรวจ: เรียก runner แล้วเห็นตารางใน `psql`
 
-- [ ] **3.7 ฝังไฟล์ SQL เป็น embedded resource**
+- [x] **3.7 ฝังไฟล์ SQL เป็น embedded resource**
   - ทำ: สร้างโฟลเดอร์ `src/MappingDemo.Shared/Database/Migrations/` และตั้ง `<EmbeddedResource Include="Database/Migrations/*.sql" />`
   - เข้าใจ: embedded resource อยู่ใน `.dll` จึงไม่ต้องกังวลเรื่อง path ตอนรัน อ่านด้วย `Assembly.GetManifestResourceStream`
   - ตรวจ: runner list ชื่อ resource ออกมาได้ (ตอนนี้ยังว่าง)
 
-- [ ] **3.8 รัน migration ที่ยังไม่เคยรันใน transaction**
+- [x] **3.8 รัน migration ที่ยังไม่เคยรันใน transaction**
   - ทำ: เรียงไฟล์ตามชื่อ ข้ามไฟล์ที่มีใน `schema_migrations` แล้วรันแต่ละไฟล์พร้อม insert version ใน transaction เดียว
   - เข้าใจ: PostgreSQL รองรับ transactional DDL ถ้าไฟล์ล้มกลางทาง ทุกอย่างในไฟล์ rollback ไม่เหลือ schema ครึ่งๆ
   - ตรวจ: ยังไม่มีไฟล์ จะตรวจจริงใน Phase 4
 
-- [ ] **3.9 กันรัน migration ซ้อนด้วย advisory lock**
+- [x] **3.9 กันรัน migration ซ้อนด้วย advisory lock**
   - ทำ: เรียก `pg_advisory_lock(<ตัวเลขคงที่>)` ก่อนรัน และ unlock หลังจบ
   - เข้าใจ: advisory lock เป็น lock ตามตัวเลขที่ application ตกลงกันเอง ถ้าสอง process เริ่มพร้อมกัน ตัวที่สองจะรอ
   - ตรวจ: อ่านโค้ดแล้วอธิบายได้ว่าเกิดอะไรถ้ารัน API 2 ตัวพร้อมกัน
 
-- [ ] **3.10 เรียก runner ตอน API เริ่ม (A3)**
+- [x] **3.10 เรียก runner ตอน API เริ่ม (A3)**
   - ทำ: ใน `Program.cs` เรียก runner หลัง `Build()` ก่อน `Run()`
   - เข้าใจ: ถ้า migration ล้ม API ต้องไม่เริ่มรับ request หรือเริ่ม Watcher; ลำดับการเปิดระบบจึงเป็น Docker → API → Worker
   - ตรวจ: เปิด API แล้ว `schema_migrations` ถูกสร้าง
