@@ -66,8 +66,8 @@
 | PowerShell | 0.7 | 7.6.6 |
 | Microsoft.Extensions.Hosting (Worker template) | 1.11 | 8.0.0 |
 | Image `postgres` | 2.1 | 17 |
-| Image `apache/kafka` | 2.6 | |
-| Image `kafbat/kafka-ui` | 2.10 | |
+| Image `apache/kafka` | 2.6 | 4.3.1 |
+| Image `kafbat/kafka-ui` | 2.10 | 1.5.0 |
 | Npgsql | 3.1 | |
 | Dapper | 3.5 | |
 | Confluent.Kafka | 9.1 | |
@@ -85,7 +85,7 @@
 ## ความคืบหน้าราย Phase
 
 - [x] Phase 0 — เตรียมความเข้าใจและเครื่อง (0.10–0.11 ข้ามตามคำสั่งผู้ใช้; ยังไม่ได้ยืนยันการใช้งาน editor)
-- [ ] Phase 1 — โครง solution เปล่า
+- [x] Phase 1 — โครง solution เปล่า
 - [ ] Phase 2 — Infrastructure บน Docker ที่ local (PostgreSQL + Kafka + Kafka UI)
 - [ ] Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 - [ ] Phase 4 — Table Definition และการสร้าง DDL
@@ -343,7 +343,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - เข้าใจ: `bin/` เก็บผล build, `obj/` เก็บไฟล์ระหว่างทาง ทั้งสองถูก ignore ใน `.gitignore` แล้ว
   - ตรวจ: build ผ่าน 0 warning, `git status` ไม่เห็น `bin/` หรือ `obj/`
 
-- [ ] **1.16 Commit Phase 1**
+- [x] **1.16 Commit Phase 1**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit ข้อความ `chore: scaffold solution and projects` เมื่อสั่งแยกต่างหาก
   - ตรวจ: `git log` เห็น commit
 
@@ -353,32 +353,32 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 ทุก service ใน phase นี้อยู่ใน `docker-compose.yml` ไฟล์เดียว และรันบนเครื่องเราทั้งหมด (ดูหัวข้อ "Infrastructure รันบน Docker ที่ local ทั้งหมด")
 
-- [ ] **2.1 สร้าง `docker-compose.yml` ที่มีแค่ PostgreSQL**
+- [x] **2.1 สร้าง `docker-compose.yml` ที่มีแค่ PostgreSQL**
   - ทำ: service `postgres` image `postgres:17`, env user/password/db = `mapping`, port `5432:5432`, named volume
   - เข้าใจ: image คือแม่แบบ container คือตัวที่รันอยู่ volume เก็บข้อมูลแยกจาก container port mapping ทำให้เครื่องเราเข้าถึง container ได้ ต้องระบุเวอร์ชัน image เพื่อให้ผลเหมือนเดิมทุกครั้ง; รหัสผ่านนี้ใช้ในเครื่องเท่านั้น
   - ตรวจ: `docker compose config` ไม่ error
 
-- [ ] **2.2 เปิด PostgreSQL**
+- [x] **2.2 เปิด PostgreSQL**
   - ทำ: `docker compose up -d postgres` แล้ว `docker compose ps` และ `docker compose logs postgres`
   - เข้าใจ: `-d` รันเบื้องหลัง; log บอกว่า database พร้อมรับ connection แล้ว
   - ตรวจ: สถานะ `running` และ log มี `ready to accept connections`
 
-- [ ] **2.3 เข้า `psql` และลองคำสั่งพื้นฐาน**
+- [x] **2.3 เข้า `psql` และลองคำสั่งพื้นฐาน**
   - ทำ: `docker compose exec postgres psql -U mapping -d mapping` แล้วลอง `\l`, `\dt`, สร้างและลบตารางทดสอบ
   - เข้าใจ: ลำดับชั้น server → database → schema (`public`) → table
   - ตรวจ: สร้าง `CREATE TABLE t(x int)`, insert, select, drop ได้
 
-- [ ] **2.4 ทดลองความคงทนของ volume**
+- [x] **2.4 ทดลองความคงทนของ volume**
   - ทำ: สร้างตาราง, `docker compose down`, `up` ใหม่ แล้วดูว่าตารางยังอยู่ จากนั้นลอง `down -v`
   - เข้าใจ: `down` ลบ container แต่เก็บ volume; `down -v` ลบข้อมูลทั้งหมด ใช้ reset demo ภายหลัง
   - ตรวจ: ตารางยังอยู่หลัง `down` และหายหลัง `down -v`
 
-- [ ] **2.5 เพิ่ม healthcheck ให้ PostgreSQL**
+- [x] **2.5 เพิ่ม healthcheck ให้ PostgreSQL**
   - ทำ: เพิ่ม `healthcheck` ใช้ `pg_isready -U mapping`
   - เข้าใจ: container "running" ไม่ได้แปลว่า database พร้อม healthcheck บอกความพร้อมจริง
   - ตรวจ: `docker compose ps` แสดง `healthy`
 
-- [ ] **2.6 เพิ่ม Kafka แบบ KRaft single node**
+- [x] **2.6 เพิ่ม Kafka แบบ KRaft single node**
   - ทำ: service `kafka` image `apache/kafka` (ระบุเวอร์ชัน 4.x) ตั้ง node เดียวทำหน้าที่ทั้ง broker และ controller พร้อม listener 2 ชุด
   - เข้าใจ:
     - broker เก็บ message; controller จัดการ metadata ของ cluster; KRaft คือโหมดที่ไม่ต้องใช้ ZooKeeper
@@ -386,27 +386,27 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
     - `advertised.listeners` คือที่อยู่ที่ broker บอก client ให้ต่อกลับมา ถ้าตั้งผิด client จะต่อครั้งแรกได้แต่ส่ง message ไม่ได้
   - ตรวจ: `docker compose up -d kafka` แล้ว log ไม่มี error
 
-- [ ] **2.7 เรียนรู้ topic และ partition ด้วย CLI**
+- [x] **2.7 เรียนรู้ topic และ partition ด้วย CLI**
   - ทำ: สร้าง topic `demo.test` ที่มี 3 partitions ด้วย `kafka-topics.sh --create` แล้ว `--describe`
   - เข้าใจ: topic คือ log ที่แบ่งเป็น partition; message ในแต่ละ partition มี offset เรียงกัน; ลำดับรับประกันเฉพาะภายใน partition เดียว
   - ตรวจ: describe เห็น 3 partitions
 
-- [ ] **2.8 ส่งและอ่าน message พร้อม key**
+- [x] **2.8 ส่งและอ่าน message พร้อม key**
   - ทำ: ใช้ `kafka-console-producer.sh` ส่ง `a:1`, `b:2`, `a:3` (เปิด `parse.key`) แล้วอ่านด้วย `kafka-console-consumer.sh` ที่แสดง partition และ key
   - เข้าใจ: Kafka hash key เพื่อเลือก partition key เดียวกันจึงไป partition เดิมเสมอ แผนนี้จะใช้ `fileJobId` และ `sourceRowId` เป็น key
   - ตรวจ: message key `a` ทั้งสองอยู่ partition เดียวกัน
 
-- [ ] **2.9 ทดลอง consumer group**
+- [x] **2.9 ทดลอง consumer group**
   - ทำ: เปิด consumer 2 ตัวใน group เดียวกัน ส่ง message หลาย key แล้วเปิดอีกตัวใน group ใหม่
   - เข้าใจ: consumer ใน group เดียวกันแบ่ง partition กัน (1 partition มีเจ้าของ 1 ตัว) ส่วนคนละ group ต่างได้ message ครบทุกตัว; group จำ offset ที่ commit แล้ว
   - ตรวจ: สองตัวใน group เดียวได้ message คนละส่วน ตัวใน group ใหม่ได้ครบ
 
-- [ ] **2.10 ปิด auto-create topic และเพิ่ม Kafka UI**
+- [x] **2.10 ปิด auto-create topic และเพิ่ม Kafka UI**
   - ทำ: ตั้ง `KAFKA_AUTO_CREATE_TOPICS_ENABLE=false` และเพิ่ม service `kafka-ui` (`kafbat/kafka-ui`) ต่อผ่าน `kafka:19092` เปิด port 8080
   - เข้าใจ: ถ้าเปิด auto-create การพิมพ์ชื่อ topic ผิดจะสร้าง topic ใหม่แบบเงียบๆ พร้อมจำนวน partition ที่ไม่ได้ตั้งใจ
   - ตรวจ: เปิด `http://localhost:8080` เห็น topic `demo.test`
 
-- [ ] **2.11 Script สร้าง topic ของระบบ**
+- [x] **2.11 Script สร้าง topic ของระบบ**
   - ทำ: `scripts/create-topics.ps1` สร้าง `mapping.file-import` และ `mapping.row-normalize` อย่างละ 3 partitions (A6) ใช้ `--if-not-exists`
   - เข้าใจ: script ที่รันซ้ำได้ผลเดิม (idempotent) ใช้ตอน reset demo ได้; จำนวน partition คือเพดานของ consumer ที่ทำงานขนานใน group เดียว
   - ตรวจ: รัน script 2 ครั้งไม่ error และ Kafka UI เห็นทั้งสอง topic
