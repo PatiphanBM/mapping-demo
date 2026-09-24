@@ -471,7 +471,7 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
   - เข้าใจ: ถ้า migration ล้ม API ต้องไม่เริ่มรับ request หรือเริ่ม Watcher; ลำดับการเปิดระบบจึงเป็น Docker → API → Worker
   - ตรวจ: เปิด API แล้ว `schema_migrations` ถูกสร้าง
 
-- [ ] **3.11 Commit Phase 3**
+- [x] **3.11 Commit Phase 3**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: connect to postgres and add migration runner` เมื่อสั่งแยกต่างหาก
 
 ---
@@ -480,42 +480,42 @@ Step 0.3–0.10 คือการตรวจเครื่องตาม "Re
 
 Concept ของ phase นี้: ระบบเก็บ **metadata** (คำอธิบายว่าตารางมีคอลัมน์อะไร ชนิดอะไร required ไหม) แยกจาก **ตารางจริง** ที่เก็บข้อมูล API เขียนทั้งสองอย่างพร้อมกัน
 
-- [ ] **4.1 Migration `0001_table_definitions.sql`**
+- [x] **4.1 Migration `0001_table_definitions.sql`**
   - ทำ: ตาราง `table_definitions(id, name unique, kind check in ('Source','Normalized'), created_at)` และ `table_columns(id, table_id fk, name, data_type check, is_required, ordinal, unique(table_id, name))`
   - เข้าใจ: `CHECK` กันค่าผิดที่ระดับ DB, `UNIQUE` กันชื่อซ้ำแม้ application มี bug, foreign key กันคอลัมน์ที่ไม่มีตารางแม่
   - ตรวจ: เปิด API แล้ว `\d table_columns` เห็นโครงสร้าง และ `schema_migrations` มี `0001`
 
-- [ ] **4.2 C# model ของ table definition**
+- [x] **4.2 C# model ของ table definition**
   - ทำ: ใน Shared สร้าง `enum TableKind`, `enum ColumnDataType { Text, Date, Decimal, Boolean }`, `record TableDefinition`, `record ColumnDefinition`
   - เข้าใจ: `record` เปรียบเทียบด้วยค่าและเหมาะกับข้อมูลที่ไม่ควรถูกแก้หลังสร้าง
   - ตรวจ: build ผ่าน
 
-- [ ] **4.3 เขียน test ของกฎชื่อ identifier ก่อน**
+- [x] **4.3 เขียน test ของกฎชื่อ identifier ก่อน**
   - ทำ: test ว่า `orders`, `order_no` ผ่าน; `Orders`, `1abc`, `a-b`, `a;drop`, ชื่อยาวเกิน 63 ตัว และชื่อที่ขึ้นต้นด้วย `pg_` ไม่ผ่าน
   - เข้าใจ: ชื่อตาราง/คอลัมน์ส่งเป็น parameter ไม่ได้ ต้องต่อเข้า SQL ตรงๆ จึงต้องจำกัดรูปแบบก่อน นี่คือจุดที่ SQL injection เกิดได้ถ้าไม่ตรวจ
   - ตรวจ: `dotnet test` แดง (ยังไม่มี implementation)
 
-- [ ] **4.4 Implement `IdentifierRules`**
+- [x] **4.4 Implement `IdentifierRules`**
   - ทำ: regex `^[a-z][a-z0-9_]{0,62}$` และรายการชื่อสงวน (คอลัมน์ metadata เช่น `id`, `file_job_id`, `row_number`)
   - เข้าใจ: 63 คือความยาวสูงสุดของ identifier ใน PostgreSQL; ชื่อสงวนกันคอลัมน์ข้อมูลชนกับคอลัมน์ระบบ
   - ตรวจ: test ใน 4.3 เขียวทั้งหมด
 
-- [ ] **4.5 Helper `SqlIdentifier.Quote`**
+- [x] **4.5 Helper `SqlIdentifier.Quote`**
   - ทำ: ครอบชื่อด้วย `"..."` และแทน `"` ภายในด้วย `""` พร้อม test
   - เข้าใจ: defense in depth — ต่อให้ validation หลุด การ quote ยังกันการปิด identifier ก่อนกำหนด
   - ตรวจ: test ผ่าน
 
-- [ ] **4.6 สร้าง DDL ของ Source table**
+- [x] **4.6 สร้าง DDL ของ Source table**
   - ทำ: `DdlBuilder.CreateSourceTable(definition)` คืน SQL ที่มีคอลัมน์ระบบ `id bigint generated always as identity primary key`, `file_job_id bigint not null`, `row_number int not null`, `imported_at timestamptz not null default now()`, `unique(file_job_id, row_number)` ตามด้วยคอลัมน์ข้อมูลที่เป็น `text` ทั้งหมด
   - เข้าใจ: Source คือ landing zone เก็บค่าดิบเป็นข้อความเพื่อไม่ให้การนำเข้าล้มเพราะชนิดข้อมูล; `unique(file_job_id, row_number)` คือกุญแจที่ทำให้ retry นำเข้าไม่สร้างแถวซ้ำ
   - ตรวจ: unit test เทียบ SQL ที่ได้
 
-- [ ] **4.7 สร้าง DDL ของ Normalized table**
+- [x] **4.7 สร้าง DDL ของ Normalized table**
   - ทำ: คอลัมน์ระบบ `id`, `source_row_id bigint not null unique`, `file_job_id`, `row_number`, `row_job_id`, `config_version_id`, `normalized_at` และคอลัมน์ข้อมูลตามชนิด text→`text`, date→`date`, decimal→`numeric`, boolean→`boolean` ทั้งหมด nullable (A4)
   - เข้าใจ: `source_row_id unique` ทำให้ Source หนึ่งแถวมีผลปัจจุบันได้แถวเดียว (Current Normalized Result); ไม่ใช้ `NOT NULL` ตาม required เพราะการเพิ่มคอลัมน์ในตารางที่มีข้อมูลแล้วจะล้ม และ Worker ต้องบันทึก required error เป็น Row Error อยู่แล้ว
   - ตรวจ: unit test เทียบ SQL
 
-- [ ] **4.8 Validation ของ table definition**
+- [x] **4.8 Validation ของ table definition**
   - ทำ: `TableDefinitionValidator` ตรวจชื่อ, คอลัมน์อย่างน้อย 1, ชื่อคอลัมน์ไม่ซ้ำ, Source ต้องเป็น text ทุกคอลัมน์และไม่มี required
   - เข้าใจ: แยก validation เป็น pure function (รับข้อมูล คืนรายการ error) เพื่อ test ได้โดยไม่ต้องมี DB
   - ตรวจ: unit test ครอบคลุมแต่ละกฎ
