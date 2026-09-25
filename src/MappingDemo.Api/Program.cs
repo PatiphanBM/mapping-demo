@@ -1,5 +1,7 @@
+using MappingDemo.Api.Options;
 using MappingDemo.Api.Services;
 using MappingDemo.Shared.Database;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Scalar.AspNetCore;
 
@@ -17,7 +19,15 @@ var mappingConnectionStringForLog = new NpgsqlConnectionStringBuilder(mappingCon
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services
+    .AddOptions<PathOptions>()
+    .Bind(builder.Configuration.GetSection(PathOptions.SectionName))
+    .Validate(
+        options => !string.IsNullOrWhiteSpace(options.InputRoot),
+        "Paths:InputRoot is required.")
+    .ValidateOnStart();
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddScoped<MappingConfigService>();
 builder.Services.AddScoped<TableService>();
 builder.Services.AddHostedService<FileWatcherService>();
 
@@ -26,6 +36,11 @@ var app = builder.Build();
 app.Logger.LogInformation(
     "Mapping database connection string: {ConnectionString}",
     mappingConnectionStringForLog);
+var pathOptions = app.Services.GetRequiredService<IOptions<PathOptions>>().Value;
+var inputRootPath = Path.GetFullPath(
+    pathOptions.InputRoot,
+    app.Environment.ContentRootPath);
+app.Logger.LogInformation("Input root path: {InputRoot}", inputRootPath);
 
 var migrationRunner = app.Services.GetRequiredService<MigrationRunner>();
 await migrationRunner.RunAsync();

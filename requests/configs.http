@@ -1,0 +1,89 @@
+@baseUrl = http://localhost:5181
+@sourceTableId = 2
+@normalizedTableId = 3
+@configId = 1
+@version = 1
+
+# Run requests/tables.http first. Update the IDs above from its responses.
+
+### Create the orders mapping config
+POST {{baseUrl}}/mapping-configs
+Content-Type: application/json
+
+{
+  "name": "orders",
+  "inputFolder": "orders",
+  "sourceTableId": {{sourceTableId}},
+  "normalizedTableId": {{normalizedTableId}}
+}
+
+### Create version 1 with every column mapped
+POST {{baseUrl}}/mapping-configs/{{configId}}/versions
+Content-Type: application/json
+
+{
+  "fileToSource": [
+    {
+      "csvHeader": "Order No",
+      "sourceColumn": "order_no"
+    },
+    {
+      "csvHeader": "Customer Name",
+      "sourceColumn": "customer_name"
+    },
+    {
+      "csvHeader": "Order Date",
+      "sourceColumn": "order_date"
+    },
+    {
+      "csvHeader": "Amount",
+      "sourceColumn": "amount"
+    },
+    {
+      "csvHeader": "Is Paid",
+      "sourceColumn": "is_paid"
+    },
+    {
+      "csvHeader": "Note",
+      "sourceColumn": "note"
+    }
+  ],
+  "sourceToNormalized": [
+    {
+      "sourceColumn": "order_no",
+      "normalizedColumn": "order_no"
+    },
+    {
+      "sourceColumn": "customer_name",
+      "normalizedColumn": "customer_name"
+    },
+    {
+      "sourceColumn": "order_date",
+      "normalizedColumn": "order_date",
+      "format": "yyyy-MM-dd"
+    },
+    {
+      "sourceColumn": "amount",
+      "normalizedColumn": "amount"
+    },
+    {
+      "sourceColumn": "is_paid",
+      "normalizedColumn": "is_paid"
+    },
+    {
+      "sourceColumn": "note",
+      "normalizedColumn": "note"
+    }
+  ]
+}
+
+### Activate version 1 for new files
+POST {{baseUrl}}/mapping-configs/{{configId}}/versions/{{version}}/activate
+
+### Verify version 1 is active
+GET {{baseUrl}}/mapping-configs/{{configId}}
+Accept: application/json
+
+### List all mapping configs
+GET {{baseUrl}}/mapping-configs
+Accept: application/json

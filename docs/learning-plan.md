@@ -92,7 +92,7 @@
 - [x] Phase 2 — Infrastructure บน Docker ที่ local (PostgreSQL + Kafka + Kafka UI)
 - [ ] Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 - [ ] Phase 4 — Table Definition และการสร้าง DDL
-- [ ] Phase 5 — API จัดการตาราง
+- [x] Phase 5 — API จัดการตาราง
 - [ ] Phase 6 — API จัดการ Mapping Config และ Config Version
 - [ ] Phase 7 — ตารางงานและ Outbox
 - [ ] Phase 8 — File Watcher
@@ -577,57 +577,57 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - เข้าใจ: Swashbuckle สร้างคำอธิบาย OpenAPI จาก controller และ action ที่มีอยู่ ส่วน Scalar อ่านเอกสารนั้นแล้วแสดงเป็น UI สำหรับสำรวจและทดลองเรียก API
   - ตรวจ: เปิด `/openapi/v1.json` เห็น `/tables` และเปิด `/scalar` เห็นหน้า API Reference
 
-- [ ] **5.11 Commit Phase 5**
+- [x] **5.11 Commit Phase 5**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): manage table definitions` เมื่อสั่งแยกต่างหาก
 
 ---
 
 ## Phase 6 — API จัดการ Mapping Config และ Config Version
 
-- [ ] **6.1 Migration `0002_mapping_configs.sql`**
+- [x] **6.1 Migration `0002_mapping_configs.sql`**
   - ทำ: `mapping_configs(id, name unique, input_folder unique, source_table_id fk, normalized_table_id fk, active_version_id null, created_at)` และ `mapping_config_versions(id, config_id fk, version_no, file_to_source jsonb, source_to_normalized jsonb, created_at, activated_at null, unique(config_id, version_no))` แล้วเพิ่ม fk ของ `active_version_id` หลังสร้างทั้งสองตาราง
   - เข้าใจ: version เก็บ rule เป็น `jsonb` ก้อนเดียวที่ไม่ถูกแก้อีก (immutable snapshot) ทำให้งานที่ตรึง version ไว้ได้กติกาเดิมแน่นอน; fk ที่อ้างกันไปมาต้องเพิ่มทีหลัง
   - ตรวจ: `\d mapping_config_versions`
 
-- [ ] **6.2 C# model ของ rule**
+- [x] **6.2 C# model ของ rule**
   - ทำ: `FileToSourceRule(csvHeader, sourceColumn)` และ `SourceToNormalizedRule(sourceColumn, normalizedColumn, format?)`
   - เข้าใจ: `format` เป็น optional เพื่อ override ค่าเริ่มต้น (เช่น date `yyyy-MM-dd`); System.Text.Json แปลง record ↔ JSON ด้วย camelCase
   - ตรวจ: unit test serialize แล้ว deserialize กลับได้ค่าเดิม
 
-- [ ] **6.3 ตั้ง `InputRoot` ใน configuration**
+- [x] **6.3 ตั้ง `InputRoot` ใน configuration**
   - ทำ: เพิ่ม `Paths:InputRoot` (เช่น `../../input` หรือ path เต็ม) และ bind เข้า `PathOptions` ด้วย Options pattern
   - เข้าใจ: `IOptions<T>` ทำให้ config เป็น object ที่มีชนิด ตรวจค่าได้ตอนเริ่ม แทนการอ่าน string กระจายทั่วโค้ด
   - ตรวจ: log ค่า path เต็มตอนเริ่ม
 
-- [ ] **6.4 `POST /mapping-configs`**
+- [x] **6.4 `POST /mapping-configs`**
   - ทำ: รับ `name`, `inputFolder` (ชื่อโฟลเดอร์ย่อยใต้ `InputRoot`), `sourceTableId`, `normalizedTableId` ตรวจว่าตารางมีจริงและ kind ถูก สร้างโฟลเดอร์ด้วย `Directory.CreateDirectory` แล้วคืน 201
   - เข้าใจ: เก็บชื่อโฟลเดอร์แบบ relative ไม่ใช่ path เต็ม เพื่อไม่ผูกกับเครื่อง; หนึ่ง config ผูกหนึ่งโฟลเดอร์ (unique)
   - ตรวจ: มีโฟลเดอร์ `input/orders` เกิดขึ้น
 
-- [ ] **6.5 Test ของ `ConfigVersionValidator` ก่อน**
+- [x] **6.5 Test ของ `ConfigVersionValidator` ก่อน**
   - ทำ: test กรณี: sourceColumn ไม่มีในตาราง, normalizedColumn ไม่มี, csvHeader ซ้ำ, map ไป normalized คอลัมน์เดียวกันสองครั้ง, required column ไม่ถูก map, format ของ date ใช้ไม่ได้
   - เข้าใจ: validator รับ rule + table definition ปัจจุบัน แล้วคืนรายการ error เป็น pure function
   - ตรวจ: test แดง
 
-- [ ] **6.6 Implement `ConfigVersionValidator`**
+- [x] **6.6 Implement `ConfigVersionValidator`**
   - ทำ: เขียนให้ test ใน 6.5 ผ่าน
   - ตรวจ: test เขียว
 
-- [ ] **6.7 `POST /mapping-configs/{id}/versions`**
+- [x] **6.7 `POST /mapping-configs/{id}/versions`**
   - ทำ: validate แล้ว insert version ใหม่ `version_no = max + 1` ส่ง JSON ด้วย `@rules::jsonb`
   - เข้าใจ: ถ้าสอง request คำนวณ `max + 1` พร้อมกัน `unique(config_id, version_no)` จะกันไว้ ให้คืน 409 แล้ว client ลองใหม่
   - ตรวจ: `select file_to_source from mapping_config_versions` เห็น JSON
 
-- [ ] **6.8 `POST /mapping-configs/{id}/versions/{version}/activate`**
+- [x] **6.8 `POST /mapping-configs/{id}/versions/{version}/activate`**
   - ทำ: โหลด table definition ปัจจุบัน รัน validator ซ้ำ แล้วตั้ง `active_version_id` และ `activated_at`
   - เข้าใจ: schema อาจเปลี่ยนระหว่างสร้าง version กับ activate จึงตรวจอีกครั้งตอน activate; active version ใช้กับ **ไฟล์ใหม่** เท่านั้น
   - ตรวจ: activate version ที่อ้างคอลัมน์ไม่มีได้ 400
 
-- [ ] **6.9 `GET /mapping-configs` และ `GET /mapping-configs/{id}`**
+- [x] **6.9 `GET /mapping-configs` และ `GET /mapping-configs/{id}`**
   - ทำ: คืน config พร้อมรายการ version และบอกว่า version ไหน active
   - ตรวจ: เห็นข้อมูลครบ
 
-- [ ] **6.10 สร้าง config ตัวอย่าง**
+- [x] **6.10 สร้าง config ตัวอย่าง**
   - ทำ: ใน `requests/configs.http` สร้าง config `orders` ผูก `src_orders`/`norm_orders`, สร้าง version 1 ที่ map ครบทุกคอลัมน์ แล้ว activate
   - ตรวจ: `GET /mapping-configs/{id}` แสดง version 1 active
 
