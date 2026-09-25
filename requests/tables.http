@@ -1,0 +1,105 @@
+@baseUrl = http://localhost:5181
+@tableId = 1
+
+# TableKind: Source = 0, Normalized = 1
+# ColumnDataType: Text = 0, Date = 1, Decimal = 2, Boolean = 3
+
+### Create the A1 Source table
+POST {{baseUrl}}/tables
+Content-Type: application/json
+
+{
+  "name": "src_orders",
+  "kind": 0,
+  "columns": [
+    {
+      "name": "order_no",
+      "dataType": 0,
+      "isRequired": false
+    },
+    {
+      "name": "customer_name",
+      "dataType": 0,
+      "isRequired": false
+    },
+    {
+      "name": "order_date",
+      "dataType": 0,
+      "isRequired": false
+    },
+    {
+      "name": "amount",
+      "dataType": 0,
+      "isRequired": false
+    },
+    {
+      "name": "is_paid",
+      "dataType": 0,
+      "isRequired": false
+    },
+    {
+      "name": "note",
+      "dataType": 0,
+      "isRequired": false
+    }
+  ]
+}
+
+### Create the A1 Normalized table
+POST {{baseUrl}}/tables
+Content-Type: application/json
+
+{
+  "name": "norm_orders",
+  "kind": 1,
+  "columns": [
+    {
+      "name": "order_no",
+      "dataType": 0,
+      "isRequired": true
+    },
+    {
+      "name": "customer_name",
+      "dataType": 0,
+      "isRequired": true
+    },
+    {
+      "name": "order_date",
+      "dataType": 1,
+      "isRequired": true
+    },
+    {
+      "name": "amount",
+      "dataType": 2,
+      "isRequired": true
+    },
+    {
+      "name": "is_paid",
+      "dataType": 3,
+      "isRequired": true
+    },
+    {
+      "name": "note",
+      "dataType": 0,
+      "isRequired": false
+    }
+  ]
+}
+
+### List tables
+GET {{baseUrl}}/tables
+Accept: application/json
+
+### Get a table by id
+GET {{baseUrl}}/tables/{{tableId}}
+Accept: application/json
+
+### Add an optional column (not part of the A1 schema)
+POST {{baseUrl}}/tables/{{tableId}}/columns
+Content-Type: application/json
+
+{
+  "name": "source_tag",
+  "dataType": 0,
+  "isRequired": false
+}

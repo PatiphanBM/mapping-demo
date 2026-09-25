@@ -1,6 +1,7 @@
 using MappingDemo.Api.Services;
 using MappingDemo.Shared.Database;
 using Npgsql;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,10 @@ var mappingConnectionStringForLog = new NpgsqlConnectionStringBuilder(mappingCon
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddScoped<TableService>();
 builder.Services.AddHostedService<FileWatcherService>();
 
 var app = builder.Build();
@@ -31,6 +35,15 @@ await migrationRunner.RunAsync();
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger(options =>
+    {
+        options.RouteTemplate = "openapi/{documentName}.json";
+    });
+    app.MapScalarApiReference();
+}
 
 app.MapControllers();
 

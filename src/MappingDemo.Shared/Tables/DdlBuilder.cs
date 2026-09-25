@@ -60,6 +60,17 @@ public static class DdlBuilder
         return string.Join(Environment.NewLine, lines);
     }
 
+    public static string AddColumn(
+        string tableName,
+        ColumnDefinition column)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+
+        return $"ALTER TABLE {SqlIdentifier.Quote(tableName)} " +
+               $"ADD COLUMN {SqlIdentifier.Quote(column.Name)} " +
+               $"{GetPostgresDataType(column.DataType)};";
+    }
+
     private static string GetPostgresDataType(ColumnDataType dataType)
     {
         return dataType switch

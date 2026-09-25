@@ -91,4 +91,20 @@ public sealed class DdlBuilderTests
             expected.ReplaceLineEndings("\n"),
             sql.ReplaceLineEndings("\n"));
     }
+
+    [Fact]
+    public void AddColumn_builds_nullable_column_ddl()
+    {
+        var column = new ColumnDefinition(
+            "amount",
+            ColumnDataType.Decimal,
+            IsRequired: true,
+            Ordinal: 2);
+
+        var sql = DdlBuilder.AddColumn("norm_orders", column);
+
+        Assert.Equal(
+            "ALTER TABLE \"norm_orders\" ADD COLUMN \"amount\" numeric;",
+            sql);
+    }
 }

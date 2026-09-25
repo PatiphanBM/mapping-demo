@@ -78,7 +78,8 @@
 | xunit.runner.visualstudio (จาก template) | 1.14 | 2.5.3 |
 | Microsoft.NET.Test.Sdk (จาก template) | 1.14 | 17.8.0 |
 | coverlet.collector (จาก template) | 1.14 | 6.0.0 |
-| Microsoft.AspNetCore.OpenApi (ถ้าใช้) | 5.10 | |
+| Swashbuckle.AspNetCore.SwaggerGen (ถ้าใช้) | 5.10 | 10.2.3 |
+| Scalar.AspNetCore (ถ้าใช้) | 5.10 | 2.17.8 |
 
 ทุกครั้งที่เพิ่ม package ให้ดูเวอร์ชันด้วย `dotnet list package` แล้วกรอกตาราง ถ้า major version ต่างจากตัวที่เคยบันทึกไว้ ให้อ่าน release note ก่อน เพราะชื่อ method หรือ option อาจเปลี่ยน
 
@@ -527,54 +528,54 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 ## Phase 5 — API จัดการตาราง
 
-- [ ] **5.1 DTO ของ request/response**
+- [x] **5.1 DTO ของ request/response**
   - ทำ: `CreateTableRequest(name, kind, columns[])`, `ColumnRequest(name, dataType, isRequired)`, `TableResponse`
   - เข้าใจ: DTO คือรูปร่างของข้อมูลที่ข้าม HTTP แยกจาก model ภายใน เพื่อเปลี่ยนภายในได้โดยไม่ทำ contract พัง; `[ApiController]` รู้เองว่า parameter ที่เป็น class มาจาก JSON body (`[FromBody]`)
   - ตรวจ: build ผ่าน
 
-- [ ] **5.2 สร้าง `TablesController`**
+- [x] **5.2 สร้าง `TablesController`**
   - ทำ: `Controllers/TablesController.cs` ที่มี `[ApiController]`, `[Route("tables")]` และ action `[HttpGet]` ชั่วคราวคืน `Ok(Array.Empty<TableResponse>())`
   - เข้าใจ: หนึ่ง controller ต่อหนึ่งกลุ่ม resource; action คือ method สาธารณะที่มี attribute HTTP verb
   - ตรวจ: `GET /tables` คืน `[]`
 
-- [ ] **5.3 `POST /tables` — validation เท่านั้น**
+- [x] **5.3 `POST /tables` — validation เท่านั้น**
   - ทำ: เรียก validator จาก 4.8 ถ้าผิดให้ใส่ error ลง `ModelState` แล้วคืน `ValidationProblem(ModelState)` ถ้าถูกคืน 501 ชั่วคราว
   - เข้าใจ: `[ApiController]` คืน 400 อัตโนมัติเมื่อ JSON bind ไม่ได้; กฎธุรกิจที่เราเขียนเองต้องเติมลง `ModelState` เอง; ProblemDetails (RFC 9457) คือรูปแบบมาตรฐานของ error ใน HTTP API
   - ตรวจ: ส่งชื่อ `Bad-Name` ได้ 400 พร้อมรายการ error
 
-- [ ] **5.4 ไฟล์ `requests/tables.http`**
+- [x] **5.4 ไฟล์ `requests/tables.http`**
   - ทำ: เขียน request สำหรับ create/list/get/add column ใช้ตัวแปร `@baseUrl`
   - เข้าใจ: เก็บ request ไว้ใน repo ทำให้ทดสอบซ้ำได้และเป็นเอกสารของ API ไปในตัว
   - ตรวจ: กด Send Request ใน VS Code ได้ผล
 
-- [ ] **5.5 บันทึก metadata และสร้างตารางใน transaction เดียว**
+- [x] **5.5 บันทึก metadata และสร้างตารางใน transaction เดียว**
   - ทำ: `TableService.CreateAsync` insert `table_definitions` + `table_columns` แล้วรัน DDL จาก 4.6/4.7 ใน transaction เดียว; controller คืน `CreatedAtAction(...)` (201 พร้อม header `Location`)
   - เข้าใจ: controller ควรบางและส่งงานให้ service; เพราะ DDL อยู่ใน transaction ได้ ถ้าการสร้างตารางล้ม metadata ก็ rollback ด้วย metadata กับตารางจริงจึงตรงกันเสมอ
   - ตรวจ: สร้างตารางแล้ว `\d <name>` ใน `psql` เห็นคอลัมน์ครบ
 
-- [ ] **5.6 ชื่อซ้ำคืน 409**
+- [x] **5.6 ชื่อซ้ำคืน 409**
   - ทำ: จับ `PostgresException` ที่ `SqlState == "23505"` (unique violation) แล้วคืน `Conflict(...)`
   - เข้าใจ: การตรวจก่อน insert มี race ถ้าสอง request มาพร้อมกัน ให้ DB constraint เป็นตัวตัดสินสุดท้าย แล้วแปลง error เป็น HTTP status
   - ตรวจ: สร้างชื่อเดิมซ้ำได้ 409
 
-- [ ] **5.7 `GET /tables` และ `GET /tables/{id}`**
+- [x] **5.7 `GET /tables` และ `GET /tables/{id}`**
   - ทำ: query metadata คืนตารางพร้อมคอลัมน์ เรียงตาม `ordinal`
   - เข้าใจ: การ map ผล join หลายแถวเป็น object ซ้อน (one-to-many) ด้วย Dapper
   - ตรวจ: ได้ตารางที่สร้างใน 5.5; id ที่ไม่มีได้ 404
 
-- [ ] **5.8 `POST /tables/{id}/columns`**
+- [x] **5.8 `POST /tables/{id}/columns`**
   - ทำ: validate แล้ว insert `table_columns` + `ALTER TABLE ... ADD COLUMN` ใน transaction เดียว
   - เข้าใจ: คอลัมน์ใหม่ในตารางที่มีข้อมูลแล้วมีค่า `NULL` ในแถวเดิม; ไม่เปิดให้ลบ/เปลี่ยนชื่อคอลัมน์ เพราะ config version เก่าอ้างถึงชื่อเดิมอยู่
   - ตรวจ: `\d` เห็นคอลัมน์ใหม่ และ `GET /tables/{id}` แสดงด้วย
 
-- [ ] **5.9 สร้างตารางตัวอย่าง (A1)**
+- [x] **5.9 สร้างตารางตัวอย่าง (A1)**
   - ทำ: ผ่าน `.http` สร้าง `src_orders` (Source, text ทุกคอลัมน์) และ `norm_orders` (Normalized: `order_no` text required, `customer_name` text required, `order_date` date required, `amount` decimal required, `is_paid` boolean required, `note` text)
   - ตรวจ: `\d src_orders` และ `\d norm_orders` ตรงกับที่คาด
 
-- [ ] **5.10 (ไม่บังคับ) OpenAPI document**
-  - ทำ: เพิ่ม package `Microsoft.AspNetCore.OpenApi` พร้อม `AddOpenApi()` และ `MapOpenApi()` (ส่วนที่ตัดออกไปด้วย `--no-openapi` ใน 1.5)
-  - เข้าใจ: framework สร้างคำอธิบาย API จาก controller และ action ที่มีอยู่
-  - ตรวจ: เปิด `/openapi/v1.json` เห็น `/tables`
+- [x] **5.10 (ไม่บังคับ) OpenAPI document + Scalar UI**
+  - ทำ: เพิ่ม package `Swashbuckle.AspNetCore.SwaggerGen` และ `Scalar.AspNetCore` พร้อม `AddSwaggerGen()`, `UseSwagger()` และ `MapScalarApiReference()`; ใช้ Swashbuckle แทน `Microsoft.AspNetCore.OpenApi` เพราะ `AddOpenApi()`/`MapOpenApi()` ไม่มีใน package สาย 8.0
+  - เข้าใจ: Swashbuckle สร้างคำอธิบาย OpenAPI จาก controller และ action ที่มีอยู่ ส่วน Scalar อ่านเอกสารนั้นแล้วแสดงเป็น UI สำหรับสำรวจและทดลองเรียก API
+  - ตรวจ: เปิด `/openapi/v1.json` เห็น `/tables` และเปิด `/scalar` เห็นหน้า API Reference
 
 - [ ] **5.11 Commit Phase 5**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): manage table definitions` เมื่อสั่งแยกต่างหาก
