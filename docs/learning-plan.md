@@ -93,7 +93,7 @@
 - [ ] Phase 3 — เชื่อม PostgreSQL จาก .NET และระบบ migration
 - [ ] Phase 4 — Table Definition และการสร้าง DDL
 - [x] Phase 5 — API จัดการตาราง
-- [ ] Phase 6 — API จัดการ Mapping Config และ Config Version
+- [x] Phase 6 — API จัดการ Mapping Config และ Config Version
 - [ ] Phase 7 — ตารางงานและ Outbox
 - [ ] Phase 8 — File Watcher
 - [ ] Phase 9 — Worker: Outbox Dispatcher
@@ -631,19 +631,19 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ทำ: ใน `requests/configs.http` สร้าง config `orders` ผูก `src_orders`/`norm_orders`, สร้าง version 1 ที่ map ครบทุกคอลัมน์ แล้ว activate
   - ตรวจ: `GET /mapping-configs/{id}` แสดง version 1 active
 
-- [ ] **6.11 Commit Phase 6**
+- [x] **6.11 Commit Phase 6**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): manage mapping configs and versions` เมื่อสั่งแยกต่างหาก
 
 ---
 
 ## Phase 7 — ตารางงานและ Outbox
 
-- [ ] **7.1 เข้าใจปัญหา dual write ก่อนเขียนโค้ด**
+- [x] **7.1 เข้าใจปัญหา dual write ก่อนเขียนโค้ด**
   - ทำ: อ่านและตอบคำถาม: ถ้า Watcher insert `file_jobs` สำเร็จแล้วส่ง Kafka ไม่สำเร็จ หรือส่ง Kafka สำเร็จแล้ว DB rollback จะเกิดอะไร
   - เข้าใจ: การเขียนสองระบบ (DB + Kafka) ทำให้เป็น atomic ไม่ได้ Transactional Outbox แก้โดยเขียนงานที่ต้องส่งลงตาราง `outbox` ใน transaction เดียวกับข้อมูล แล้วให้ process อื่นอ่าน outbox ไปส่ง ผลคือได้ at-least-once (ส่งแน่แต่อาจซ้ำ) ปลายทางจึงต้องกันผลซ้ำเอง
   - ตรวจ: อธิบายได้ว่าทำไม consumer ต้อง idempotent
 
-- [ ] **7.2 Migration `0003_file_jobs_outbox.sql`**
+- [x] **7.2 Migration `0003_file_jobs_outbox.sql`**
   - ทำ:
     - `file_jobs(id, config_id, config_version_id, original_path, file_name, intake_key, import_status, archive_status, content_hash, snapshot_path, total_rows, archive_path, last_error, created_at, updated_at)` พร้อม `unique(config_id, intake_key)`
     - partial unique index `(config_id, content_hash) where content_hash is not null and import_status <> 'Duplicate'`
@@ -651,17 +651,17 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - เข้าใจ: partial index บังคับ unique เฉพาะแถวที่ตรงเงื่อนไข ไฟล์ Duplicate หลายไฟล์จึงมี hash เดียวกันได้ แต่ไฟล์ที่นำเข้าจริงมี hash ซ้ำไม่ได้; index `where sent_at is null` ทำให้ dispatcher หางานค้างได้เร็วแม้ outbox โต
   - ตรวจ: `\d file_jobs` เห็น index ทั้งสอง
 
-- [ ] **7.3 ค่าคงที่ของสถานะและ topic**
+- [x] **7.3 ค่าคงที่ของสถานะและ topic**
   - ทำ: class `ImportStatus`, `ArchiveStatus`, `RowJobStatus` และ `Topics.FileImport = "mapping.file-import"`, `Topics.RowNormalize = "mapping.row-normalize"`
   - เข้าใจ: เก็บ string ที่ใช้หลายที่ไว้ที่เดียว กันพิมพ์ผิดแล้วบั๊กเงียบ
   - ตรวจ: build ผ่าน
 
-- [ ] **7.4 Message contract**
+- [x] **7.4 Message contract**
   - ทำ: `record FileImportRequested(long FileJobId)` และ `record RowNormalizeRequested(long RowJobId)`
   - เข้าใจ: message เป็น "ตัวชี้" ไป record ใน DB ไม่ใช่ข้อมูลทั้งหมด (thin message) consumer อ่านสถานะล่าสุดจาก DB เสมอ จึงไม่เจอข้อมูลเก่าใน message
   - ตรวจ: build ผ่าน
 
-- [ ] **7.5 `OutboxWriter.AddAsync(connection, transaction, topic, key, message)`**
+- [x] **7.5 `OutboxWriter.AddAsync(connection, transaction, topic, key, message)`**
   - ทำ: serialize message เป็น JSON แล้ว insert `outbox` โดยใช้ connection และ transaction ที่ผู้เรียกส่งมา
   - เข้าใจ: ถ้า writer เปิด connection ของตัวเอง outbox จะไม่อยู่ใน transaction เดียวกับข้อมูล pattern จะพังทันที
   - ตรวจ: อ่าน signature แล้วอธิบายได้ว่าทำไมต้องรับ transaction
