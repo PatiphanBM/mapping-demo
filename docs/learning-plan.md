@@ -95,7 +95,7 @@
 - [x] Phase 5 — API จัดการตาราง
 - [x] Phase 6 — API จัดการ Mapping Config และ Config Version
 - [ ] Phase 7 — ตารางงานและ Outbox
-- [ ] Phase 8 — File Watcher
+- [x] Phase 8 — File Watcher
 - [ ] Phase 9 — Worker: Outbox Dispatcher
 - [ ] Phase 10 — Worker: รับ File Import Job และหน่วง 30 วินาที
 - [ ] Phase 11 — Worker: อ่าน CSV และนำเข้า Source Table
@@ -673,76 +673,76 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 ## Phase 8 — File Watcher
 
-- [ ] **8.1 เตรียม configuration ของ Watcher**
+- [x] **8.1 เตรียม configuration ของ Watcher**
   - ทำ: เพิ่ม `Paths:InputRoot`, `Watcher:ConfigRefreshSeconds=10`, `Watcher:ScanIntervalSeconds=60` (A7) ใน configuration ของ API; ใช้ `AddMappingDatabase` ที่ API ลงทะเบียนไว้
   - เข้าใจ: Watcher เป็น hosted service ใน API จึงใช้ configuration และ DB connection ของ API ชุดเดียวกัน
   - ตรวจ: API เริ่มพร้อม Watcher และ log ค่า options
 
-- [ ] **8.2 ทดลอง `FileSystemWatcher` แบบดิบ**
+- [x] **8.2 ทดลอง `FileSystemWatcher` แบบดิบ**
   - ทำ: ใน `src/MappingDemo.Api/Services/FileWatcherService.cs` สร้าง watcher ที่โฟลเดอร์ `input/orders` log ทุก event (`Created`, `Changed`, `Renamed`, `Deleted`)
   - เข้าใจ: OS แจ้ง event ผ่าน callback บน thread pool ไม่ใช่ thread ของ `ExecuteAsync`
   - ตรวจ: สร้าง, แก้, rename, ลบไฟล์ แล้วเห็น event ตรงกัน
 
-- [ ] **8.3 สังเกตว่า Created ไม่ได้แปลว่าไฟล์เขียนเสร็จ**
+- [x] **8.3 สังเกตว่า Created ไม่ได้แปลว่าไฟล์เขียนเสร็จ**
   - ทำ: copy ไฟล์ขนาดใหญ่ (เช่น 200 MB) เข้าโฟลเดอร์แล้วดู event
   - เข้าใจ: `Created` เกิดตอนเริ่ม copy แล้วตามด้วย `Changed` หลายครั้ง นี่คือเหตุผลที่ระบบใช้ event เป็นแค่ "สัญญาณพบไฟล์" แล้วหน่วง 30 วินาทีก่อนอ่าน
   - ตรวจ: เห็น `Created` หนึ่งครั้งตามด้วย `Changed` หลายครั้ง
 
-- [ ] **8.4 กรองเฉพาะ `Created` และ `Renamed` ของ `.csv`**
+- [x] **8.4 กรองเฉพาะ `Created` และ `Renamed` ของ `.csv`**
   - ทำ: ตั้ง `Filter = "*.csv"`, `NotifyFilter = FileName | LastWrite | Size`, subscribe `Created` และ `Renamed` (ตรวจชื่อใหม่ลงท้าย `.csv`) และ `Error`
   - เข้าใจ: `Renamed` จำเป็นเพราะบางโปรแกรมเขียนชื่ออื่นก่อนแล้ว rename; `Error` เกิดเมื่อ buffer event ล้น (`InternalBufferSize`) แปลว่า event หายไปแล้ว
   - ตรวจ: สร้าง `.txt` ไม่เห็น log, rename `.txt` เป็น `.csv` เห็น log
 
-- [ ] **8.5 ส่ง event เข้า `Channel<T>`**
+- [x] **8.5 ส่ง event เข้า `Channel<T>`**
   - ทำ: handler เรียกแค่ `channel.Writer.TryWrite(new FileDetected(configId, path))`; `ExecuteAsync` อ่านด้วย `await foreach (... ReadAllAsync(stoppingToken))`
   - เข้าใจ: event handler ต้องจบเร็วและไม่ await DB; Channel คือคิวใน memory แยกผู้ผลิต (event) กับผู้บริโภค (intake) และเปลี่ยน callback ให้เป็นลำดับงานที่ควบคุมได้
   - ตรวจ: log ฝั่งอ่าน channel แสดงไฟล์ที่ drop
 
-- [ ] **8.6 `ActiveConfigProvider` อ่าน config จาก DB**
+- [x] **8.6 `ActiveConfigProvider` อ่าน config จาก DB**
   - ทำ: query config ทั้งหมดพร้อม `active_version_id` แล้วคำนวณ path เต็มจาก `InputRoot`
   - เข้าใจ: Watcher ไม่ hardcode โฟลเดอร์ แต่ถาม DB ว่ามีโฟลเดอร์ไหนต้องเฝ้า
   - ตรวจ: log รายการ config ที่โหลดได้
 
-- [ ] **8.7 `WatcherRegistry` — หนึ่ง watcher ต่อหนึ่ง config**
+- [x] **8.7 `WatcherRegistry` — หนึ่ง watcher ต่อหนึ่ง config**
   - ทำ: เก็บ `Dictionary<configId, FileSystemWatcher>` สร้างตาม config ที่ active และ `Dispose` ทั้งหมดเมื่อ service หยุด
   - เข้าใจ: `FileSystemWatcher` ถือ handle ของ OS ต้อง dispose ไม่เช่นนั้น resource รั่ว
   - ตรวจ: drop ไฟล์ใน `input/orders` แล้วเห็น event พร้อม configId ที่ถูก
 
-- [ ] **8.8 โหลด config ใหม่เป็นระยะ**
+- [x] **8.8 โหลด config ใหม่เป็นระยะ**
   - ทำ: ใช้ `PeriodicTimer` ทุก 10 วินาที เพิ่ม watcher ให้ config ใหม่ และลบ watcher ของ config ที่ไม่มี active version แล้ว; config ที่ไม่มี active version ให้ log warning
   - เข้าใจ: `PeriodicTimer` ไม่ยิงซ้อนถ้ารอบก่อนยังไม่จบ ต่างจาก `System.Threading.Timer`
   - ตรวจ: สร้าง config ใหม่ผ่าน API แล้วภายใน 10 วินาที Watcher เริ่มเฝ้าโฟลเดอร์ใหม่
 
-- [ ] **8.9 คำนวณ intake key**
+- [x] **8.9 คำนวณ intake key**
   - ทำ: `FileIntake` อ่าน `FileInfo` แล้วสร้าง key `path|size|lastWriteTimeUtc.Ticks`
   - เข้าใจ: key นี้กัน event ซ้ำของไฟล์เดียวกัน แต่ถ้า partner ส่งไฟล์ชื่อเดิมทับด้วยเนื้อหาใหม่ size/เวลาจะเปลี่ยน จึงได้งานใหม่ (ข้อตกลง Step 1 รอบที่ 6) การตรวจเนื้อหาซ้ำจริงเป็นหน้าที่ของ content hash ใน Worker
   - ตรวจ: log key ของไฟล์ที่ drop
 
-- [ ] **8.10 สร้าง File Import Job + outbox ใน transaction เดียว**
+- [x] **8.10 สร้าง File Import Job + outbox ใน transaction เดียว**
   - ทำ: `INSERT INTO file_jobs (..., config_version_id = active version ตอนนี้, import_status='Queued', archive_status='NotArchived') ON CONFLICT (config_id, intake_key) DO NOTHING RETURNING id` ถ้าได้ id ให้เรียก `OutboxWriter` (topic file-import, key = fileJobId) แล้ว commit
   - เข้าใจ: การตรึง `config_version_id` ตรงนี้คือข้อตกลง ★ — ถ้า activate version ใหม่ระหว่างหน่วง งานนี้ยังใช้ version เดิม; `ON CONFLICT DO NOTHING` ทำให้ event ซ้ำไม่สร้างงานซ้ำ
   - ตรวจ: drop ไฟล์ แล้วเห็น 1 แถวใน `file_jobs` และ 1 แถวใน `outbox` ที่ `sent_at is null`
 
-- [ ] **8.11 Scan ตอนเริ่ม**
+- [x] **8.11 Scan ตอนเริ่ม**
   - ทำ: ตอน Watcher เริ่ม ให้ enumerate `*.csv` ในทุกโฟลเดอร์ที่เฝ้าแล้วส่งเข้า channel เดียวกัน
   - เข้าใจ: ไฟล์ที่มาถึงตอน API ปิดอยู่ไม่มี event; เมื่อ API เริ่มใหม่ Watcher ส่งไฟล์ผ่าน intake ชุดเดียวกันจึงกันซ้ำด้วยกลไกเดิม
   - ตรวจ: ปิด API, drop ไฟล์, เปิด API ใหม่ แล้วเกิด job
 
-- [ ] **8.12 ข้าม path ที่ยังมีงานค้าง (A5)**
+- [x] **8.12 ข้าม path ที่ยังมีงานค้าง (A5)**
   - ทำ: ก่อน insert ตรวจว่ามี job ของ `config_id + original_path` ที่สถานะ `Queued`/`Delaying`/`Importing` หรือไม่ ถ้ามีให้ข้าม
   - เข้าใจ: ระหว่างหน่วง 30 วินาที ไฟล์อาจยังโตอยู่ scan จะเห็น size ใหม่และได้ key ใหม่ ถ้าไม่ข้ามจะเกิดสอง job จากไฟล์เดียว — ยืนยันข้อสมมตินี้ก่อนทำ
   - ตรวจ: drop ไฟล์แล้ว append ข้อมูลเพิ่มก่อน scan รอบถัดไป ยังมี job เดียว
 
-- [ ] **8.13 Scan ชดเชยเป็นระยะและเมื่อ `Error`**
+- [x] **8.13 Scan ชดเชยเป็นระยะและเมื่อ `Error`**
   - ทำ: scan ทุก 60 วินาที และสั่ง scan ทันทีเมื่อได้ `Error` event
   - ตรวจ: log แสดงรอบ scan และไม่มี job ซ้ำ
 
-- [ ] **8.14 Structured logging ด้วย scope**
+- [x] **8.14 Structured logging ด้วย scope**
   - ทำ: ใช้ `logger.BeginScope` ใส่ `ConfigId`, `FileJobId`, `Path` และ log message แบบ template (`"Created job {FileJobId}"`)
   - เข้าใจ: template เก็บค่าเป็น field แยก ค้นและกรอง log ได้ ต่างจาก string interpolation
   - ตรวจ: log อ่านแล้วรู้ว่าไฟล์ไหนได้ job อะไร
 
-- [ ] **8.15 Commit Phase 8**
+- [x] **8.15 Commit Phase 8**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(watcher): detect csv files and create file import jobs` เมื่อสั่งแยกต่างหาก
 
 ---

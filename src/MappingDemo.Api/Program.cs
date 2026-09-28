@@ -26,7 +26,20 @@ builder.Services
         options => !string.IsNullOrWhiteSpace(options.InputRoot),
         "Paths:InputRoot is required.")
     .ValidateOnStart();
+builder.Services
+    .AddOptions<WatcherOptions>()
+    .Bind(builder.Configuration.GetSection(WatcherOptions.SectionName))
+    .Validate(
+        options => options.ConfigRefreshSeconds > 0,
+        "Watcher:ConfigRefreshSeconds must be greater than zero.")
+    .Validate(
+        options => options.ScanIntervalSeconds > 0,
+        "Watcher:ScanIntervalSeconds must be greater than zero.")
+    .ValidateOnStart();
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddSingleton<ActiveConfigProvider>();
+builder.Services.AddSingleton<WatcherRegistry>();
+builder.Services.AddSingleton<FileIntake>();
 builder.Services.AddScoped<MappingConfigService>();
 builder.Services.AddScoped<TableService>();
 builder.Services.AddHostedService<FileWatcherService>();
