@@ -72,7 +72,7 @@
 | Microsoft.Extensions.Configuration.Abstractions | 3.3 | 8.0.0 |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 3.3 | 8.0.2 |
 | Dapper | 3.5 | 2.1.89 |
-| Confluent.Kafka | 9.1 | |
+| Confluent.Kafka | 9.1 | 2.15.1 |
 | CsvHelper | 11.1 | |
 | xUnit (จาก template) | 1.14 | 2.5.3 |
 | xunit.runner.visualstudio (จาก template) | 1.14 | 2.5.3 |
@@ -94,7 +94,7 @@
 - [ ] Phase 4 — Table Definition และการสร้าง DDL
 - [x] Phase 5 — API จัดการตาราง
 - [x] Phase 6 — API จัดการ Mapping Config และ Config Version
-- [ ] Phase 7 — ตารางงานและ Outbox
+- [x] Phase 7 — ตารางงานและ Outbox
 - [x] Phase 8 — File Watcher
 - [ ] Phase 9 — Worker: Outbox Dispatcher
 - [ ] Phase 10 — Worker: รับ File Import Job และหน่วง 30 วินาที
@@ -666,7 +666,7 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - เข้าใจ: ถ้า writer เปิด connection ของตัวเอง outbox จะไม่อยู่ใน transaction เดียวกับข้อมูล pattern จะพังทันที
   - ตรวจ: อ่าน signature แล้วอธิบายได้ว่าทำไมต้องรับ transaction
 
-- [ ] **7.6 Commit Phase 7**
+- [x] **7.6 Commit Phase 7**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: add job tables and transactional outbox writer` เมื่อสั่งแยกต่างหาก
 
 ---
@@ -749,36 +749,36 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 ## Phase 9 — Worker: Outbox Dispatcher
 
-- [ ] **9.1 เพิ่ม Confluent.Kafka เฉพาะ Worker**
+- [x] **9.1 เพิ่ม Confluent.Kafka เฉพาะ Worker**
   - ทำ: `dotnet add src/MappingDemo.Worker package Confluent.Kafka` และตั้ง connection string + `Kafka:BootstrapServers=localhost:9092`
   - เข้าใจ: Confluent.Kafka ห่อ librdkafka (native library) ไว้; ใส่ใน Worker เท่านั้นเพราะ API ที่มี Watcher ไม่คุยกับ Kafka
   - ตรวจ: build ผ่าน
 
-- [ ] **9.2 ลงทะเบียน producer**
+- [x] **9.2 ลงทะเบียน producer**
   - ทำ: `IProducer<string, string>` singleton ด้วย `Acks = Acks.All`, `EnableIdempotence = true`
   - เข้าใจ: `Acks.All` รอให้ broker ยืนยันว่าเขียนแล้ว; idempotent producer กัน message ซ้ำจากการ retry ภายใน client (แต่ไม่กันซ้ำจากการที่เราส่งใหม่เอง)
   - ตรวจ: Worker เริ่มได้
 
-- [ ] **9.3 ทดลองส่ง message หนึ่งตัว**
+- [x] **9.3 ทดลองส่ง message หนึ่งตัว**
   - ทำ: ตอนเริ่ม ส่ง message ทดสอบเข้า `mapping.file-import` แล้วดูใน Kafka UI จากนั้นลบโค้ดทดสอบ
   - เข้าใจ: `ProduceAsync` คืน `DeliveryResult` ที่บอก partition และ offset
   - ตรวจ: Kafka UI เห็น message
 
-- [ ] **9.4 โครง `OutboxDispatcher`**
+- [x] **9.4 โครง `OutboxDispatcher`**
   - ทำ: `BackgroundService` ใช้ `PeriodicTimer` 500ms
   - ตรวจ: log ทุกรอบ (ปิด log นี้หลังตรวจเสร็จ)
 
-- [ ] **9.5 อ่านงานค้าง**
+- [x] **9.5 อ่านงานค้าง**
   - ทำ: `SELECT id, topic, message_key, payload FROM outbox WHERE sent_at IS NULL ORDER BY id LIMIT 100`
   - เข้าใจ: batch จำกัด 100 กันการโหลดมากเกินในรอบเดียว
   - ตรวจ: log จำนวนงานที่พบ
 
-- [ ] **9.6 ส่งแล้ว mark `sent_at`**
+- [x] **9.6 ส่งแล้ว mark `sent_at`**
   - ทำ: ทีละรายการ `await ProduceAsync` แล้ว `UPDATE outbox SET sent_at = now() WHERE id = @id`; ถ้าส่งไม่ได้ให้หยุด batch แล้วลองรอบหน้า
   - เข้าใจ: ถ้า process ตายหลัง broker ack แต่ก่อน update รอบหน้าจะส่งซ้ำ — นี่คือ at-least-once; ไม่ลบแถวที่ส่งแล้วเพื่อดูย้อนหลังตอน demo
   - ตรวจ: job จาก Phase 8 ถูกส่ง, `sent_at` มีค่า, Kafka UI เห็น key = fileJobId
 
-- [ ] **9.7 ทดสอบความคงทน**
+- [x] **9.7 ทดสอบความคงทน**
   - ทำ: ปิด Worker, drop 2 ไฟล์, เปิด Worker
   - เข้าใจ: งานไม่หายเพราะรออยู่ใน outbox; Watcher ไม่ต้องรู้ว่า Worker หรือ Kafka ทำงานอยู่ไหม
   - ตรวจ: outbox ค้าง 2 แถวตอนปิด และถูกส่งหมดหลังเปิด
