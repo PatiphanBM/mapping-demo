@@ -1,4 +1,5 @@
 using Confluent.Kafka;
+using MappingDemo.Shared.Csv;
 using MappingDemo.Shared.Database;
 using MappingDemo.Worker;
 
@@ -27,6 +28,7 @@ builder.Services.AddSingleton(new ConsumerConfig
     EnableAutoCommit = false,
     AutoOffsetReset = AutoOffsetReset.Earliest
 });
+builder.Services.AddSingleton<CsvRecordReader>();
 builder.Services.AddSingleton<FileImportHandler>();
 builder.Services.AddHostedService<OutboxDispatcher>();
 builder.Services.AddHostedService<FileImportConsumer>();

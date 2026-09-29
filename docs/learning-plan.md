@@ -73,7 +73,7 @@
 | Microsoft.Extensions.DependencyInjection.Abstractions | 3.3 | 8.0.2 |
 | Dapper | 3.5 | 2.1.89 |
 | Confluent.Kafka | 9.1 | 2.15.1 |
-| CsvHelper | 11.1 | |
+| CsvHelper | 11.1 | 33.1.0 |
 | xUnit (จาก template) | 1.14 | 2.5.3 |
 | xunit.runner.visualstudio (จาก template) | 1.14 | 2.5.3 |
 | Microsoft.NET.Test.Sdk (จาก template) | 1.14 | 17.8.0 |
@@ -844,73 +844,73 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - ทำ: drop ไฟล์ แล้ว activate version 2 ระหว่างหน่วง
   - ตรวจ: `file_jobs.config_version_id` ยังเป็น version 1
 
-- [ ] **10.12 Commit Phase 10**
+- [x] **10.12 Commit Phase 10**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): consume file import jobs with delay and snapshot` เมื่อสั่งแยกต่างหาก
 
 ---
 
 ## Phase 11 — Worker: อ่าน CSV และนำเข้า Source Table
 
-- [ ] **11.1 เพิ่ม CsvHelper**
+- [x] **11.1 เพิ่ม CsvHelper**
   - ทำ: เพิ่ม package ใน Shared แล้วลองอ่าน CSV ตัวอย่างพิมพ์ header และค่า
   - เข้าใจ: CSV มีกติกา quote (RFC 4180) ค่า `"a,b"` คือค่าเดียว และค่าข้ามบรรทัดได้ `string.Split(',')` จึงผิด
   - ตรวจ: อ่านไฟล์ที่มี comma ใน quote ได้ถูก
 
-- [ ] **11.2 Test ของ `CsvRecordReader` ก่อน**
+- [x] **11.2 Test ของ `CsvRecordReader` ก่อน**
   - ทำ: test ว่า record แรกหลัง header ได้ rownumber 1, ค่าที่มีขึ้นบรรทัดใหม่ใน quote ยังนับเป็น record เดียว, บรรทัดว่างท้ายไฟล์ไม่นับ
   - เข้าใจ: Row Number คือลำดับ record ไม่ใช่เลขบรรทัดจริง (ตาม CONTEXT.md)
   - ตรวจ: test แดง
 
-- [ ] **11.3 Implement `CsvRecordReader`**
+- [x] **11.3 Implement `CsvRecordReader`**
   - ทำ: `IAsyncEnumerable<CsvRecord>` ที่ให้ `(RowNumber, IReadOnlyDictionary<string,string> Values)`
   - เข้าใจ: `IAsyncEnumerable` อ่านทีละ record ไม่โหลดทั้งไฟล์เข้า memory
   - ตรวจ: test เขียว
 
-- [ ] **11.4 โหลด rule ของ version ที่ตรึงไว้**
+- [x] **11.4 โหลด rule ของ version ที่ตรึงไว้**
   - ทำ: อ่าน `file_to_source` ของ `file_jobs.config_version_id` และชื่อ Source table
   - ตรวจ: log rule ที่ใช้
 
-- [ ] **11.5 ตรวจ header**
+- [x] **11.5 ตรวจ header**
   - ทำ: ถ้า CSV ไม่มี header ที่ rule ต้องใช้ ให้ตั้ง `ImportFailed` พร้อม `last_error` ที่บอกชื่อ header ที่ขาด แล้ว commit offset
   - เข้าใจ: นี่คือ error ระดับไฟล์ ไม่ใช่ Row Error
   - ตรวจ: drop ไฟล์ที่ขาดคอลัมน์ได้ `ImportFailed` พร้อมเหตุผล
 
-- [ ] **11.6 Migration `0004_row_jobs.sql`**
+- [x] **11.6 Migration `0004_row_jobs.sql`**
   - ทำ: `row_jobs(id, file_job_id, source_row_id, row_number, config_version_id, kind check in ('Initial','Reprocess'), status, attempts, last_error, created_at, finished_at)` พร้อม partial unique index `(source_row_id) where status = 'Pending'` และ `row_errors(id, row_job_id, file_job_id, row_number, field, reason, created_at)`
   - เข้าใจ: index นี้ทำให้ Source แถวหนึ่งมีงานที่กำลังรอได้แค่งานเดียว ใช้กันการ reprocess แถวเดียวกันซ้อนใน Phase 17; `row_jobs` ทุกแถวคือประวัติการรันของ Source แถวนั้น
   - ตรวจ: `\d row_jobs`
 
-- [ ] **11.7 `SourceRowWriter` — INSERT แบบ dynamic**
+- [x] **11.7 `SourceRowWriter` — INSERT แบบ dynamic**
   - ทำ: สร้าง SQL จาก rule: `INSERT INTO "src_orders" (file_job_id, row_number, "order_no", ...) VALUES (@fileJobId, @rowNumber, @p0, ...) ON CONFLICT (file_job_id, row_number) DO NOTHING RETURNING id` ใช้ `DynamicParameters`
   - เข้าใจ: ชื่อตาราง/คอลัมน์มาจาก metadata ที่ผ่าน validation และถูก quote ส่วนค่าข้อมูลส่งเป็น parameter เสมอ; ถ้าไม่ได้ id กลับมาแปลว่าแถวนี้เคยนำเข้าแล้ว
   - ตรวจ: unit test ของ SQL ที่สร้าง
 
-- [ ] **11.8 หนึ่ง transaction ต่อหนึ่งแถว**
+- [x] **11.8 หนึ่ง transaction ต่อหนึ่งแถว**
   - ทำ: ในแต่ละ record เปิด transaction → insert Source row → ถ้าได้ id ใหม่ insert `row_jobs` (`Initial`, `Pending`) + outbox (topic row-normalize, key = sourceRowId) → commit
   - เข้าใจ: commit ทีละแถวทำให้ dispatcher ส่งงานแถวได้ทันทีโดยไม่รอทั้งไฟล์ แลกกับความเร็วนำเข้าที่ช้ากว่า batch; key = sourceRowId ทำให้แถวต่างๆ กระจายหลาย partition
   - ตรวจ: `src_orders` จำนวนแถวเท่ากับ record และ outbox มีงานแถวครบ
 
-- [ ] **11.9 Demo throttle**
+- [x] **11.9 Demo throttle**
   - ทำ: เพิ่ม `Demo:ImportRowDelayMs` (ค่าเริ่ม 0) หน่วงหลังแต่ละแถว
   - เข้าใจ: ไฟล์ 100 แถวนำเข้าเร็วมากจนมองไม่เห็นการทำขนาน ค่านี้ใช้เพื่อสาธิตเท่านั้น
   - ตรวจ: ตั้ง 200ms แล้วเห็นแถวค่อยๆ เพิ่มใน `src_orders`
 
-- [ ] **11.10 ปิดงานนำเข้า**
+- [x] **11.10 ปิดงานนำเข้า**
   - ทำ: เมื่ออ่านครบให้ตั้ง `Imported` และ `total_rows` แล้ว commit offset
   - เข้าใจ: `total_rows` บันทึกครั้งเดียวตอนนี้ เพราะเป็นจุดแรกที่รู้จำนวนแถวทั้งหมดแน่นอน
   - ตรวจ: `total_rows` ตรงกับจำนวน record
 
-- [ ] **11.11 นำเข้าล้มกลางทาง + fault injection**
+- [x] **11.11 นำเข้าล้มกลางทาง + fault injection**
   - ทำ: เพิ่ม `Demo:FailImportAtRow` (ค่าเริ่ม null) ให้โยน exception ที่แถวนั้น; จับ exception ใน handler ตั้ง `ImportFailed` + `last_error` แล้ว commit offset
   - เข้าใจ: ถ้าไม่ commit offset message เดิมจะวนกลับมาล้มซ้ำไม่จบและบล็อก partition (poison message) จึงบันทึกเป็นสถานะแล้วให้คนสั่ง retry; แถวที่ commit แล้วยังอยู่และ normalize ต่อได้
   - ตรวจ: ตั้งให้ล้มที่แถว 50 ได้ `ImportFailed` และ `src_orders` มี 49 แถวของไฟล์นี้
 
-- [ ] **11.12 ทดสอบ process ตายกลางการนำเข้า**
+- [x] **11.12 ทดสอบ process ตายกลางการนำเข้า**
   - ทำ: ตั้ง throttle แล้ว Ctrl+C Worker ระหว่างนำเข้า จากนั้นเปิดใหม่
   - เข้าใจ: offset ยังไม่ commit message จึงกลับมา; handler อ่านจาก snapshot เดิม และ `ON CONFLICT` ข้ามแถวที่มีแล้ว
   - ตรวจ: จำนวนแถวสุดท้ายเท่ากับ record ในไฟล์พอดี ไม่มีซ้ำ
 
-- [ ] **11.13 Commit Phase 11**
+- [x] **11.13 Commit Phase 11**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): import csv rows into source table` เมื่อสั่งแยกต่างหาก
 
 ---
