@@ -955,39 +955,39 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
 
 phase นี้ไม่แตะ DB และ Kafka เลย เขียน test ก่อนทุก step
 
-- [ ] **13.1 ชนิดผลลัพธ์ `ConversionResult`**
+- [x] **13.1 ชนิดผลลัพธ์ `ConversionResult`**
   - ทำ: record ที่เป็นได้ทั้ง "สำเร็จพร้อมค่า" หรือ "ผิดพร้อมเหตุผล"
   - เข้าใจ: ข้อมูลผิดเป็นเรื่องที่คาดไว้ได้ จึงคืนเป็นค่า ไม่ใช้ exception ซึ่งช้าและทำให้ flow อ่านยาก
   - ตรวจ: build ผ่าน
 
-- [ ] **13.2 Trim และ required**
+- [x] **13.2 Trim และ required**
   - ทำ: test แล้ว implement: ค่าถูก trim เสมอ; ว่างหลัง trim + required → error `Required`; ว่าง + ไม่ required → `null`
   - ตรวจ: test เขียว
 
-- [ ] **13.3 Text**
+- [x] **13.3 Text**
   - ทำ: test แล้ว implement การคืนค่าที่ trim แล้ว
   - ตรวจ: test เขียว
 
-- [ ] **13.4 Date**
+- [x] **13.4 Date**
   - ทำ: `DateOnly.TryParseExact(value, format ?? "yyyy-MM-dd", CultureInfo.InvariantCulture, ...)`; test `2026-01-31` ผ่าน, `2026-02-30`, `31/01/2026` ไม่ผ่าน, format override `dd/MM/yyyy` ผ่าน
   - เข้าใจ: ต้องระบุ culture เสมอ ไม่เช่นนั้นผลขึ้นกับการตั้งค่าเครื่อง (เครื่องไทยอาจตีความเป็นปีพุทธศักราช)
   - ตรวจ: test เขียว
 
-- [ ] **13.5 Decimal**
+- [x] **13.5 Decimal**
   - ทำ: `decimal.TryParse` ด้วย `NumberStyles.AllowLeadingSign | AllowDecimalPoint` และ `InvariantCulture`; test `1234.50`, `-3` ผ่าน, `1,234.50`, `12a` ไม่ผ่าน
   - เข้าใจ: ไม่เปิด `AllowThousands` ตามข้อตกลง; ใช้ `decimal` ไม่ใช้ `double` เพราะเงินต้องแม่นยำ
   - ตรวจ: test เขียว
 
-- [ ] **13.6 Boolean**
+- [x] **13.6 Boolean**
   - ทำ: รับ `true/false/1/0` ไม่สนตัวพิมพ์; test `TRUE`, `0` ผ่าน, `yes` ไม่ผ่าน
   - ตรวจ: test เขียว
 
-- [ ] **13.7 `RowNormalizer` เก็บ error ทุก field**
+- [x] **13.7 `RowNormalizer` เก็บ error ทุก field**
   - ทำ: รับ Source row + rules + normalized column definitions คืนค่าที่แปลงแล้ว หรือรายการ `(field, reason)` ทั้งหมด
   - เข้าใจ: ไม่หยุดที่ error แรก เพราะข้อตกลงให้เก็บ Row Error ทุก field ของแถว
   - ตรวจ: test แถวที่ผิด 2 field ได้ 2 error
 
-- [ ] **13.8 Commit Phase 13**
+- [x] **13.8 Commit Phase 13**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: add normalization conversion rules` เมื่อสั่งแยกต่างหาก
 
 ---
