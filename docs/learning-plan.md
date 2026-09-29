@@ -96,7 +96,7 @@
 - [x] Phase 6 — API จัดการ Mapping Config และ Config Version
 - [x] Phase 7 — ตารางงานและ Outbox
 - [x] Phase 8 — File Watcher
-- [ ] Phase 9 — Worker: Outbox Dispatcher
+- [x] Phase 9 — Worker: Outbox Dispatcher
 - [ ] Phase 10 — Worker: รับ File Import Job และหน่วง 30 วินาที
 - [ ] Phase 11 — Worker: อ่าน CSV และนำเข้า Source Table
 - [ ] Phase 12 — Archive
@@ -783,64 +783,64 @@ Concept ของ phase นี้: ระบบเก็บ **metadata** (คำ
   - เข้าใจ: งานไม่หายเพราะรออยู่ใน outbox; Watcher ไม่ต้องรู้ว่า Worker หรือ Kafka ทำงานอยู่ไหม
   - ตรวจ: outbox ค้าง 2 แถวตอนปิด และถูกส่งหมดหลังเปิด
 
-- [ ] **9.8 Commit Phase 9**
+- [x] **9.8 Commit Phase 9**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): dispatch outbox messages to kafka` เมื่อสั่งแยกต่างหาก
 
 ---
 
 ## Phase 10 — Worker: รับ File Import Job และหน่วง 30 วินาที
 
-- [ ] **10.1 Consumer ตัวแรก**
+- [x] **10.1 Consumer ตัวแรก**
   - ทำ: `ConsumerConfig` group `mapping-file-import`, `EnableAutoCommit = false`, `AutoOffsetReset = Earliest` subscribe `mapping.file-import` แล้ว log partition/offset/key
   - เข้าใจ: ปิด auto commit เพื่อ commit offset เองหลังงานถูกบันทึกถาวรแล้วเท่านั้น; `Earliest` ทำให้ group ใหม่อ่านตั้งแต่ต้น topic
   - ตรวจ: เห็น message ที่ dispatcher ส่งไว้
 
-- [ ] **10.2 รัน consumer บน thread ของตัวเอง**
+- [x] **10.2 รัน consumer บน thread ของตัวเอง**
   - ทำ: ห่อ loop ด้วย `Task.Factory.StartNew(..., TaskCreationOptions.LongRunning)` และ `consumer.Close()` ตอนหยุด
   - เข้าใจ: `Consume()` block thread จนมี message ถ้ารันบน thread pool ตรงๆ จะกิน thread ของงานอื่น; `Close()` แจ้ง group ให้ rebalance ทันทีแทนที่จะรอ timeout
   - ตรวจ: Ctrl+C แล้ว Worker หยุดเรียบร้อย
 
-- [ ] **10.3 Commit offset ด้วยมือ**
+- [x] **10.3 Commit offset ด้วยมือ**
   - ทำ: เรียก `consumer.Commit(result)` หลัง log
   - เข้าใจ: offset ที่ commit คือจุดที่ group จะเริ่มอ่านต่อหลัง restart ถ้าไม่ commit message จะถูกส่งมาใหม่
   - ตรวจ: restart Worker แล้วไม่เห็น message เก่าซ้ำ
 
-- [ ] **10.4 เพิ่มเป็น 3 consumer ใน group เดียว (A6)**
+- [x] **10.4 เพิ่มเป็น 3 consumer ใน group เดียว (A6)**
   - ทำ: สร้าง consumer ตาม `Kafka:FileImportConsumers=3` แต่ละตัวมี thread ของตัวเอง และ log ใน `SetPartitionsAssignedHandler`
   - เข้าใจ: consumer ของ Confluent.Kafka ไม่ thread-safe หนึ่ง instance ต่อหนึ่ง thread; group แบ่ง 3 partitions ให้ 3 ตัว (rebalance)
   - ตรวจ: log แสดงแต่ละ consumer ได้ partition คนละตัว
 
-- [ ] **10.5 `FileImportHandler` — โหลดงานและกันซ้ำ**
+- [x] **10.5 `FileImportHandler` — โหลดงานและกันซ้ำ**
   - ทำ: deserialize message โหลด `file_jobs` ถ้าสถานะเป็น `Imported` หรือ `Duplicate` แล้วให้ข้ามและ commit offset
   - เข้าใจ: เพราะ outbox ส่งซ้ำได้ handler ทุกตัวต้องถามว่า "งานนี้ทำไปแล้วหรือยัง" ก่อนเสมอ
   - ตรวจ: ส่ง message เดิมซ้ำด้วย console producer แล้วเห็น log ว่าข้าม
 
-- [ ] **10.6 เปลี่ยนเป็น `Delaying` แล้วหน่วง 30 วินาที**
+- [x] **10.6 เปลี่ยนเป็น `Delaying` แล้วหน่วง 30 วินาที**
   - ทำ: update `import_status='Delaying'` (commit ทันที) แล้ว `await Task.Delay(TimeSpan.FromSeconds(Import:DelaySeconds), stoppingToken)`
   - เข้าใจ: เริ่มนับ 30 วินาทีเมื่อ Worker รับงาน ไม่ใช่ตอน Watcher พบไฟล์; ถ้า shutdown ระหว่างรอ delay ถูกยกเลิก offset ไม่ถูก commit งานจึงกลับมาใหม่ตอน restart; ระหว่างนี้ consumer ตัวนี้ไม่อ่าน partition ของตัวเองต่อ — นี่คือเหตุผลที่ต้องมีหลาย partition
   - ตรวจ: `file_jobs` เป็น `Delaying` นาน 30 วินาที
 
-- [ ] **10.7 พิสูจน์ว่าไฟล์ A และ B หน่วงพร้อมกัน**
+- [x] **10.7 พิสูจน์ว่าไฟล์ A และ B หน่วงพร้อมกัน**
   - ทำ: drop 2 ไฟล์พร้อมกัน ดู log partition ของแต่ละไฟล์; ถ้าลงคนละ partition ต้อง `Delaying` พร้อมกัน ถ้าลง partition เดียวกันจะต่อกัน
   - เข้าใจ: key = fileJobId ถูก hash ไป partition จึงไม่ได้คาบเกี่ยวทุกครั้ง นี่คือเกณฑ์ demo "Log partition ของไฟล์ A และ B"
   - ตรวจ: ได้อย่างน้อยหนึ่งรอบที่ A และ B อยู่คนละ partition และเริ่ม `Delaying` ห่างกันไม่ถึงวินาที
 
-- [ ] **10.8 Copy snapshot**
+- [x] **10.8 Copy snapshot**
   - ทำ: เปลี่ยนเป็น `Importing` แล้ว copy ไฟล์ไป `data/staging/{fileJobId}.csv` บันทึก `snapshot_path`; ถ้า snapshot มีอยู่แล้วจากรอบก่อนให้ใช้ของเดิม
   - เข้าใจ: อ่านจาก snapshot แทนไฟล์จริงทำให้ข้อมูลไม่เปลี่ยนระหว่างอ่าน และ retry ได้ rownumber ชุดเดิม; ถ้า partner ยังล็อกไฟล์อยู่ `File.Copy` จะโยน `IOException`
   - ตรวจ: มีไฟล์ใน `data/staging/`
 
-- [ ] **10.9 Content hash**
+- [x] **10.9 Content hash**
   - ทำ: `SHA256.HashDataAsync(stream)` บน snapshot แล้วบันทึก `content_hash` เป็น hex
   - เข้าใจ: hash เนื้อหาเดียวกันได้ค่าเดียวกันเสมอไม่ว่าชื่อไฟล์อะไร
   - ตรวจ: ไฟล์เนื้อหาเดียวกันสองชื่อได้ hash ตรงกัน
 
-- [ ] **10.10 ตรวจ Duplicate File**
+- [x] **10.10 ตรวจ Duplicate File**
   - ทำ: ถ้ามี job อื่นใน config เดียวกันที่ hash ตรงและไม่ใช่ `Duplicate` ให้ตั้ง `Duplicate`; จับ unique violation จาก partial index ของ 7.2 ในกรณีสองไฟล์ชนกันพร้อมกัน
   - เข้าใจ: การตรวจด้วย query มี race ส่วน index เป็นตัวตัดสินสุดท้าย; ไฟล์ Duplicate จะถูก archive ใน Phase 12
   - ตรวจ: drop ไฟล์เดิมด้วยชื่อใหม่ ได้ `Duplicate` และไม่มีแถวเพิ่มใน `src_orders`
 
-- [ ] **10.11 ตรวจว่า version ถูกตรึงจริง**
+- [x] **10.11 ตรวจว่า version ถูกตรึงจริง**
   - ทำ: drop ไฟล์ แล้ว activate version 2 ระหว่างหน่วง
   - ตรวจ: `file_jobs.config_version_id` ยังเป็น version 1
 
@@ -1159,14 +1159,14 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 | - [ ] | สร้าง schema/config ผ่าน API และ Source เก็บเป็นข้อความ | 5.9, 6.10, 11.8 |
 | - [ ] | Worker ไม่อ่านไฟล์ก่อนครบ 30 วินาที และ normalize ทำงานได้ระหว่างนั้น | 10.6, 14.1 |
 | - [ ] | Row job เริ่ม normalize ก่อน File Import Job จบ | 14.10 |
-| - [ ] | ไฟล์ A และ B ประมวลผลคาบเกี่ยวกัน และ log partition ยืนยัน | 10.7 |
+| - [x] | ไฟล์ A และ B ประมวลผลคาบเกี่ยวกัน และ log partition ยืนยัน | 10.7 |
 | - [ ] | 100 records ผิด 2: Source 100, Normalized 98, ค้น error ได้ | 14.9, 15.3 |
 | - [ ] | Archive หลังเข้า Source ครบ ขณะ normalize อาจยังทำอยู่ | 12.3, 14.10 |
 | - [ ] | หยุดหลัง Source/outbox commit แล้วเริ่มใหม่ ส่งต่อได้ ไม่เพิ่มผลซ้ำ | 9.7, 11.12, 14.11 |
 | - [ ] | นำเข้าล้มกลางทางแล้ว retry ไม่เพิ่มข้อมูลซ้ำ | 11.11, 16.2 |
-| - [ ] | แก้ config ระหว่างงาน งานเดิมใช้ version ที่ตรึงไว้ | 10.11 |
+| - [x] | แก้ config ระหว่างงาน งานเดิมใช้ version ที่ตรึงไว้ | 10.11 |
 | - [ ] | Retry ใช้ version เดิม; Reprocess ใช้ version ที่เลือกและมีประวัติแยก | 16.3, 17.4 |
-| - [ ] | ไฟล์เนื้อหาเดิมชื่อใหม่เป็น Duplicate | 10.10 |
+| - [x] | ไฟล์เนื้อหาเดิมชื่อใหม่เป็น Duplicate | 10.10 |
 | - [ ] | Reprocess ไม่ผ่าน ผลเดิมและ version เดิมยังอยู่ | 17.5 |
 | - [ ] | แก้ไฟล์หลัง snapshot ได้ `ChangedAfterRead` และไม่ย้าย | 12.5 |
 | - [ ] | แถว `Failed` ทำให้ไฟล์เป็น `CompletedWithErrors`; retry แล้วคำนวณใหม่ | 14.8, 16.3 |

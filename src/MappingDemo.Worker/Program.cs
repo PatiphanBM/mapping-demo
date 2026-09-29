@@ -20,7 +20,16 @@ builder.Services.AddSingleton<IProducer<string, string>>(_ =>
 
     return new ProducerBuilder<string, string>(config).Build();
 });
+builder.Services.AddSingleton(new ConsumerConfig
+{
+    BootstrapServers = bootstrapServers,
+    GroupId = "mapping-file-import",
+    EnableAutoCommit = false,
+    AutoOffsetReset = AutoOffsetReset.Earliest
+});
+builder.Services.AddSingleton<FileImportHandler>();
 builder.Services.AddHostedService<OutboxDispatcher>();
+builder.Services.AddHostedService<FileImportConsumer>();
 
 var host = builder.Build();
 host.Run();
