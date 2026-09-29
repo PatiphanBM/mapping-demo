@@ -15,6 +15,11 @@ public sealed class FileImportHandler
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
+    private static readonly TimeSpan ArchiveRetryDelay =
+        TimeSpan.FromSeconds(1);
+
+    private const int ArchiveMaxAttempts = 3;
+
     private const string ContentHashUniqueConstraint =
         "ux_file_jobs_config_content_hash";
 
@@ -24,8 +29,12 @@ public sealed class FileImportHandler
             file_jobs.config_id AS ConfigId,
             file_jobs.config_version_id AS ConfigVersionId,
             file_jobs.original_path AS OriginalPath,
+            file_jobs.file_name AS FileName,
             file_jobs.snapshot_path AS SnapshotPath,
             file_jobs.import_status AS ImportStatus,
+            file_jobs.archive_status AS ArchiveStatus,
+            file_jobs.content_hash AS ContentHash,
+            file_jobs.created_at AS CreatedAt,
             mapping_config_versions.file_to_source::text
                 AS FileToSourceJson,
             source_table.name AS SourceTableName
@@ -109,6 +118,32 @@ public sealed class FileImportHandler
         WHERE id = @FileJobId;
         """;
 
+    private const string SetArchivedSql = """
+        UPDATE file_jobs
+        SET
+            archive_status = @ArchiveStatus,
+            archive_path = @ArchivePath,
+            updated_at = now()
+        WHERE id = @FileJobId;
+        """;
+
+    private const string SetChangedAfterReadSql = """
+        UPDATE file_jobs
+        SET
+            archive_status = @ArchiveStatus,
+            updated_at = now()
+        WHERE id = @FileJobId;
+        """;
+
+    private const string SetArchiveFailedSql = """
+        UPDATE file_jobs
+        SET
+            archive_status = @ArchiveStatus,
+            last_error = @LastError,
+            updated_at = now()
+        WHERE id = @FileJobId;
+        """;
+
     private const string InsertRowJobSql = """
         INSERT INTO row_jobs (
             file_job_id,
@@ -133,6 +168,7 @@ public sealed class FileImportHandler
     private readonly TimeSpan _importRowDelay;
     private readonly int? _failImportAtRow;
     private readonly string _stagingRootPath;
+    private readonly string _archiveRootPath;
     private readonly ILogger<FileImportHandler> _logger;
 
     public FileImportHandler(
@@ -155,6 +191,12 @@ public sealed class FileImportHandler
                 "Configuration 'Import:StagingRoot' is not set.");
         _stagingRootPath = Path.GetFullPath(
             stagingRootPath,
+            hostEnvironment.ContentRootPath);
+        var archiveRootPath = configuration["Paths:ArchiveRoot"]
+            ?? throw new InvalidOperationException(
+                "Configuration 'Paths:ArchiveRoot' is not set.");
+        _archiveRootPath = Path.GetFullPath(
+            archiveRootPath,
             hostEnvironment.ContentRootPath);
         _logger = logger;
 
@@ -193,14 +235,32 @@ public sealed class FileImportHandler
             ?? throw new InvalidOperationException(
                 $"File job {request.FileJobId} was not found.");
 
-        if (fileJob.ImportStatus is ImportStatus.Imported
-            or ImportStatus.Duplicate
-            or ImportStatus.ImportFailed)
+        if (fileJob.ImportStatus == ImportStatus.ImportFailed
+            || fileJob.ArchiveStatus != ArchiveStatus.NotArchived)
         {
             _logger.LogInformation(
-                "Skipping file job {FileJobId} because import status is {ImportStatus}",
+                "Skipping file job {FileJobId} because import status is {ImportStatus} and archive status is {ArchiveStatus}",
                 fileJob.Id,
-                fileJob.ImportStatus);
+                fileJob.ImportStatus,
+                fileJob.ArchiveStatus);
+            return true;
+        }
+
+        if (fileJob.ImportStatus is ImportStatus.Imported
+            or ImportStatus.Duplicate)
+        {
+            var savedSnapshotPath = fileJob.SnapshotPath
+                ?? throw new InvalidOperationException(
+                    $"File job {fileJob.Id} has no snapshot path.");
+            var savedContentHash = fileJob.ContentHash
+                ?? throw new InvalidOperationException(
+                    $"File job {fileJob.Id} has no content hash.");
+
+            await ArchiveAsync(
+                fileJob,
+                savedSnapshotPath,
+                savedContentHash,
+                cancellationToken);
             return true;
         }
 
@@ -258,11 +318,14 @@ public sealed class FileImportHandler
             snapshotPath,
             cancellationToken);
 
-        await using var snapshotStream = File.OpenRead(snapshotPath);
-        var hash = await SHA256.HashDataAsync(
-            snapshotStream,
-            cancellationToken);
-        var contentHash = Convert.ToHexString(hash);
+        string contentHash;
+        await using (var snapshotStream = File.OpenRead(snapshotPath))
+        {
+            var hash = await SHA256.HashDataAsync(
+                snapshotStream,
+                cancellationToken);
+            contentHash = Convert.ToHexString(hash);
+        }
 
         if (await HasDuplicateAsync(
                 fileJob.Id,
@@ -275,6 +338,11 @@ public sealed class FileImportHandler
                 contentHash,
                 cancellationToken);
             LogDuplicate(fileJob.Id, contentHash);
+            await ArchiveAsync(
+                fileJob,
+                snapshotPath,
+                contentHash,
+                cancellationToken);
             return true;
         }
 
@@ -294,6 +362,11 @@ public sealed class FileImportHandler
                 contentHash,
                 cancellationToken);
             LogDuplicate(fileJob.Id, contentHash);
+            await ArchiveAsync(
+                fileJob,
+                snapshotPath,
+                contentHash,
+                cancellationToken);
             return true;
         }
 
@@ -381,10 +454,154 @@ public sealed class FileImportHandler
                 "File job {FileJobId} failed during import: {LastError}",
                 fileJob.Id,
                 exception.Message);
+            return true;
         }
+
+        await ArchiveAsync(
+            fileJob,
+            snapshotPath,
+            contentHash,
+            cancellationToken);
 
         return true;
     }
+
+    private async Task ArchiveAsync(
+        FileJob fileJob,
+        string snapshotPath,
+        string snapshotContentHash,
+        CancellationToken cancellationToken)
+    {
+        var archivePath = ArchivePathBuilder.Build(
+            _archiveRootPath,
+            fileJob.ConfigId,
+            fileJob.Id,
+            fileJob.FileName,
+            DateOnly.FromDateTime(fileJob.CreatedAt.ToUniversalTime()));
+
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var hashesMatch = await MoveToArchiveIfUnchangedAsync(
+                    fileJob,
+                    snapshotPath,
+                    snapshotContentHash,
+                    archivePath,
+                    cancellationToken);
+
+                if (!hashesMatch)
+                {
+                    await SetChangedAfterReadAsync(
+                        fileJob.Id,
+                        cancellationToken);
+                    _logger.LogWarning(
+                        "File job {FileJobId} changed after its snapshot was read; original file and snapshot were retained",
+                        fileJob.Id);
+                    return;
+                }
+
+                await SetArchivedAsync(
+                    fileJob.Id,
+                    archivePath,
+                    cancellationToken);
+
+                _logger.LogInformation(
+                    "Archived file job {FileJobId} at {ArchivePath} and deleted snapshot {SnapshotPath}",
+                    fileJob.Id,
+                    archivePath,
+                    snapshotPath);
+                return;
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+                when (IsArchiveFileException(exception))
+            {
+                if (attempt >= ArchiveMaxAttempts)
+                {
+                    await SetArchiveFailedAsync(
+                        fileJob.Id,
+                        exception.Message,
+                        cancellationToken);
+                    _logger.LogError(
+                        "Archiving file job {FileJobId} failed after {ArchiveAttempts} attempts with {ErrorType}: {ErrorMessage}",
+                        fileJob.Id,
+                        attempt,
+                        exception.GetType().Name,
+                        exception.Message);
+                    return;
+                }
+
+                _logger.LogWarning(
+                    "Archiving file job {FileJobId} failed on attempt {ArchiveAttempt} with {ErrorType}: {ErrorMessage}; retrying in {RetryDelaySeconds} second",
+                    fileJob.Id,
+                    attempt,
+                    exception.GetType().Name,
+                    exception.Message,
+                    ArchiveRetryDelay.TotalSeconds);
+                await Task.Delay(ArchiveRetryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<bool> MoveToArchiveIfUnchangedAsync(
+        FileJob fileJob,
+        string snapshotPath,
+        string snapshotContentHash,
+        string archivePath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(fileJob.OriginalPath) && File.Exists(archivePath))
+        {
+            File.Delete(snapshotPath);
+            _logger.LogInformation(
+                "File job {FileJobId} was already moved to {ArchivePath}; completing archive status",
+                fileJob.Id,
+                archivePath);
+            return true;
+        }
+
+        string originalContentHash;
+        await using (var originalStream = File.OpenRead(fileJob.OriginalPath))
+        {
+            var hash = await SHA256.HashDataAsync(
+                originalStream,
+                cancellationToken);
+            originalContentHash = Convert.ToHexString(hash);
+        }
+
+        var hashesMatch = string.Equals(
+            originalContentHash,
+            snapshotContentHash,
+            StringComparison.Ordinal);
+        _logger.LogInformation(
+            "Original file hash {OriginalContentHash} matches snapshot hash {SnapshotContentHash} for file job {FileJobId}: {HashesMatch}",
+            originalContentHash,
+            snapshotContentHash,
+            fileJob.Id,
+            hashesMatch);
+
+        if (!hashesMatch)
+        {
+            return false;
+        }
+
+        var archiveDirectoryPath = Path.GetDirectoryName(archivePath)
+            ?? throw new InvalidOperationException(
+                $"Archive path '{archivePath}' has no directory.");
+
+        Directory.CreateDirectory(archiveDirectoryPath);
+        File.Move(fileJob.OriginalPath, archivePath);
+        File.Delete(snapshotPath);
+        return true;
+    }
+
+    private static bool IsArchiveFileException(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException;
 
     private async Task ImportRecordAsync(
         FileJob fileJob,
@@ -606,6 +823,64 @@ public sealed class FileImportHandler
         await connection.ExecuteAsync(command);
     }
 
+    private async Task SetArchivedAsync(
+        long fileJobId,
+        string archivePath,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        var command = new CommandDefinition(
+            SetArchivedSql,
+            new
+            {
+                FileJobId = fileJobId,
+                ArchiveStatus = ArchiveStatus.Archived,
+                ArchivePath = archivePath
+            },
+            cancellationToken: cancellationToken);
+
+        await connection.ExecuteAsync(command);
+    }
+
+    private async Task SetChangedAfterReadAsync(
+        long fileJobId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        var command = new CommandDefinition(
+            SetChangedAfterReadSql,
+            new
+            {
+                FileJobId = fileJobId,
+                ArchiveStatus = ArchiveStatus.ChangedAfterRead
+            },
+            cancellationToken: cancellationToken);
+
+        await connection.ExecuteAsync(command);
+    }
+
+    private async Task SetArchiveFailedAsync(
+        long fileJobId,
+        string lastError,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        var command = new CommandDefinition(
+            SetArchiveFailedSql,
+            new
+            {
+                FileJobId = fileJobId,
+                ArchiveStatus = ArchiveStatus.ArchiveFailed,
+                LastError = lastError
+            },
+            cancellationToken: cancellationToken);
+
+        await connection.ExecuteAsync(command);
+    }
+
     private void LogDuplicate(long fileJobId, string contentHash)
     {
         _logger.LogInformation(
@@ -619,8 +894,12 @@ public sealed class FileImportHandler
         long ConfigId,
         long ConfigVersionId,
         string OriginalPath,
+        string FileName,
         string? SnapshotPath,
         string ImportStatus,
+        string ArchiveStatus,
+        string? ContentHash,
+        DateTime CreatedAt,
         string FileToSourceJson,
         string SourceTableName);
 }

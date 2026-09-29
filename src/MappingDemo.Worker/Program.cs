@@ -6,6 +6,25 @@ using MappingDemo.Worker;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddMappingDatabase(builder.Configuration);
 
+var inputRoot = builder.Configuration["Paths:InputRoot"];
+if (string.IsNullOrWhiteSpace(inputRoot))
+{
+    throw new InvalidOperationException(
+        "Configuration 'Paths:InputRoot' is not set.");
+}
+
+var archiveRoot = builder.Configuration["Paths:ArchiveRoot"];
+if (string.IsNullOrWhiteSpace(archiveRoot))
+{
+    throw new InvalidOperationException(
+        "Configuration 'Paths:ArchiveRoot' is not set.");
+}
+
+ArchivePathValidator.Validate(
+    inputRoot,
+    archiveRoot,
+    builder.Environment.ContentRootPath);
+
 var bootstrapServers = builder.Configuration["Kafka:BootstrapServers"]
     ?? throw new InvalidOperationException(
         "Configuration 'Kafka:BootstrapServers' is not set.");
