@@ -49,8 +49,10 @@ builder.Services.AddSingleton(new ConsumerConfig
 });
 builder.Services.AddSingleton<CsvRecordReader>();
 builder.Services.AddSingleton<FileImportHandler>();
+builder.Services.AddSingleton<RowNormalizeHandler>();
 builder.Services.AddHostedService<OutboxDispatcher>();
 builder.Services.AddHostedService<FileImportConsumer>();
+builder.Services.AddHostedService<RowNormalizeConsumer>();
 
 var host = builder.Build();
 host.Run();

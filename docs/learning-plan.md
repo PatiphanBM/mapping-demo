@@ -994,58 +994,58 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 ## Phase 14 — Worker: Normalize Consumer
 
-- [ ] **14.1 Consumer group ที่สอง**
+- [x] **14.1 Consumer group ที่สอง**
   - ทำ: group `mapping-row-normalize` subscribe `mapping.row-normalize` จำนวน `Kafka:NormalizeConsumers=3` ใช้โครงเดียวกับ Phase 10
   - เข้าใจ: คนละ group กับ import จึงทำงานอิสระ ไม่ติดการหน่วง 30 วินาทีของไฟล์
   - ตรวจ: log แสดง partition assignment ของ group ที่สอง
 
-- [ ] **14.2 ล็อกงานแถวและกันซ้ำ**
+- [x] **14.2 ล็อกงานแถวและกันซ้ำ**
   - ทำ: เปิด transaction แล้ว `SELECT ... FROM row_jobs WHERE id = @id FOR UPDATE` ถ้าเป็น `Done` หรือ `Invalid` ให้ commit และข้าม
   - เข้าใจ: `FOR UPDATE` ล็อกแถวไว้จนจบ transaction ถ้ามี message ซ้ำเข้ามาพร้อมกัน ตัวที่สองจะรอ แล้วเห็นว่าทำเสร็จแล้ว
   - ตรวจ: log แสดงการข้ามเมื่อส่ง message ซ้ำ
 
-- [ ] **14.3 โหลด rule และ Source row**
+- [x] **14.3 โหลด rule และ Source row**
   - ทำ: อ่าน `source_to_normalized` ของ `row_jobs.config_version_id` และ `SELECT * FROM "src_orders" WHERE id = @sourceRowId`
   - เข้าใจ: ใช้ version ที่ผูกกับงานแถว ไม่ใช่ active version ปัจจุบัน
   - ตรวจ: log ค่าที่อ่านได้
 
-- [ ] **14.4 เรียก `RowNormalizer`**
+- [x] **14.4 เรียก `RowNormalizer`**
   - ทำ: ส่งค่าเข้า logic จาก Phase 13
   - ตรวจ: log ผลสำเร็จ/ผิด
 
-- [ ] **14.5 สำเร็จ — upsert Normalized**
+- [x] **14.5 สำเร็จ — upsert Normalized**
   - ทำ: `INSERT ... ON CONFLICT (source_row_id) DO UPDATE SET <คอลัมน์ข้อมูล>, row_job_id, config_version_id, normalized_at` แล้วตั้ง row job `Done`
   - เข้าใจ: upsert ทำให้ message ซ้ำหรือ reprocess เขียนทับผลเดิมของแถวเดียวกัน ไม่เพิ่มแถว
   - ตรวจ: `norm_orders` มีค่าชนิดถูกต้อง เช่น `amount` เป็น numeric
 
-- [ ] **14.6 ผิด — Row Error**
+- [x] **14.6 ผิด — Row Error**
   - ทำ: insert `row_errors` ทุก field พร้อม `row_number` แล้วตั้ง row job `Invalid`
   - เข้าใจ: ข้อมูลผิดไม่ retry อัตโนมัติ เพราะรันซ้ำก็ผิดเหมือนเดิม แก้ได้ด้วย reprocess
   - ตรวจ: แถวผิดมีใน `row_errors` และไม่มีใน `norm_orders`
 
-- [ ] **14.7 Commit DB ก่อน commit offset**
+- [x] **14.7 Commit DB ก่อน commit offset**
   - ทำ: commit transaction แล้วค่อย `consumer.Commit(result)`
   - เข้าใจ: ถ้าสลับลำดับ แล้ว process ตายระหว่างกลาง จะเสียงานแถวนั้นไปถาวร ลำดับนี้ทำให้แย่สุดคือทำซ้ำ ซึ่งกันไว้แล้วใน 14.2
   - ตรวจ: อธิบายได้ว่าแต่ละลำดับเสียหายแบบไหน
 
-- [ ] **14.8 ระบบล้ม — retry แล้ว `Failed`**
+- [x] **14.8 ระบบล้ม — retry แล้ว `Failed`**
   - ทำ: เพิ่ม `Demo:FailNormalizeRowNumbers` สำหรับจำลอง; exception ที่ไม่ใช่ข้อมูลผิดให้ retry 3 ครั้งแบบ backoff (1s, 2s, 4s) แล้วตั้ง `Failed` + `last_error` ใน transaction ใหม่ และ commit offset
   - เข้าใจ: แยก error ชั่วคราวของระบบ (DB หลุด) ออกจากข้อมูลผิด; หลัง retry หมดต้อง commit offset ไม่เช่นนั้น partition ติด
   - ตรวจ: ตั้งให้แถว 10 ล้ม ได้ `Failed` และแถวอื่นเดินต่อ
 
-- [ ] **14.9 ตรวจเกณฑ์ 100 แถว ผิด 2**
+- [x] **14.9 ตรวจเกณฑ์ 100 แถว ผิด 2**
   - ทำ: เตรียมไฟล์ 100 records ที่ผิด 2 records แล้วรันครบ flow
   - ตรวจ: `src_orders` 100 แถว, `norm_orders` 98 แถว, `row_errors` ค้นด้วย rownumber/field/สาเหตุได้
 
-- [ ] **14.10 ตรวจว่า normalize เริ่มก่อนนำเข้าจบ**
+- [x] **14.10 ตรวจว่า normalize เริ่มก่อนนำเข้าจบ**
   - ทำ: ตั้ง throttle 200ms แล้วเทียบ `min(norm_orders.normalized_at)` กับเวลาที่ file job เป็น `Imported`
   - ตรวจ: normalize แถวแรกเกิดก่อนนำเข้าทั้งไฟล์จบ
 
-- [ ] **14.11 ตรวจการส่งซ้ำ**
+- [x] **14.11 ตรวจการส่งซ้ำ**
   - ทำ: ส่ง `RowNormalizeRequested` ของแถวที่ `Done` แล้วซ้ำด้วย console producer และ reset outbox บางแถวให้ `sent_at = null`
   - ตรวจ: จำนวนแถวใน `norm_orders` ไม่เปลี่ยน
 
-- [ ] **14.12 Commit Phase 14**
+- [x] **14.12 Commit Phase 14**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(worker): normalize source rows` เมื่อสั่งแยกต่างหาก
 
 ---
