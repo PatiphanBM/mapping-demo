@@ -1,45 +1,83 @@
 # Mapping Demo
 
-โปรเจกต์สาธิตการนำข้อมูล CSV เข้า Source Table และแปลงเป็น Normalized Table ผ่าน Kafka
-
-**สถานะ:** เริ่มสร้าง solution แล้ว โดย API มี Watcher เป็น hosted service; Worker และ Docker Compose ยังอยู่ในแผน
-
-## เอกสารหลัก
-
-- [แผน Demo](docs/demo-plan.md)
-- [Sequence Diagram — draw.io](docs/diagrams/mapping-demo-sequence.drawio)
-- [คำศัพท์ของระบบ](CONTEXT.md)
-
-ดาวน์โหลดไฟล์ `.drawio` แล้วเปิดด้วย diagrams.net หรือ draw.io Desktop เพื่อดูและแก้ไข diagram
-หน้า 01 Main Flow เรียง lifeline ซ้าย→ขวาตามลำดับงาน: Input Folder → Watcher → Kafka file → Import → Source/Outbox → Dispatcher → Kafka row → Normalize → Normalized → Archive; ตามด้วยหน้า retry/reprocess และ configuration
-
-## Flow ที่ตกลงไว้
+โปรเจกต์สาธิต pipeline นำข้อมูล CSV เข้า Source Table แล้ว normalize ผ่าน Kafka โดยมี PostgreSQL เก็บ config, job, outbox และผลลัพธ์
 
 ```text
-Partner folder → Watcher → Kafka (1 file = 1 job)
-  → Import Worker delay 30 วินาที
-  → Source Table: field จากไฟล์เป็น string
-      → Outbox → Kafka (1 row = 1 job)
-          → Normalize → Normalized Table / Row Error
-  → Archive หลังนำเข้า Source ครบ
+input/ → API (File Watcher) → outbox → Worker → Kafka
+          Source rows ← File Import ←┘       └→ Row Normalize → Normalized rows
 ```
 
-Normalize เริ่มทำงานได้ตั้งแต่แต่ละ Source row commit โดยไม่ต้องรอนำเข้าทั้งไฟล์จบ
-การหน่วง 30 วินาทีเป็นเวลารอตายตัว ไม่ได้ยืนยันว่า partner เขียนไฟล์เสร็จแล้ว
+Source เก็บค่าจาก CSV เป็นข้อความก่อน จากนั้นแต่ละแถวถูกส่งผ่าน transactional outbox ไป normalize โดยไม่ต้องรอให้ทั้งไฟล์ import เสร็จ รองรับ duplicate detection, retry และ reprocess ด้วย config version ที่เลือก
 
-## โครงสร้างที่วางแผน
+## สิ่งที่ต้องมี
 
-- **Config API:** ASP.NET Core Web API จัดการ mapping ทั้งสองขั้น รวมการสร้างตารางและเพิ่มคอลัมน์
-- **File Watcher:** hosted service ใน API เฝ้าดู folder ที่ผูกกับ mapping config และส่งงานไฟล์
-- **Mapping Worker:** import, outbox dispatcher และ normalize ภายใน process เดียว
-- **Infrastructure:** Kafka และ PostgreSQL บน Docker; .NET ทั้ง 2 process (API และ Worker) รันบนเครื่องเพื่อ debug
+- .NET 8 SDK (โปรเจกต์กำหนด SDK `8.0.400` และอนุญาต latest feature roll-forward)
+- Docker Desktop พร้อม Docker Compose
+- PowerShell 7 (`pwsh`)
 
-ใช้ config version ที่ตรึงเมื่อรับไฟล์ พร้อมป้องกันข้อมูลซ้ำ รองรับ retry ด้วย version เดิม และ reprocess ด้วย version ที่เลือก
+## รันเดโมจากสถานะว่าง
 
-## เอกสารบริบทเดิม
+คำสั่งทั้งหมดให้รันจาก root ของ repository และเปิด API กับ Worker คนละ terminal
 
-- [Current Program Workflow](current-program-workflow.md)
-- [Mapping API Modernization Proposal](plan-mapping-api-modernization.md)
+1. รีเซ็ตข้อมูล เปิด PostgreSQL/Kafka/Kafka UI และสร้าง topics:
 
-เอกสารสองฉบับนี้เป็นบริบทระบบเดิมและข้อเสนอเดิม รายละเอียด demo ปัจจุบันให้ยึดแผน Demo
-ลิงก์ไปโค้ดหรือไฟล์ตัวอย่างในเอกสารเดิมอาจอ้างถึงไฟล์ที่ไม่ได้อยู่ใน repository นี้
+   ```powershell
+   pwsh ./scripts/reset-demo.ps1
+   ```
+
+   คำสั่งนี้ลบ Docker volumes ของเดโมและล้าง `input/`, `archive/`, `data/` จึงควรหยุด API/Worker ก่อนใช้
+
+2. เปิด API ซึ่งจะ apply migrations และเริ่ม File Watcher ด้วย:
+
+   ```powershell
+   dotnet run --project src/MappingDemo.Api --launch-profile http
+   ```
+
+   ตรวจ health ได้ที่ <http://localhost:5181/health> และดู API reference ที่ <http://localhost:5181/scalar/v1>
+
+3. จาก terminal ใหม่ สร้าง Source/Normalized schema, mapping config และ version ผ่าน API:
+
+   ```powershell
+   pwsh ./scripts/configure-demo.ps1
+   ```
+
+4. เปิด Worker ใน terminal อีกหน้าหนึ่ง:
+
+   ```powershell
+   dotnet run --project src/MappingDemo.Worker
+   ```
+
+5. รอประมาณ 10 วินาทีให้ Watcher โหลด config แล้วสร้างไฟล์ตัวอย่างลง `input/orders`:
+
+   ```powershell
+   pwsh ./scripts/generate-sample.ps1
+   ```
+
+   `orders-a.csv` มี 100 records โดยตั้งใจให้แถวข้อมูล 25 เป็นวันที่ผิดและแถว 75 เป็นจำนวนเงินผิด จึงควรได้ Source 100, Normalized 98 และ 2 row errors ส่วน `orders-b.csv` มี 100 records ที่ถูกทั้งหมด หลัง import ไฟล์จะย้ายไป `archive/<config-id>/<yyyyMMdd>/<file-job-id>_<file-name>`
+
+6. ดูสถานะผ่าน API:
+
+   ```text
+   GET http://localhost:5181/file-jobs
+   GET http://localhost:5181/file-jobs/{id}
+   GET http://localhost:5181/file-jobs/{id}/errors
+   GET http://localhost:5181/file-jobs/{id}/history
+   ```
+
+Kafka UI อยู่ที่ <http://localhost:8080> การ import จะรอ 30 วินาทีตาม `Import:DelaySeconds`; ช่วงทดสอบสามารถ override ได้ เช่น `dotnet run --project src/MappingDemo.Worker -- Import:DelaySeconds=1`
+
+## สคริปต์ช่วยเดโม
+
+- `scripts/reset-demo.ps1` — ล้าง state และเริ่ม infrastructure ใหม่
+- `scripts/create-topics.ps1` — สร้าง Kafka topics แบบเรียกซ้ำได้
+- `scripts/configure-demo.ps1` — สร้าง schema/config ตัวอย่างผ่าน API หลัง reset
+- `scripts/generate-sample.ps1` — สร้าง CSV สองไฟล์; ใช้ `-OutputDirectory` เพื่อเลือกปลายทางอื่นได้
+
+## เอกสาร
+
+- [Learning plan](docs/learning-plan.md) — ขั้นตอนลงมือและเกณฑ์ตรวจรับ
+- [Demo plan](docs/demo-plan.md) — ขอบเขตและการตัดสินใจของเดโม
+- [Sequence diagram](docs/diagrams/mapping-demo-sequence.drawio) — เปิดด้วย diagrams.net หรือ draw.io Desktop
+- [Domain context](CONTEXT.md) — คำศัพท์ของระบบ
+
+รายละเอียด demo ปัจจุบันให้ยึด learning plan และ demo plan เอกสารบริบทระบบเดิมคือ [Current Program Workflow](current-program-workflow.md) และ [Mapping API Modernization Proposal](plan-mapping-api-modernization.md)

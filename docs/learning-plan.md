@@ -1135,17 +1135,17 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 ## Phase 18 — Demo script และตรวจรับ
 
-- [ ] **18.1 Script สร้างไฟล์ตัวอย่าง**
+- [x] **18.1 Script สร้างไฟล์ตัวอย่าง**
   - ทำ: `scripts/generate-sample.ps1` สร้าง `orders-a.csv` 100 records (ผิด 2) และ `orders-b.csv`
   - ตรวจ: เปิดไฟล์แล้วหาแถวที่ผิดเจอ
 
-- [ ] **18.2 Script reset**
+- [x] **18.2 Script reset**
   - ทำ: `scripts/reset-demo.ps1` สั่ง `docker compose down -v`, `up -d`, สร้าง topic และล้าง `input/`, `archive/`, `data/`
   - ตรวจ: รันแล้วระบบกลับสู่สถานะเริ่มต้น
 
-- [ ] **18.3 ไล่เกณฑ์ตรวจรับครบทุกข้อ** (ตารางด้านล่าง)
+- [x] **18.3 ไล่เกณฑ์ตรวจรับครบทุกข้อ** (ตารางด้านล่าง)
 
-- [ ] **18.4 อัปเดต README**
+- [x] **18.4 อัปเดต README**
   - ทำ: เพิ่มวิธีรัน: ลำดับ Docker → API (รวม Watcher) → Worker และลิงก์แผนนี้
   - ตรวจ: คนที่ไม่เคยเห็น repo ทำตาม README แล้วรันได้
 
@@ -1156,17 +1156,17 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 | ตรวจ | เกณฑ์ | พิสูจน์ใน step |
 |---|---|---|
-| - [ ] | สร้าง schema/config ผ่าน API และ Source เก็บเป็นข้อความ | 5.9, 6.10, 11.8 |
-| - [ ] | Worker ไม่อ่านไฟล์ก่อนครบ 30 วินาที และ normalize ทำงานได้ระหว่างนั้น | 10.6, 14.1 |
-| - [ ] | Row job เริ่ม normalize ก่อน File Import Job จบ | 14.10 |
+| - [x] | สร้าง schema/config ผ่าน API และ Source เก็บเป็นข้อความ | 5.9, 6.10, 11.8 |
+| - [x] | Worker ไม่อ่านไฟล์ก่อนครบ 30 วินาที และ normalize ทำงานได้ระหว่างนั้น | 10.6, 14.1 |
+| - [x] | Row job เริ่ม normalize ก่อน File Import Job จบ | 14.10 |
 | - [x] | ไฟล์ A และ B ประมวลผลคาบเกี่ยวกัน และ log partition ยืนยัน | 10.7 |
-| - [ ] | 100 records ผิด 2: Source 100, Normalized 98, ค้น error ได้ | 14.9, 15.3 |
-| - [ ] | Archive หลังเข้า Source ครบ ขณะ normalize อาจยังทำอยู่ | 12.3, 14.10 |
-| - [ ] | หยุดหลัง Source/outbox commit แล้วเริ่มใหม่ ส่งต่อได้ ไม่เพิ่มผลซ้ำ | 9.7, 11.12, 14.11 |
-| - [ ] | นำเข้าล้มกลางทางแล้ว retry ไม่เพิ่มข้อมูลซ้ำ | 11.11, 16.2 |
+| - [x] | 100 records ผิด 2: Source 100, Normalized 98, ค้น error ได้ | 14.9, 15.3 |
+| - [x] | Archive หลังเข้า Source ครบ ขณะ normalize อาจยังทำอยู่ | 12.3, 14.10 |
+| - [x] | หยุดหลัง Source/outbox commit แล้วเริ่มใหม่ ส่งต่อได้ ไม่เพิ่มผลซ้ำ | 9.7, 11.12, 14.11 |
+| - [x] | นำเข้าล้มกลางทางแล้ว retry ไม่เพิ่มข้อมูลซ้ำ | 11.11, 16.2 |
 | - [x] | แก้ config ระหว่างงาน งานเดิมใช้ version ที่ตรึงไว้ | 10.11 |
-| - [ ] | Retry ใช้ version เดิม; Reprocess ใช้ version ที่เลือกและมีประวัติแยก | 16.3, 17.4 |
+| - [x] | Retry ใช้ version เดิม; Reprocess ใช้ version ที่เลือกและมีประวัติแยก | 16.3, 17.4 |
 | - [x] | ไฟล์เนื้อหาเดิมชื่อใหม่เป็น Duplicate | 10.10 |
-| - [ ] | Reprocess ไม่ผ่าน ผลเดิมและ version เดิมยังอยู่ | 17.5 |
-| - [ ] | แก้ไฟล์หลัง snapshot ได้ `ChangedAfterRead` และไม่ย้าย | 12.5 |
-| - [ ] | แถว `Failed` ทำให้ไฟล์เป็น `CompletedWithErrors`; retry แล้วคำนวณใหม่ | 14.8, 16.3 |
+| - [x] | Reprocess ไม่ผ่าน ผลเดิมและ version เดิมยังอยู่ | 17.5 |
+| - [x] | แก้ไฟล์หลัง snapshot ได้ `ChangedAfterRead` และไม่ย้าย | 12.5 |
+| - [x] | แถว `Failed` ทำให้ไฟล์เป็น `CompletedWithErrors`; retry แล้วคำนวณใหม่ | 14.8, 16.3 |
