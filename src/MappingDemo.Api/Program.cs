@@ -42,6 +42,7 @@ builder.Services.AddSingleton<WatcherRegistry>();
 builder.Services.AddSingleton<FileIntake>();
 builder.Services.AddScoped<MappingConfigService>();
 builder.Services.AddScoped<TableService>();
+builder.Services.AddScoped<FileJobService>();
 builder.Services.AddHostedService<FileWatcherService>();
 
 var app = builder.Build();

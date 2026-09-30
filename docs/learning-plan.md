@@ -102,7 +102,7 @@
 - [ ] Phase 12 — Archive
 - [ ] Phase 13 — กฎแปลงข้อมูล (pure logic + unit test)
 - [ ] Phase 14 — Worker: Normalize Consumer
-- [ ] Phase 15 — API ดูสถานะงาน
+- [x] Phase 15 — API ดูสถานะงาน
 - [ ] Phase 16 — Retry
 - [ ] Phase 17 — Reprocess
 - [ ] Phase 18 — Demo script และตรวจรับ
@@ -1052,26 +1052,26 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 ## Phase 15 — API ดูสถานะงาน
 
-- [ ] **15.1 Test ของการคำนวณ `normalization_status` ก่อน**
+- [x] **15.1 Test ของการคำนวณ `normalization_status` ก่อน**
   - ทำ: pure function รับ `import_status` และยอดตามสถานะ; test: ยังไม่ `Imported` → `InProgress`; มี `Pending` → `InProgress`; ทุกแถว `Done` → `Completed`; มี `Invalid` หรือ `Failed` → `CompletedWithErrors`
   - เข้าใจ: คำนวณตอนอ่านจาก row jobs แทนการเก็บ counter บน file job เพื่อไม่ให้ row jobs ที่ทำขนานแย่ง lock แถวเดียวกัน
   - ตรวจ: test แดงแล้วเขียว
 
-- [ ] **15.2 `GET /file-jobs` และ `GET /file-jobs/{id}`**
+- [x] **15.2 `GET /file-jobs` และ `GET /file-jobs/{id}`**
   - ทำ: คืน import/archive status, total_rows, ยอด `Pending/Done/Invalid/Failed` นับจากงานล่าสุดของแต่ละ Source row ด้วย `DISTINCT ON (source_row_id) ... ORDER BY source_row_id, id DESC`
   - เข้าใจ: หลัง reprocess Source แถวหนึ่งมีหลาย row job ต้องนับเฉพาะงานล่าสุด `DISTINCT ON` ของ PostgreSQL เลือกแถวแรกของแต่ละกลุ่มตาม `ORDER BY`
   - ตรวจ: ยอดตรงกับ 14.9 และสถานะเป็น `CompletedWithErrors`
 
-- [ ] **15.3 `GET /file-jobs/{id}/errors`**
+- [x] **15.3 `GET /file-jobs/{id}/errors`**
   - ทำ: คืน `rowNumber`, `field`, `reason` ของงานล่าสุดแต่ละแถว เรียงตาม rowNumber
   - ตรวจ: เห็น 2 แถวที่ผิด
 
-- [ ] **15.4 `GET /file-jobs/{id}/rows/{rowNumber}/history`**
+- [x] **15.4 `GET /file-jobs/{id}/rows/{rowNumber}/history`**
   - ทำ: คืนทุก row job ของแถวนั้นพร้อม version, kind, status, error
   - เข้าใจ: นี่คือประวัติที่ใช้ดูผลของ reprocess
   - ตรวจ: แถวปกติมี 1 รายการ `Initial`
 
-- [ ] **15.5 Commit Phase 15**
+- [x] **15.5 Commit Phase 15**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat(api): query file job status and errors` เมื่อสั่งแยกต่างหาก
 
 ---
