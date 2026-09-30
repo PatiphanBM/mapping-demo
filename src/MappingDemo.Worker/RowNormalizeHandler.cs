@@ -95,6 +95,7 @@ public sealed class RowNormalizeHandler
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly IReadOnlySet<int> _failNormalizeRowNumbers;
+    private readonly TimeSpan _normalizeDelay;
     private readonly ILogger<RowNormalizeHandler> _logger;
 
     public RowNormalizeHandler(
@@ -107,12 +108,20 @@ public sealed class RowNormalizeHandler
             .GetSection("Demo:FailNormalizeRowNumbers")
             .Get<int[]>() ?? [];
         _failNormalizeRowNumbers = failNormalizeRowNumbers.ToHashSet();
+        _normalizeDelay = TimeSpan.FromMilliseconds(
+            configuration.GetValue<int>("Demo:NormalizeDelayMs"));
         _logger = logger;
 
         if (_failNormalizeRowNumbers.Any(rowNumber => rowNumber <= 0))
         {
             throw new InvalidOperationException(
                 "Configuration 'Demo:FailNormalizeRowNumbers' must only contain positive row numbers.");
+        }
+
+        if (_normalizeDelay < TimeSpan.Zero)
+        {
+            throw new InvalidOperationException(
+                "Configuration 'Demo:NormalizeDelayMs' must not be negative.");
         }
     }
 
@@ -208,6 +217,11 @@ public sealed class RowNormalizeHandler
         {
             throw new InvalidOperationException(
                 $"Demo normalize failure at row {rowJob.RowNumber}.");
+        }
+
+        if (_normalizeDelay > TimeSpan.Zero)
+        {
+            await Task.Delay(_normalizeDelay, cancellationToken);
         }
 
         var rules = JsonSerializer.Deserialize<SourceToNormalizedRule[]>(

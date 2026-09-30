@@ -1,3 +1,4 @@
+using MappingDemo.Api.Contracts.FileJobs;
 using MappingDemo.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -97,6 +98,40 @@ public sealed class FileJobsController : ControllerBase
             }),
             _ => throw new InvalidOperationException(
                 $"Unsupported retry result '{result}'.")
+        };
+    }
+
+    [HttpPost("{id:long}/reprocess")]
+    public async Task<IActionResult> Reprocess(
+        long id,
+        ReprocessFileJobRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fileJobService.ReprocessAsync(
+            id,
+            request.VersionId,
+            cancellationToken);
+
+        return result.Outcome switch
+        {
+            FileReprocessOutcome.Accepted => Accepted(
+                new ReprocessFileJobResponse(result.RowJobsCreated)),
+            FileReprocessOutcome.FileJobNotFound => NotFound(),
+            FileReprocessOutcome.InvalidVersion => BadRequest(
+                new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "Invalid config version for reprocess.",
+                    Detail = result.Error
+                }),
+            FileReprocessOutcome.Conflict => Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "File job cannot be reprocessed.",
+                Detail = "A Source row already has a Pending normalization job."
+            }),
+            _ => throw new InvalidOperationException(
+                $"Unsupported reprocess outcome '{result.Outcome}'.")
         };
     }
 }

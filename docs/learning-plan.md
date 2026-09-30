@@ -104,7 +104,7 @@
 - [ ] Phase 14 — Worker: Normalize Consumer
 - [x] Phase 15 — API ดูสถานะงาน
 - [x] Phase 16 — Retry
-- [ ] Phase 17 — Reprocess
+- [x] Phase 17 — Reprocess
 - [ ] Phase 18 — Demo script และตรวจรับ
 
 ---
@@ -1100,35 +1100,35 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 ## Phase 17 — Reprocess
 
-- [ ] **17.1 ยืนยันขอบเขต (A2)**
+- [x] **17.1 ยืนยันขอบเขต (A2)**
   - ทำ: ตัดสินว่า reprocess ทั้งไฟล์พอหรือต้องเลือกบางแถว แล้วบันทึกผลใน demo-plan
   - ตรวจ: มีข้อสรุปเป็นลายลักษณ์อักษร
 
-- [ ] **17.2 ตรวจ version ที่เลือก**
+- [x] **17.2 ตรวจ version ที่เลือก**
   - ทำ: version ต้องเป็นของ config เดียวกัน และ sourceColumn ทุกตัวใน `source_to_normalized` ต้องมีใน Source table
   - เข้าใจ: reprocess อ่านจาก Source ไม่อ่าน CSV ใหม่ จึงใช้ได้เฉพาะ field ที่นำเข้ามาแล้ว
   - ตรวจ: เลือก version ของ config อื่นได้ 400
 
-- [ ] **17.3 `POST /file-jobs/{id}/reprocess`**
+- [x] **17.3 `POST /file-jobs/{id}/reprocess`**
   - ทำ: รับ `versionId` ใน transaction เดียวสร้าง row job `Reprocess`/`Pending` ต่อทุก Source row ของไฟล์พร้อม outbox; ถ้าชน partial unique index ให้ rollback และคืน 409
   - เข้าใจ: index `where status = 'Pending'` ทำหน้าที่เป็น lock ระดับ DB กันแถวเดียวกัน reprocess ซ้อน โดยไม่ต้องเขียน lock เอง
   - ตรวจ: row_jobs เพิ่ม 100 แถว
 
-- [ ] **17.4 Reprocess สำเร็จ**
+- [x] **17.4 Reprocess สำเร็จ**
   - ทำ: สร้าง version 2 ที่ตั้ง format ต่างออกไปจนแถวที่เคยผิดผ่าน แล้ว reprocess
   - เข้าใจ: upsert เดิมใน 14.5 เขียนทับ Current Normalized Result พร้อม `config_version_id` ใหม่
   - ตรวจ: `norm_orders` 100 แถว และ history ของแถวที่เคยผิดมี 2 รายการ
 
-- [ ] **17.5 Reprocess ไม่ผ่าน**
+- [x] **17.5 Reprocess ไม่ผ่าน**
   - ทำ: สร้าง version 3 ที่ทำให้บางแถวผิด แล้ว reprocess
   - เข้าใจ: ผิดแล้วไม่แตะ `norm_orders` ผลสำเร็จเดิมพร้อม version เดิมจึงยังอยู่ ส่วน error เป็นของการรันล่าสุดแยกกัน
   - ตรวจ: แถวนั้นยังมีใน `norm_orders` ด้วย version 2 และ `/errors` แสดง error ของ version 3
 
-- [ ] **17.6 กันรันซ้อน**
+- [x] **17.6 กันรันซ้อน**
   - ทำ: ตั้ง `Demo:NormalizeDelayMs` ให้ normalize ช้า แล้วยิง reprocess สองครั้งติดกัน
   - ตรวจ: ครั้งที่สองได้ 409
 
-- [ ] **17.7 Commit Phase 17**
+- [x] **17.7 Commit Phase 17**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: reprocess file with selected config version` เมื่อสั่งแยกต่างหาก
 
 ---

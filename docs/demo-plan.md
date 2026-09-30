@@ -66,6 +66,13 @@ Sequence diagrams: [เปิดไฟล์ draw.io](diagrams/mapping-demo-sequ
 - Enqueue ทันทีที่ Watcher พบไฟล์ แล้ว Worker หน่วง 30 วินาทีก่อนนำเข้า ตามข้อสรุปเพิ่มเติมด้านล่าง
 - ชุดข้อมูลลูกค้าและจำนวน 2 configs จากข้อเสนอเดิมยังไม่ได้รับการยืนยัน; ไม่ถือเป็นข้อกำหนดของผู้ใช้
 
+### ขอบเขต Reprocess
+
+- หนึ่งคำสั่ง reprocess ทำงานกับทุก Source row ของ File Import Job ไม่รองรับการเลือกบางแถว
+- reprocess สร้าง Row Normalization Job ชุดใหม่ชนิด `Reprocess` และเลือก Config Version ได้ โดยไม่อ่าน CSV ใหม่
+- หาก Source row ใดมีงาน `Pending` อยู่แล้ว คำสั่งทั้งไฟล์ต้องไม่สร้างงานบางส่วนและคืน conflict
+- ผล normalization ที่สำเร็จใหม่เป็น Current Normalized Result; หากการรันใหม่ไม่ผ่าน ให้คงผลสำเร็จเดิมไว้และแสดง Row Error จากงานล่าสุด
+
 ### ข้อสรุปเพิ่มเติม: เข้าคิวทันทีแล้วหน่วง 30 วินาที
 
 ผู้ใช้กำหนด flow: `เข้าคิวทันที → Worker delay 30 วินาที → เริ่มนำเข้า Source`

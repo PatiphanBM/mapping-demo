@@ -1,14 +1,50 @@
 using System.Globalization;
+using System.Text.Json;
 using Dapper;
 using MappingDemo.Api.Contracts.FileJobs;
 using MappingDemo.Shared.Jobs;
+using MappingDemo.Shared.MappingConfigs;
 using MappingDemo.Shared.Messaging;
+using MappingDemo.Shared.Tables;
 using Npgsql;
 
 namespace MappingDemo.Api.Services;
 
 public sealed class FileJobService
 {
+    private static readonly JsonSerializerOptions JsonOptions =
+        new(JsonSerializerDefaults.Web);
+
+    private const string PendingRowJobConstraint =
+        "ux_row_jobs_pending_source_row";
+
+    private const string SelectReprocessFileJobSql = """
+        SELECT
+            file_jobs.config_id AS "ConfigId",
+            mapping_configs.source_table_id AS "SourceTableId",
+            source_table.name AS "SourceTableName"
+        FROM file_jobs
+        INNER JOIN mapping_configs
+            ON mapping_configs.id = file_jobs.config_id
+        INNER JOIN table_definitions AS source_table
+            ON source_table.id = mapping_configs.source_table_id
+        WHERE file_jobs.id = @FileJobId;
+        """;
+
+    private const string SelectReprocessVersionSql = """
+        SELECT
+            config_id AS "ConfigId",
+            source_to_normalized::text AS "SourceToNormalizedJson"
+        FROM mapping_config_versions
+        WHERE id = @VersionId;
+        """;
+
+    private const string SelectSourceColumnsSql = """
+        SELECT name
+        FROM table_columns
+        WHERE table_id = @SourceTableId;
+        """;
+
     private const string RetryFileJobSql = """
         UPDATE file_jobs
         SET
@@ -251,6 +287,138 @@ public sealed class FileJobService
         return JobRetryResult.Retried;
     }
 
+    public async Task<FileReprocessResult> ReprocessAsync(
+        long fileJobId,
+        long versionId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken);
+        var fileJobCommand = new CommandDefinition(
+            SelectReprocessFileJobSql,
+            new { FileJobId = fileJobId },
+            transaction,
+            cancellationToken: cancellationToken);
+        var fileJob = await connection
+            .QuerySingleOrDefaultAsync<ReprocessFileJobRow>(fileJobCommand);
+
+        if (fileJob is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new FileReprocessResult(
+                FileReprocessOutcome.FileJobNotFound);
+        }
+
+        var versionCommand = new CommandDefinition(
+            SelectReprocessVersionSql,
+            new { VersionId = versionId },
+            transaction,
+            cancellationToken: cancellationToken);
+        var version = await connection
+            .QuerySingleOrDefaultAsync<ReprocessVersionRow>(versionCommand);
+
+        if (version is null || version.ConfigId != fileJob.ConfigId)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new FileReprocessResult(
+                FileReprocessOutcome.InvalidVersion,
+                Error: "Version must belong to the file job's mapping config.");
+        }
+
+        var rules = JsonSerializer.Deserialize<SourceToNormalizedRule[]>(
+                version.SourceToNormalizedJson,
+                JsonOptions) ?? [];
+        var columnsCommand = new CommandDefinition(
+            SelectSourceColumnsSql,
+            new { fileJob.SourceTableId },
+            transaction,
+            cancellationToken: cancellationToken);
+        var sourceColumns = (await connection.QueryAsync<string>(
+                columnsCommand))
+            .ToHashSet(StringComparer.Ordinal);
+        var missingSourceColumns = rules
+            .Select(rule => rule.SourceColumn)
+            .Where(column => !sourceColumns.Contains(column))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        if (missingSourceColumns.Length > 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new FileReprocessResult(
+                FileReprocessOutcome.InvalidVersion,
+                Error: $"Source columns do not exist: {string.Join(", ", missingSourceColumns)}.");
+        }
+
+        var insertRowJobsSql = $"""
+            INSERT INTO row_jobs (
+                file_job_id,
+                source_row_id,
+                row_number,
+                config_version_id,
+                kind,
+                status)
+            SELECT
+                @FileJobId,
+                source_rows.id,
+                source_rows.row_number,
+                @VersionId,
+                @Kind,
+                @Status
+            FROM {SqlIdentifier.Quote(fileJob.SourceTableName)} AS source_rows
+            WHERE source_rows.file_job_id = @FileJobId
+            ORDER BY source_rows.row_number
+            RETURNING id AS "RowJobId", source_row_id AS "SourceRowId";
+            """;
+        var insertCommand = new CommandDefinition(
+            insertRowJobsSql,
+            new
+            {
+                FileJobId = fileJobId,
+                VersionId = versionId,
+                Kind = "Reprocess",
+                Status = RowJobStatus.Pending
+            },
+            transaction,
+            cancellationToken: cancellationToken);
+
+        IReadOnlyList<CreatedRowJob> createdRowJobs;
+
+        try
+        {
+            createdRowJobs = (await connection.QueryAsync<CreatedRowJob>(
+                    insertCommand))
+                .ToArray();
+        }
+        catch (PostgresException exception)
+            when (exception.SqlState == PostgresErrorCodes.UniqueViolation
+                  && exception.ConstraintName == PendingRowJobConstraint)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new FileReprocessResult(FileReprocessOutcome.Conflict);
+        }
+
+        foreach (var rowJob in createdRowJobs)
+        {
+            await OutboxWriter.AddAsync(
+                connection,
+                transaction,
+                Topics.RowNormalize,
+                rowJob.SourceRowId.ToString(CultureInfo.InvariantCulture),
+                new RowNormalizeRequested(rowJob.RowJobId),
+                cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return new FileReprocessResult(
+            FileReprocessOutcome.Accepted,
+            createdRowJobs.Count);
+    }
+
     private async Task<IReadOnlyList<FileJobRow>> GetRowsAsync(
         long? id,
         CancellationToken cancellationToken)
@@ -352,4 +520,17 @@ public sealed class FileJobService
 
         public string? ErrorReason { get; init; }
     }
+
+    private sealed record ReprocessFileJobRow(
+        long ConfigId,
+        long SourceTableId,
+        string SourceTableName);
+
+    private sealed record ReprocessVersionRow(
+        long ConfigId,
+        string SourceToNormalizedJson);
+
+    private sealed record CreatedRowJob(
+        long RowJobId,
+        long SourceRowId);
 }
