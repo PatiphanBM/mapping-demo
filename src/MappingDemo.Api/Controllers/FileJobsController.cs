@@ -75,4 +75,28 @@ public sealed class FileJobsController : ControllerBase
             cancellationToken);
         return Ok(history);
     }
+
+    [HttpPost("{id:long}/retry")]
+    public async Task<IActionResult> Retry(
+        long id,
+        CancellationToken cancellationToken)
+    {
+        var result = await _fileJobService.RetryAsync(
+            id,
+            cancellationToken);
+
+        return result switch
+        {
+            JobRetryResult.Retried => Accepted(),
+            JobRetryResult.NotFound => NotFound(),
+            JobRetryResult.Conflict => Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "File job cannot be retried.",
+                Detail = "Only an ImportFailed file job can be retried."
+            }),
+            _ => throw new InvalidOperationException(
+                $"Unsupported retry result '{result}'.")
+        };
+    }
 }

@@ -1,12 +1,32 @@
+using System.Globalization;
 using Dapper;
 using MappingDemo.Api.Contracts.FileJobs;
 using MappingDemo.Shared.Jobs;
+using MappingDemo.Shared.Messaging;
 using Npgsql;
 
 namespace MappingDemo.Api.Services;
 
 public sealed class FileJobService
 {
+    private const string RetryFileJobSql = """
+        UPDATE file_jobs
+        SET
+            import_status = @QueuedStatus,
+            last_error = NULL,
+            updated_at = now()
+        WHERE id = @FileJobId
+          AND import_status = @FailedStatus
+        RETURNING id;
+        """;
+
+    private const string FileJobExistsSql = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM file_jobs
+            WHERE id = @FileJobId);
+        """;
+
     private const string SelectFileJobsSql = """
         WITH latest_row_jobs AS (
             SELECT DISTINCT ON (file_job_id, source_row_id)
@@ -180,6 +200,55 @@ public sealed class FileJobService
                     errors);
             })
             .ToArray();
+    }
+
+    public async Task<JobRetryResult> RetryAsync(
+        long fileJobId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken);
+        var retryCommand = new CommandDefinition(
+            RetryFileJobSql,
+            new
+            {
+                FileJobId = fileJobId,
+                QueuedStatus = ImportStatus.Queued,
+                FailedStatus = ImportStatus.ImportFailed
+            },
+            transaction,
+            cancellationToken: cancellationToken);
+        var retriedFileJobId =
+            await connection.ExecuteScalarAsync<long?>(retryCommand);
+
+        if (!retriedFileJobId.HasValue)
+        {
+            var existsCommand = new CommandDefinition(
+                FileJobExistsSql,
+                new { FileJobId = fileJobId },
+                transaction,
+                cancellationToken: cancellationToken);
+            var exists = await connection.ExecuteScalarAsync<bool>(
+                existsCommand);
+            await transaction.RollbackAsync(cancellationToken);
+
+            return exists
+                ? JobRetryResult.Conflict
+                : JobRetryResult.NotFound;
+        }
+
+        await OutboxWriter.AddAsync(
+            connection,
+            transaction,
+            Topics.FileImport,
+            fileJobId.ToString(CultureInfo.InvariantCulture),
+            new FileImportRequested(fileJobId),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return JobRetryResult.Retried;
     }
 
     private async Task<IReadOnlyList<FileJobRow>> GetRowsAsync(

@@ -103,7 +103,7 @@
 - [ ] Phase 13 — กฎแปลงข้อมูล (pure logic + unit test)
 - [ ] Phase 14 — Worker: Normalize Consumer
 - [x] Phase 15 — API ดูสถานะงาน
-- [ ] Phase 16 — Retry
+- [x] Phase 16 — Retry
 - [ ] Phase 17 — Reprocess
 - [ ] Phase 18 — Demo script และตรวจรับ
 
@@ -1078,22 +1078,22 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 
 ## Phase 16 — Retry
 
-- [ ] **16.1 `POST /file-jobs/{id}/retry`**
+- [x] **16.1 `POST /file-jobs/{id}/retry`**
   - ทำ: อนุญาตเฉพาะ `ImportFailed` ใน transaction เดียวตั้ง `Queued` + เขียน outbox topic file-import; สถานะอื่นคืน 409
   - เข้าใจ: API ไม่ส่ง Kafka เอง ใช้ outbox แบบเดียวกับ Watcher คำสั่งจึงไม่หายแม้ Worker ปิดอยู่
   - ตรวจ: outbox มีแถวใหม่
 
-- [ ] **16.2 Worker รับงาน retry**
+- [x] **16.2 Worker รับงาน retry**
   - ทำ: ให้ handler รับ `Queued` ที่มี snapshot อยู่แล้วโดยใช้ snapshot เดิม
   - เข้าใจ: retry ใช้ version เดิมและ snapshot เดิม rownumber จึงชี้ข้อมูลชุดเดิม
   - ตรวจ: ล้มที่แถว 50 (11.11) ปิด fault injection แล้ว retry ได้ `Imported`, Source 100 แถว ไม่มีซ้ำ
 
-- [ ] **16.3 `POST /row-jobs/{id}/retry`**
+- [x] **16.3 `POST /row-jobs/{id}/retry`**
   - ทำ: อนุญาตเฉพาะ `Failed` ตั้ง `Pending` + outbox ด้วย row job id เดิม
   - เข้าใจ: retry ไม่สร้าง row job ใหม่ และใช้ `config_version_id` เดิม
   - ตรวจ: แถวที่ `Failed` จาก 14.8 เป็น `Done` และสถานะไฟล์คำนวณใหม่เป็น `Completed` หรือ `CompletedWithErrors` ตาม `Invalid` ที่เหลือ
 
-- [ ] **16.4 Commit Phase 16**
+- [x] **16.4 Commit Phase 16**
   - ทำ: สรุปงานให้ผู้ใช้ แล้วให้ผู้ใช้ commit `feat: retry file import and row normalization` เมื่อสั่งแยกต่างหาก
 
 ---

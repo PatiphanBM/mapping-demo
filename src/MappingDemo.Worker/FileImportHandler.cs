@@ -114,6 +114,7 @@ public sealed class FileImportHandler
         SET
             import_status = @ImportStatus,
             total_rows = @TotalRows,
+            last_error = NULL,
             updated_at = now()
         WHERE id = @FileJobId;
         """;
