@@ -242,6 +242,13 @@ topic คือ `mapping.file-import` และ `mapping.row-normalize` ตา�
 - `normalization_status` ปิดได้เมื่อ `import_status = Imported` และไม่มี `Pending`; แถว `Failed` นับว่าปิดแล้วและแสดงยอดแยกจาก `Invalid` จึงได้ `CompletedWithErrors`; retry แถวแล้วสถานะไฟล์คำนวณใหม่เอง
 - ไฟล์ `ImportFailed` ยังไม่มี `total_rows` จึงเป็น `InProgress` จนกว่า retry นำเข้าจะสำเร็จ; แถวที่เข้า Source แล้วยัง normalize ต่อได้
 
+## ข้อสรุปรอบที่ 7 — หน้าเว็บตั้งค่า Mapping Config
+
+- เพิ่มหน้าเว็บสำหรับสร้าง Mapping Config, สร้าง Config Version และ activate ผ่าน API เดิม โดยไม่เพิ่ม endpoint ใหม่ ส่วนแผนทีละ step อยู่ที่ [web-config-plan.md](web-config-plan.md)
+- ใช้ Next.js (App Router, client component ทั้งหมด) เพราะเป็นแค่ demo และผู้ใช้สนใจ งานจริงของบริษัทใช้ Angular จึงเลือกโครงที่ย้ายแนวคิดไปได้: API client แยกเป็นไฟล์เดียวที่ไม่ผูกกับ React และใช้ dev proxy แทน CORS
+- ทำแบบเบา: ไม่ลง library เพิ่มนอกจากที่ `create-next-app` ใส่มา, ไม่ทำ validation ซ้ำฝั่ง client (API เป็นผู้ตัดสินที่เดียว) และไม่ทำหน้าจัดการ Tables
+- API ส่ง enum เป็นชื่อ (`JsonStringEnumConverter`) โดยยังรับค่าตัวเลขเดิมได้
+
 ## บริบทเอกสารเดิม
 
 - [ระบบเดิม](../current-program-workflow.md) อธิบาย flow ไฟล์ → staging → mapping/condition → ตารางปลายทาง และแยกไฟล์ข้อมูลออกจาก configuration

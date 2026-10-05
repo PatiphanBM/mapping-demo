@@ -106,6 +106,7 @@
 - [x] Phase 16 — Retry
 - [x] Phase 17 — Reprocess
 - [ ] Phase 18 — Demo script และตรวจรับ
+- [ ] Phase 19 — หน้าเว็บตั้งค่า Mapping Config → แยกไว้ที่ [web-config-plan.md](web-config-plan.md)
 
 ---
 

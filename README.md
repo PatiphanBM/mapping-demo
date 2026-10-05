@@ -76,6 +76,7 @@ Kafka UI อยู่ที่ <http://localhost:8080> การ import จะ�
 ## เอกสาร
 
 - [Learning plan](docs/learning-plan.md) — ขั้นตอนลงมือและเกณฑ์ตรวจรับ
+- [Web config plan](docs/web-config-plan.md) — แผน Phase 19 หน้าเว็บตั้งค่า Mapping Config
 - [Acceptance test guide](docs/acceptance-test-guide.md) — ไฟล์ทดสอบและวิธีพิสูจน์เกณฑ์ตรวจรับทุกข้อทีละขั้น
 - [Demo plan](docs/demo-plan.md) — ขอบเขตและการตัดสินใจของเดโม
 - [Sequence diagram](docs/diagrams/mapping-demo-sequence.drawio) — เปิดด้วย diagrams.net หรือ draw.io Desktop
