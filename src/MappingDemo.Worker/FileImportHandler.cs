@@ -475,8 +475,6 @@ public sealed class FileImportHandler
     {
         var archivePath = ArchivePathBuilder.Build(
             _archiveRootPath,
-            fileJob.ConfigId,
-            fileJob.Id,
             fileJob.FileName,
             DateOnly.FromDateTime(fileJob.CreatedAt.ToUniversalTime()));
 

@@ -53,7 +53,7 @@ Source เก็บค่าจาก CSV เป็นข้อความก�
    pwsh ./scripts/generate-sample.ps1
    ```
 
-   `orders-a.csv` มี 100 records โดยตั้งใจให้แถวข้อมูล 25 เป็นวันที่ผิดและแถว 75 เป็นจำนวนเงินผิด จึงควรได้ Source 100, Normalized 98 และ 2 row errors ส่วน `orders-b.csv` มี 100 records ที่ถูกทั้งหมด หลัง import ไฟล์จะย้ายไป `archive/<config-id>/<yyyyMMdd>/<file-job-id>_<file-name>`
+   `orders-a.csv` มี 100 records โดยตั้งใจให้แถวข้อมูล 25 เป็นวันที่ผิดและแถว 75 เป็นจำนวนเงินผิด จึงควรได้ Source 100, Normalized 98 และ 2 row errors ส่วน `orders-b.csv` มี 100 records ที่ถูกทั้งหมด หลัง import ไฟล์จะย้ายไป `archive/<ddMMyyyy>/<file-name>` โดยสร้างโฟลเดอร์วันที่เมื่อยังไม่มีและใช้โฟลเดอร์เดิมเมื่อมีอยู่แล้ว
 
 6. ดูสถานะผ่าน API:
 
@@ -76,6 +76,7 @@ Kafka UI อยู่ที่ <http://localhost:8080> การ import จะ�
 ## เอกสาร
 
 - [Learning plan](docs/learning-plan.md) — ขั้นตอนลงมือและเกณฑ์ตรวจรับ
+- [Acceptance test guide](docs/acceptance-test-guide.md) — ไฟล์ทดสอบและวิธีพิสูจน์เกณฑ์ตรวจรับทุกข้อทีละขั้น
 - [Demo plan](docs/demo-plan.md) — ขอบเขตและการตัดสินใจของเดโม
 - [Sequence diagram](docs/diagrams/mapping-demo-sequence.drawio) — เปิดด้วย diagrams.net หรือ draw.io Desktop
 - [Domain context](CONTEXT.md) — คำศัพท์ของระบบ

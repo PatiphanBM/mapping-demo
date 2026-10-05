@@ -6,8 +6,6 @@ public static class ArchivePathBuilder
 {
     public static string Build(
         string archiveRootPath,
-        long configId,
-        long fileJobId,
         string fileName,
         DateOnly archiveDate)
     {
@@ -16,8 +14,7 @@ public static class ArchivePathBuilder
 
         return Path.Combine(
             archiveRootPath,
-            configId.ToString(CultureInfo.InvariantCulture),
-            archiveDate.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
-            $"{fileJobId}_{Path.GetFileName(fileName)}");
+            archiveDate.ToString("ddMMyyyy", CultureInfo.InvariantCulture),
+            Path.GetFileName(fileName));
     }
 }

@@ -1,0 +1,4 @@
+Order No,Customer Name,Order Date,Amount,Is Paid,Note
+DUP-001,Customer DUP-001,2026-03-01,601.25,true,Duplicate row 1
+DUP-002,Customer DUP-002,2026-03-02,602.25,false,Duplicate row 2
+DUP-003,Customer DUP-003,2026-03-03,603.25,true,Duplicate row 3

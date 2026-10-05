@@ -224,7 +224,8 @@ topic คือ `mapping.file-import` และ `mapping.row-normalize` ตา�
 
 - ★ ก่อนย้าย hash ไฟล์จริงแล้วเทียบกับ snapshot: ตรงกันย้ายไป Archive แล้วลบ snapshot; ไม่ตรงตั้ง `ChangedAfterRead` ไม่ย้ายไฟล์ และรอคนตัดสิน
   - ข้อนี้ทำให้เห็นกรณีที่ 30 วินาทีไม่พอ แต่ไม่ได้ป้องกัน เพราะแถวจาก snapshot เข้า Source และ normalize ไปแล้ว
-- path ใน Archive คือ `archive/{configId}/{yyyyMMdd}/{fileJobId}_{ชื่อเดิม}`
+- path ใน Archive คือ `archive/{ddMMyyyy}/{ชื่อเดิม}` โดยสร้างโฟลเดอร์วันที่เมื่อยังไม่มีและใช้โฟลเดอร์เดิมเมื่อมีอยู่แล้ว
+- ถ้ามีไฟล์ชื่อเดียวกันอยู่ในโฟลเดอร์วันที่แล้วจะไม่เขียนทับ และงานใหม่เข้าสถานะ `ArchiveFailed`
 - การย้ายทำซ้ำได้: ถ้าไฟล์อยู่ที่ archive path แล้วให้ตั้งสถานะเท่านั้น; Archive folder ต้องไม่อยู่ใต้ input folder ที่ Watcher เฝ้าดู
 - ย้ายไม่ได้ retry 3 ครั้ง แล้วตั้ง `ArchiveFailed` โดยไม่กระทบ normalization; import ล้มกลางทางไม่ย้ายไฟล์
 
