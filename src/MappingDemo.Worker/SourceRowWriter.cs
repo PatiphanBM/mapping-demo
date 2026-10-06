@@ -30,7 +30,7 @@ public static class SourceRowWriter
         };
         values.AddRange(
             rules.Select((_, index) => $"@p{index}"));
-
+        //Insert source_orders
         return $"""
             INSERT INTO {SqlIdentifier.Quote(sourceTableName)} ({string.Join(", ", columns)})
             VALUES ({string.Join(", ", values)})
@@ -62,7 +62,7 @@ public static class SourceRowWriter
                 $"p{index}",
                 record.Values[rules[index].CsvHeader]);
         }
-
+        //Insert source_orders
         var command = new CommandDefinition(
             BuildInsertSql(sourceTableName, rules),
             parameters,

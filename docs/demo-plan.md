@@ -249,6 +249,34 @@ topic คือ `mapping.file-import` และ `mapping.row-normalize` ตา�
 - ทำแบบเบา: ไม่ลง library เพิ่มนอกจากที่ `create-next-app` ใส่มา, ไม่ทำ validation ซ้ำฝั่ง client (API เป็นผู้ตัดสินที่เดียว) และไม่ทำหน้าจัดการ Tables
 - API ส่ง enum เป็นชื่อ (`JsonStringEnumConverter`) โดยยังรับค่าตัวเลขเดิมได้
 
+ข้อสรุปรอบนี้ถูกขยายด้วยข้อสรุปรอบที่ 8 หลังตรวจ workbook จริง: หน้าเว็บยังใช้แนวทางเดิม แต่ต้องสร้าง Transformation Program และ endpoint สำหรับ capabilities/validate/preview ก่อน จึงไม่ยึดเงื่อนไข “ไม่เพิ่ม endpoint ใหม่” อีกต่อไป
+
+## ข้อสรุปรอบที่ 8 — Transformation Config จาก PMIB workbook
+
+- วิเคราะห์ `docs/Mapping-PMIB-PRD.xlsx` แล้วพบว่า config จริงไม่ได้มีแค่การจับคู่ field แต่มี direct/default mapping, `CASE`, เงื่อนไขหลาย field, `ISNULL`, `LIKE`, `SUBSTRING`, `CONVERT`, current date, named function, cross-table anti-lookup และ `MAPPING` + `UNION`
+- Source row หนึ่งแถวจึงต้องให้ผลได้ `0..N` Normalized rows: ไม่ผ่าน filter คือ 0, primary branch คือ 1 และ primary + union อาจเป็น 2; `UNION` เป็น output branch ไม่ใช่ field operator
+- เปลี่ยน Source-to-Normalized Mapping เป็น versioned **Transformation Program** แบบ typed JSON AST; direct mapping เป็น expression ชนิดที่ง่ายที่สุด ไม่เพิ่ม flat fields แบบ `operator/operand1/operand2`
+- ไม่รับ raw SQL, table name, function name หรือ script ตามอำเภอใจจาก config; named transform และ named lookup ต้องมาจาก allowlist ที่ server เป็นเจ้าของและ pin version ได้
+- วาง seam ที่ Transformation Module ซึ่งมี interface หลักสำหรับ compile/validate และ evaluate; API create/activate/preview กับ Worker ต้องใช้ compiler/evaluator ชุดเดียวกัน
+- รองรับ output branch ที่มี stable `outputKey`, `emitWhen` และ field assignments; persistence เปลี่ยน identity จาก `source_row_id` เป็น `(source_row_id, output_key)` และ reprocess ต้อง reconcile output set แบบ atomic
+- `currentDate` ใช้เวลาที่ตรึงกับ Row Normalization Job เพื่อให้ retry ได้ผลเดิม; lookup เป็น live business state ที่บันทึกเวลา/ชื่อ capability เพื่อ audit และต้องใช้ idempotency key ไม่ให้ผลของงานเดิม block retry ตัวเอง
+- หน้าเว็บใช้ progressive editor: ค่าเริ่มต้นเป็น Direct field แล้วเลือก Constant, Current date, CASE หรือ Named transform ได้; filter และ lookup อยู่ระดับ output branch; ไม่มีช่อง raw SQL
+- เพิ่ม endpoint อ่าน transformation capabilities, validate และ preview ก่อนสร้าง Config Version; API ยังเป็นผู้ตัดสิน validation ที่เดียว
+- เก็บ golden cases จาก workbook สำหรับตัวอย่าง PMIB ทั้งสี่กลุ่มก่อน implement และแยก one-time workbook importer เป็นงานภายหลัง ไม่ใช้ pseudo-SQL ใน Excel เป็น runtime language
+
+## ข้อสรุปรอบที่ 9 — Fixed-width Input Layout จาก TIB workbook
+
+- วิเคราะห์ `docs/Mapping-TIB-PRD.xlsx` tab `Condition-TIB-01` และ `docs/isoMTI-N7780.txt` แล้วพบ fixed-width 115 fields ครอบคลุมตำแหน่ง 1–3,761 ต่อเนื่อง ไม่มี gap/overlap
+- ไฟล์ตัวอย่างเป็น UTF-8 ไม่มี BOM มี Header `H` 1 record, Detail `D` 21 records และ Trailer `T` 1 record; H/T ยาว 1,500 ตำแหน่งข้อความ ส่วน D ยาว 3,761 ตำแหน่งข้อความ
+- byte length ของ Detail ไม่คงที่เพราะข้อความไทยเป็น UTF-8 หลาย byte จึงต้อง decode ก่อน slice และห้ามใช้ byte offset; contract รุ่นแรก pin `positionUnit = utf16CodeUnit` ให้ตรงกับ `.NET Substring(start - 1, length)` ของระบบเดิม
+- แยก **Input Record Parser Module** สำหรับ raw file → Source row ออกจาก **Transformation Program Module** สำหรับ Source row → Normalized outputs; fixed-width ใช้ node ชื่อ `slice` เพื่อไม่สับสนกับ `substring` expression ใน transformation
+- Config Version เก็บ `inputLayout` แบบ `Delimited` หรือ `FixedWidth`; fixed-width ระบุ encoding, record discriminator/action/expected length และ field start/length
+- TIB กำหนด H/T เป็น `Ignore`, D เป็น `Import`, unknown record เป็น error; classify record ก่อนตรวจความยาวเพื่อไม่เอากฎ 3,761 ไปใช้กับ H/T
+- Source Table เก็บ raw slice รวม padding เพื่อรักษาหลักฐานต้นทาง; trim/type conversion อยู่ใน Transformation Program
+- `ROWNUM/QUERY` ของ TIB เป็น common `TransformationProgram.sourceWhen` ก่อน branch ส่วน `MAPPING`/`UNION` ใช้ `output.emitWhen`; ไม่ทิ้ง Source row ตอน import เพื่อให้ reprocess ได้
+- API validate/preview และ File Import Worker ต้องใช้ Input Layout compiler/parser implementation เดียวกัน; preview แสดง raw record → Source fields → Normalized outputs โดยไม่เขียน DB
+- Golden tests ต้องยืนยัน field ต้น/กลาง/ท้าย โดยเฉพาะข้อมูลไทยและ `Suffix` ที่ start 3,712 length 50 รวม invalid UTF-8, unknown record type และ short Detail record
+
 ## บริบทเอกสารเดิม
 
 - [ระบบเดิม](../current-program-workflow.md) อธิบาย flow ไฟล์ → staging → mapping/condition → ตารางปลายทาง และแยกไฟล์ข้อมูลออกจาก configuration

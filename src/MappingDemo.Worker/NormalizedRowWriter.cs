@@ -44,7 +44,7 @@ public static class NormalizedRowWriter
         updateAssignments.Add(
             "config_version_id = EXCLUDED.config_version_id");
         updateAssignments.Add("normalized_at = now()");
-
+        //Insert normalized_orders
         return $"""
             INSERT INTO {SqlIdentifier.Quote(normalizedTableName)} ({string.Join(", ", insertColumns)})
             VALUES ({string.Join(", ", valueParameters)})
@@ -80,7 +80,7 @@ public static class NormalizedRowWriter
         {
             parameters.Add($"p{index}", values[columnNames[index]]);
         }
-
+        //Insert normalized_orders
         var command = new CommandDefinition(
             BuildUpsertSql(normalizedTableName, columnNames),
             parameters,

@@ -41,6 +41,7 @@ public static class OutboxWriter
             MessageKey = key,
             PayloadJson = JsonSerializer.Serialize(message, JsonOptions)
         };
+        //Insert Outbox
         var command = new CommandDefinition(
             InsertOutboxSql,
             parameters,
