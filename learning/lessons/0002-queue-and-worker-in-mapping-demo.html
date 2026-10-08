@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 2 · Queue กับ Worker ใน mapping-demo</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+<script src="../assets/queue-sim.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="0001-history-and-concepts.html">← บทที่ 1</a> · <a href="../reference/message-map.html">แผนที่ message</a> · <a href="../reference/glossary.html">อภิธานศัพท์</a></nav>
+
+<p class="kicker">บทที่ 2 · ภาพรวม · ราว 15 นาที</p>
+<h1>Queue กับ Worker ทำอะไรใน mapping-demo</h1>
+<p class="subtitle">ทำไม mapping-demo มีสองโปรแกรม และมี Kafka อยู่ตรงกลาง อธิบายด้วย concept จากบทที่ 1</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> วาดภาพรวมของ mapping-demo ได้ ชี้ได้ว่าส่วนไหนคือ <em>producer</em>, <em>queue</em> และ <em>worker</em> และอธิบายได้ว่าทำไมไม่ให้ API ทำงานทุกอย่างเอง</p>
+</div>
+
+<h2>1. ปัญหา: งานบางอย่างช้าเกินกว่าจะรอ</h2>
+
+<p>ไฟล์หนึ่งไฟล์ใน mapping-demo ต้องผ่านขั้นตอนเยอะ: รอให้ไฟล์เขียนเสร็จ (<code>Import:DelaySeconds</code>), อ่านทีละแถวลง Source, normalize ทีละแถวลง Normalized, แล้วย้ายไฟล์ไป archive ถ้าให้ File Watcher ใน API ทำทั้งหมดเอง จะเจอปัญหาสามอย่าง</p>
+<ul>
+<li><strong>ค้าง:</strong> ระหว่างทำไฟล์หนึ่ง ไฟล์ถัดไปต้องรอคิว</li>
+<li><strong>หาย:</strong> ถ้า API ล่มกลางทาง งานที่ค้างอยู่ในหน่วยความจำหายไปด้วย</li>
+<li><strong>ขยายไม่ได้:</strong> อยากได้คนช่วยทำเพิ่ม ก็ต้องเพิ่ม API ทั้งก้อน</li>
+</ul>
+
+<h2>2. ทางออก: แยกคนสั่งงานออกจากคนทำงาน</h2>
+
+<aside class="note">“A message queue is a form of asynchronous service-to-service communication… a component called a producer adds a message to the queue… another component called a consumer retrieves the message and does something with it.” — <a href="https://aws.amazon.com/message-queue/">AWS: Message Queues</a></aside>
+
+<p>แนวคิดนี้คือ decoupling (concept ข้อ 01 ใน<a href="0001-history-and-concepts.html">บทที่ 1</a>) ลองนึกถึงร้านกาแฟ แคชเชียร์รับออเดอร์ เขียนบิลแปะไว้บนราง แล้วหันไปรับลูกค้าคนถัดไปทันที บาริสต้าหยิบบิลจากรางไปชงทีละใบ ถ้าบาริสต้าพักห้านาที บิลก็แค่รออยู่บนราง ไม่หายไปไหน</p>
+
+<div class="table-wrap">
+<table>
+<tr><th>ร้านกาแฟ</th><th>ศัพท์</th><th>ใน mapping-demo</th></tr>
+<tr><td>แคชเชียร์</td><td><strong>producer</strong> (ผู้สั่งงาน)</td><td>File Watcher ใน API</td></tr>
+<tr><td>บิลหนึ่งใบ</td><td><strong>message</strong> (คำสั่งงานหนึ่งชิ้น)</td><td><code>{"fileJobId":1}</code> มีแค่เลขงาน ไม่ได้แบกไฟล์มาด้วย</td></tr>
+<tr><td>รางแปะบิล</td><td><strong>queue</strong> (ที่พักงาน)</td><td>Kafka (topic <code>mapping.file-import</code>)</td></tr>
+<tr><td>บาริสต้า</td><td><strong>worker</strong> (ผู้หยิบงานไปทำ)</td><td>โปรแกรม <code>MappingDemo.Worker</code></td></tr>
+</table>
+</div>
+
+<p>message มีแค่เลขงาน เหมือนบิลที่เขียนแค่เลขออเดอร์ ส่วนรายละเอียดทั้งหมด (ไฟล์อยู่ไหน ใช้ config version ไหน) อยู่ในตาราง <code>file_jobs</code> ของ PostgreSQL Worker เอาเลขนี้ไปค้นต่อเอง</p>
+
+<aside class="note">Kafka นิยามตัวเองว่าเก็บ event ไว้ใน topic ซึ่ง “very simplified, a topic is similar to a folder in a filesystem” — <a href="https://kafka.apache.org/intro">Apache Kafka: Introduction</a></aside>
+
+<p>ในโปรเจกต์นี้ Kafka คือรางแปะบิล แต่ละรางเรียกว่า topic และ mapping-demo มีสองราง</p>
+
+<h2>3. ภาพรวมทั้งระบบ: รูปแบบเดียวกันสองรอบ</h2>
+
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 680,
+ "height": 300,
+ "nodes": [
+  {
+   "id": "in",
+   "label": "input/",
+   "sub": "orders/",
+   "x": 10,
+   "y": 15,
+   "w": 100,
+   "h": 64,
+   "kind": "plain"
+  },
+  {
+   "id": "wa",
+   "label": "File Watcher",
+   "sub": "API",
+   "x": 140,
+   "y": 15,
+   "w": 130,
+   "h": 64,
+   "kind": "producer"
+  },
+  {
+   "id": "ob",
+   "label": "outbox",
+   "sub": "PostgreSQL",
+   "x": 300,
+   "y": 15,
+   "w": 180,
+   "h": 64,
+   "kind": "store"
+  },
+  {
+   "id": "dp",
+   "label": "OutboxDispatcher",
+   "sub": "Worker",
+   "x": 510,
+   "y": 15,
+   "w": 160,
+   "h": 64,
+   "kind": "producer"
+  },
+  {
+   "id": "tf",
+   "label": "mapping.file-import",
+   "sub": "",
+   "x": 510,
+   "y": 125,
+   "w": 160,
+   "h": 64,
+   "kind": "queue"
+  },
+  {
+   "id": "iw",
+   "label": "Import worker",
+   "sub": "",
+   "x": 300,
+   "y": 125,
+   "w": 180,
+   "h": 64,
+   "kind": "consumer"
+  },
+  {
+   "id": "src",
+   "label": "Source Table",
+   "sub": "0 แถว",
+   "x": 140,
+   "y": 125,
+   "w": 130,
+   "h": 64,
+   "kind": "store"
+  },
+  {
+   "id": "tr",
+   "label": "mapping.row-normalize",
+   "sub": "",
+   "x": 510,
+   "y": 230,
+   "w": 160,
+   "h": 64,
+   "kind": "queue"
+  },
+  {
+   "id": "nw",
+   "label": "Normalize worker",
+   "sub": "",
+   "x": 300,
+   "y": 230,
+   "w": 180,
+   "h": 64,
+   "kind": "consumer"
+  },
+  {
+   "id": "nm",
+   "label": "Normalized",
+   "sub": "0 แถว",
+   "x": 140,
+   "y": 230,
+   "w": 130,
+   "h": 64,
+   "kind": "store"
+  }
+ ],
+ "edges": [
+  {
+   "from": "in",
+   "to": "wa"
+  },
+  {
+   "from": "wa",
+   "to": "ob"
+  },
+  {
+   "from": "ob",
+   "to": "dp"
+  },
+  {
+   "from": "dp",
+   "to": "tf"
+  },
+  {
+   "from": "tf",
+   "to": "iw"
+  },
+  {
+   "from": "iw",
+   "to": "src"
+  },
+  {
+   "from": "iw",
+   "to": "ob",
+   "dashed": true
+  },
+  {
+   "from": "tr",
+   "to": "nw"
+  },
+  {
+   "from": "nw",
+   "to": "nm"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "วาง orders-a.csv ลงโฟลเดอร์ input/",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    }
+   ]
+  },
+  {
+   "caption": "File Watcher เจอไฟล์ บันทึก file job #1 และ message ลง outbox ใน transaction เดียวกัน แล้วไปทำอย่างอื่นต่อ",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "ob",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "wa": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "OutboxDispatcher หยิบ message จาก outbox ไปส่งเข้า mapping.file-import",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "tf",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "wa": {
+     "state": null
+    },
+    "dp": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "Import worker หยิบ #1 ไปทำ รอตาม Import:DelaySeconds แล้วเริ่มอ่านไฟล์ทีละแถว",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "iw",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "dp": {
+     "state": null
+    },
+    "iw": {
+     "state": "active",
+     "sub": "Importing"
+    }
+   }
+  },
+  {
+   "caption": "ทุกแถวที่บันทึกลง Source จะได้ message ของตัวเองใน outbox ด้วย (เส้นประ) นี่คือจุดเริ่มของรอบสอง",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "iw",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "r1",
+     "at": "ob",
+     "kind": "msg"
+    },
+    {
+     "id": "r2",
+     "label": "r2",
+     "at": "ob",
+     "kind": "msg"
+    },
+    {
+     "id": "r3",
+     "label": "r3",
+     "at": "ob",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "src": {
+     "sub": "3 แถว"
+    }
+   }
+  },
+  {
+   "caption": "Dispatcher ส่ง message ของแต่ละแถวเข้า mapping.row-normalize ขณะที่ Import worker ยังอ่านแถวถัดไป",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "iw",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "r1",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r2",
+     "label": "r2",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r3",
+     "label": "r3",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r4",
+     "label": "r4",
+     "at": "ob",
+     "kind": "msg"
+    },
+    {
+     "id": "r5",
+     "label": "r5",
+     "at": "ob",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "src": {
+     "sub": "5 แถว"
+    },
+    "dp": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "Normalize worker หยิบทีละแถวไปแปลง import กับ normalize จึงเดินไปพร้อมกัน",
+   "tokens": [
+    {
+     "id": "f",
+     "label": "csv",
+     "at": "in",
+     "kind": "row"
+    },
+    {
+     "id": "m1",
+     "label": "#1",
+     "at": "iw",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "r1",
+     "at": "nw",
+     "kind": "msg"
+    },
+    {
+     "id": "r2",
+     "label": "r2",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r3",
+     "label": "r3",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r4",
+     "label": "r4",
+     "at": "tr",
+     "kind": "msg"
+    },
+    {
+     "id": "r5",
+     "label": "r5",
+     "at": "ob",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "src": {
+     "sub": "8 แถว"
+    },
+    "nw": {
+     "state": "active"
+    },
+    "nm": {
+     "sub": "0 แถว"
+    },
+    "dp": {
+     "state": null
+    }
+   }
+  },
+  {
+   "caption": "เมื่อจบไฟล์ Source มี 100 แถว Normalized มี 98 แถว อีก 2 แถวไม่ผ่านกฎ และไฟล์ต้นฉบับย้ายไป archive แล้ว",
+   "tokens": [],
+   "nodes": {
+    "in": {
+     "sub": "ย้ายไป archive"
+    },
+    "iw": {
+     "state": null,
+     "sub": "Imported"
+    },
+    "nw": {
+     "state": null
+    },
+    "src": {
+     "sub": "100 แถว",
+     "state": "ok"
+    },
+    "nm": {
+     "sub": "98 แถว + 2 error",
+     "state": "ok"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+
+<p>สิ่งที่เห็นจากแผนภาพนี้</p>
+<ol>
+<li>Import worker เป็น worker ของรอบ 1 และเป็น producer ของรอบ 2 ไปพร้อมกัน</li>
+<li>งานหนึ่งแตกเป็นหลายงาน ไฟล์ <code>orders-a.csv</code> 100 แถวสร้าง message รอบแรก 1 อัน และรอบที่สองอีก 100 อัน</li>
+<li>แถวที่ 1 เริ่ม normalize ได้ทันทีขณะที่แถวที่ 2–100 ยัง import อยู่ ตรงกับที่ README บอกว่า normalize “ไม่ต้องรอให้ทั้งไฟล์ import เสร็จ”</li>
+</ol>
+
+<h3>ข้างในโปรแกรม Worker มีอะไรบ้าง</h3>
+<aside class="note">.NET เรียกโปรแกรมแบบนี้ว่า Worker Service; background service แต่ละตัวเป็น <code>BackgroundService</code> ที่วนทำงานไปจนโปรแกรมถูกสั่งหยุด — <a href="https://learn.microsoft.com/en-us/dotnet/core/extensions/workers">Microsoft Learn: Worker Services</a></aside>
+<p>ในโปรแกรม <code>MappingDemo.Worker</code> มี background service สามตัวรันพร้อมกัน แต่ละตัววนทำงานไปเรื่อย ๆ จนกว่าจะปิดโปรแกรม (ดูที่ <code>src/MappingDemo.Worker/Program.cs</code> บรรทัด <code>AddHostedService</code>):</p>
+<div class="table-wrap">
+<table>
+<tr><th>Background service</th><th>ทำอะไร (แบบเข้าใจง่าย)</th></tr>
+<tr><td><code>OutboxDispatcher</code></td><td>บุรุษไปรษณีย์: ทุกครึ่งวินาที หยิบ message ที่รอส่งจากตาราง <code>outbox</code> ไปแปะลง Kafka</td></tr>
+<tr><td><code>FileImportConsumer</code></td><td>Import worker: หยิบงานจาก <code>mapping.file-import</code> ไปอ่านไฟล์ลง Source</td></tr>
+<tr><td><code>RowNormalizeConsumer</code></td><td>Normalize worker: หยิบงานจาก <code>mapping.row-normalize</code> ไปแปลงทีละแถว</td></tr>
+</table>
+</div>
+<p>ต้องมี “บุรุษไปรษณีย์” เพราะผู้สั่งงานไม่ได้แปะบิลลง Kafka เอง แต่หย่อนไว้ใน “กล่องจดหมายขาออก” (ตาราง <code>outbox</code>) ก่อน เหตุผลที่ต้องอ้อมแบบนี้อยู่ในบทที่ 6</p>
+
+<h2>4. ลองเล่น: ปิด Worker แล้วดูว่าเกิดอะไรขึ้น</h2>
+
+<p>ตัวจำลองนี้มีแค่รอบที่ 1 และไม่มีกล่องจดหมายขาออก Worker ใช้เวลาทำแต่ละงาน 2.5 วินาที</p>
+
+<div class="sim" data-queue-sim data-topic="mapping.file-import" data-produce-label="วางไฟล์ CSV ลง input/" data-job-prefix="file job" data-work-ms="2500" data-pos-label="ลำดับ"></div>
+
+<ol class="steps">
+<li>กดวางไฟล์เร็ว ๆ 4 ครั้งติดกัน ฝั่ง API ต้องรอ Worker ไหม? ตัวเลข “ค้างรอ worker” เป็นอย่างไร?</li>
+<li>ปิด Worker แล้ววางไฟล์อีก 3 ไฟล์ งานหายไหม?</li>
+<li>เปิด Worker กลับมา มันทำต่อจากตรงไหน?</li>
+<li>ปิด Worker <em>ระหว่างที่</em>กล่องสีส้มกำลังทำอยู่ แล้วเปิดใหม่ งานชิ้นนั้นทำไปกี่ครั้ง? (นี่คือ at-least-once จากบทที่ 1 ส่วนวิธีที่ mapping-demo รับมืออยู่ในบทที่ 4)</li>
+</ol>
+
+<p>กล่องที่ทำเสร็จแล้วยังอยู่บนราง Kafka ไม่ฉีกบิลทิ้งแบบร้านกาแฟ แต่เก็บไว้ระยะหนึ่ง แล้วให้ worker จำเองว่าทำถึงใบไหน</p>
+
+<h2>5. เฉลย: concept จากบทที่ 1 อยู่ตรงไหนในโปรเจกต์</h2>
+
+<p>เอาไปเทียบกับคำตอบที่เดาไว้ท้าย<a href="0001-history-and-concepts.html">บทที่ 1</a></p>
+
+<div class="table-wrap">
+<table>
+<tr><th>Concept</th><th>ใน mapping-demo</th></tr>
+<tr><td><strong>01 Decoupling</strong></td><td>File Watcher (API) แค่บันทึกงานแล้วไปทำอย่างอื่นต่อ Worker เป็นอีกโปรแกรมที่จะเปิดหรือปิดก็ได้ ระหว่างนั้นงานก็รอไว้ก่อน</td></tr>
+<tr><td><strong>02 Load leveling</strong></td><td>โยนไฟล์เข้ามาพร้อมกัน 20 ไฟล์ ก็ได้ 20 งานในคิว แล้ว Import worker ค่อย ๆ ทำทีละงานในจังหวะของตัวเอง (หน่วงตาม <code>Import:DelaySeconds</code>) API ไม่ช้าลงเลย</td></tr>
+<tr><td><strong>03 Competing consumers</strong></td><td>ค่า <code>Kafka:FileImportConsumers</code> และ <code>Kafka:NormalizeConsumers</code> ใน appsettings คือจำนวน worker ที่ช่วยกันหยิบงานจากแต่ละ topic (ตอนนี้ตั้งไว้ที่ 1 ดูรายละเอียดในบทที่ 5)</td></tr>
+<tr><td><strong>04 Point-to-point</strong></td><td>งาน import หนึ่งไฟล์ต้องทำแค่<em>ครั้งเดียว</em> worker ทุกตัวของ import จึงอยู่ในกลุ่มเดียวกัน (<code>mapping-file-import</code>) และแบ่งงานกัน ไม่ได้รับสำเนาซ้ำ</td></tr>
+<tr><td><strong>05 At-least-once</strong></td><td>worker แจ้ง Kafka ว่าเสร็จ <em>หลัง</em> ทำงานจบเท่านั้น ถ้าดับกลางทาง งานจะกลับมาอีกรอบ ส่วนงานที่พัง ระบบจะบันทึกสถานะ <code>Failed</code> / <code>ImportFailed</code> ไว้ในฐานข้อมูล ให้คนสั่ง Retry ผ่าน API ได้ แทนการใช้ dead-letter queue (บทที่ 4)</td></tr>
+<tr><td><strong>Kafka = queue แบบ log</strong></td><td>message ที่ทำเสร็จแล้วยังอยู่ใน topic ให้ดูย้อนหลังได้ใน Kafka UI</td></tr>
+</table>
+</div>
+
+<h2>6. ทบทวนโดยไม่เลื่อนขึ้นไปดู</h2>
+
+<div class="quiz">
+<p class="q">1. message ที่ส่งเข้า <code>mapping.file-import</code> มีข้อมูลอะไร?</p>
+<ol class="options">
+<li data-correct>เลขของ file job เพียงค่าเดียว</li>
+<li>เนื้อหาไฟล์ CSV ทั้งไฟล์ทุกแถว</li>
+<li>path ของไฟล์และ mapping config</li>
+<li>ผลลัพธ์แถวที่ normalize แล้ว</li>
+</ol>
+<div class="why">message มีแค่ <code>fileJobId</code> Worker เอาเลขนี้ไปค้นรายละเอียดในตาราง <code>file_jobs</code> เอง ข้อมูลจริงจึงอยู่ที่เดียวคือฐานข้อมูล</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. ไฟล์ CSV 100 แถวที่บันทึกลง Source ได้ครบ ทำให้เกิด message ทั้งหมดกี่อัน?</p>
+<ol class="options">
+<li data-correct>1 อันของไฟล์ บวก 100 อันของแถว</li>
+<li>1 อันของไฟล์ทั้งไฟล์เท่านั้นเอง</li>
+<li>100 อันของแถว ไม่มีของไฟล์เลย</li>
+<li>2 อัน คือ import 1 และ normalize 1</li>
+</ol>
+<div class="why">รอบแรก: 1 message ต่อไฟล์ (<code>mapping.file-import</code>) รอบสอง: 1 message ต่อแถวที่บันทึกลง Source (<code>mapping.row-normalize</code>) รวม 101 อัน การที่งานหนึ่งแตกเป็นหลายงานแบบนี้ ทำให้ normalize ทำไปพร้อมกับ import ได้</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. ปิดโปรแกรม Worker ไว้แล้ววางไฟล์ใหม่ 3 ไฟล์ จะเกิดอะไร?</p>
+<ol class="options">
+<li data-correct>ระบบเก็บงานไว้รอจน Worker กลับมาทำ</li>
+<li>API ค้างรอจนกว่า Worker จะกลับมา</li>
+<li>ไฟล์ถูกข้ามและหายไปจากระบบเลย</li>
+<li>API หันมา import ไฟล์ทั้งสามเอง</li>
+</ol>
+<div class="why">Watcher บันทึกงานแล้วทำงานต่อได้ทันที แต่ “บุรุษไปรษณีย์” (<code>OutboxDispatcher</code>) อยู่ในโปรแกรม Worker ด้วย ตอน Worker ปิด งานจึงรออยู่ในกล่องจดหมายขาออก (ตาราง <code>outbox</code>) ยังไม่ถึง Kafka ลองพิสูจน์ได้ในส่วนที่ 7</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. ในโปรแกรม <code>MappingDemo.Worker</code> มี background service อะไรบ้าง?</p>
+<ol class="options">
+<li data-correct>ส่ง outbox เข้า Kafka, import ไฟล์, normalize แถว</li>
+<li>เฝ้าโฟลเดอร์ input, import ไฟล์, normalize แถว</li>
+<li>รับ HTTP request, import ไฟล์, normalize แถว</li>
+<li>สร้าง Kafka topic, import ไฟล์, normalize แถว</li>
+</ol>
+<div class="why"><code>OutboxDispatcher</code>, <code>FileImportConsumer</code>, <code>RowNormalizeConsumer</code> การเฝ้าโฟลเดอร์และรับ HTTP อยู่ฝั่ง API ส่วน topic สร้างด้วยสคริปต์ <code>create-topics.ps1</code></div>
+</div>
+
+<div class="quiz">
+<p class="q">5. ทำไมการหน่วง <code>Import:DelaySeconds</code> ไม่ทำให้ File Watcher ช้าลง?</p>
+<ol class="options">
+<li data-correct>Watcher แค่บันทึกงานแล้วส่งต่อ ไม่รอผล</li>
+<li>Watcher ข้ามการหน่วงเมื่อไฟล์มีขนาดเล็ก</li>
+<li>Kafka เร่งความเร็วการ import ให้อัตโนมัติ</li>
+<li>การหน่วงเกิดก่อนที่ Watcher จะเห็นไฟล์</li>
+</ol>
+<div class="why">การหน่วงเกิดใน Import worker งานของ Watcher จบตั้งแต่บันทึกงานลงฐานข้อมูล จึงไม่ต้องรอการหน่วงนี้</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน จะจำได้นานกว่าการอ่านซ้ำ</p>
+
+<h2>7. ลองกับระบบจริง (ไม่บังคับ)</h2>
+
+<p>ต้องรันเดโมตาม <a href="../../README.md">README</a> ไว้ก่อน (reset → API → configure → Worker)</p>
+
+<div class="callout ask">
+<p><strong>ทายก่อนลงมือ:</strong> ถ้าปิด Worker แล้ววางไฟล์ใหม่ Kafka UI จะเห็น message ใหม่ไหม? เขียนคำตอบพร้อมเหตุผลไว้ก่อน แล้วค่อยลอง</p>
+</div>
+
+<ol class="steps">
+<li>เปิด Kafka UI ที่ <a href="http://localhost:8080">localhost:8080</a> → Topics แล้วดูว่าแต่ละ topic มี message กี่อัน</li>
+<li>กด <kbd>Ctrl</kbd>+<kbd>C</kbd> ที่ terminal ของ Worker</li>
+<li>รัน <code>pwsh ./scripts/generate-sample.ps1</code> ไฟล์ควรค้างอยู่ใน <code>input/orders</code></li>
+<li>ดู Kafka UI อีกครั้ง จำนวน message เปลี่ยนไหม? แล้วงานไปรออยู่ที่ไหน?</li>
+<li>เปิด Worker กลับมา (<code>dotnet run --project src/MappingDemo.Worker</code>) แล้วดู Kafka UI กับ <code>GET http://localhost:5181/file-jobs</code> คำทายของคุณถูกไหม?</li>
+</ol>
+
+<h2>8. อธิบายด้วยคำพูดตัวเอง</h2>
+
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชทสั้น ๆ 2–3 ประโยค:</p>
+<ol>
+<li>ทำไม File Watcher ถึงไม่ import ไฟล์เอง?</li>
+<li>ทำไม Import worker ถึงเป็นทั้ง “ผู้ทำงาน” และ “ผู้สั่งงาน” ในเวลาเดียวกัน?</li>
+</ol>
+<p>Claude จะตรวจคำตอบ แล้วใช้คำตอบนั้นวางจุดเริ่มของบทถัดไป ถ้าตรงไหนยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://aws.amazon.com/message-queue/">AWS, Message Queues</a> อธิบายภาพรวมของ queue และประโยชน์ (decouple, buffer, รับงานที่มาเป็นระลอก) ในหน้าเดียว อ่านราว 5 นาที แล้วลองหาว่าประโยชน์แต่ละข้อตรงกับส่วนไหนของ mapping-demo</p>
+<p>ถ้าอยากอ่านเรื่อง Kafka ต่อ: <a href="https://kafka.apache.org/intro">Apache Kafka, Introduction</a> ส่วน “Main Concepts and Terminology”</p>
+
+<footer class="next">
+<span>บทที่ 2 จาก ~6</span>
+<span>ถัดไป: <a href="0003-life-of-a-file-job.html">บทที่ 3 Lifecycle ของ file job</a></span>
+</footer>
+
+</main>
+</body>
+</html>

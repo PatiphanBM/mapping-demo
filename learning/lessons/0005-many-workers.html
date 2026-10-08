@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 5 · หลาย worker ช่วยกัน</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="0004-when-things-fail.html">← บทที่ 4</a> · <a href="../reference/glossary.html">อภิธานศัพท์</a> · <a href="../reference/message-map.html">แผนที่ message</a></nav>
+
+<p class="kicker">บทที่ 5 · ภาพรวม · ราว 20 นาที</p>
+<h1>หลาย worker ช่วยกัน: partition, consumer group และ rebalance</h1>
+<p class="subtitle">เพิ่ม consumer แล้วระบบเร็วขึ้นได้จริง แต่มีเพดาน และมีเงื่อนไขว่างานไหนทำพร้อมกันได้ งานไหนต้องรอกัน</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> บอกได้ว่าตั้ง <code>Kafka:FileImportConsumers</code> เป็นเท่าไรแล้วจะทำงานพร้อมกันได้กี่ชิ้น อธิบายได้ว่าทำไมบางครั้งเพิ่ม consumer แล้วงานยังต้องรอกัน และเล่าได้ว่าเมื่อ consumer ตัวหนึ่งดับ งานของมันไปอยู่ที่ไหน</p>
+</div>
+
+<h2>1. ปัญหาเกิดจากอะไร</h2>
+
+<p>ตอนนี้ mapping-demo ตั้ง <code>Kafka:FileImportConsumers</code> และ <code>Kafka:NormalizeConsumers</code> ไว้ที่ 1 ถ้าวางไฟล์ A กับ B ติดกัน consumer ตัวเดียวต้องทำ A ให้จบก่อน ทั้งช่วงหน่วงและช่วง import แล้วจึงเริ่ม B ได้ งานยิ่งเข้ามามาก งานท้ายแถวก็ยิ่งรอนาน</p>
+
+<p>บทที่ 1 ให้คำตอบไว้แล้วคือ competing consumers (concept 03) เพิ่ม worker ให้ช่วยกันหยิบงาน แต่ใน Kafka การเพิ่ม consumer มีเงื่อนไขบางอย่างที่ต้องรู้ก่อน</p>
+
+<h2>2. ที่มาของ concept</h2>
+
+<p>เริ่มจากคำถามว่า “ถ้าเปิด consumer หลายตัว จะแบ่งงานกันอย่างไรไม่ให้ทำซ้ำ” แล้วไล่คำถามที่ตามมาทีละข้อ</p>
+
+<ol>
+<li>topic ของ Kafka ไม่ลบ message หลังทำเสร็จ (บทที่ 1) ถ้าทุกตัวอ่านแถวเดียวกัน ทุกตัวก็จะได้ message ครบทุกชิ้น แล้วจะแบ่งกันอย่างไร? แบ่ง topic เป็นหลายแถวย่อย แล้วแจกแถวย่อยให้ consumer แต่ละตัว → <strong>13 partition</strong></li>
+<li>Kafka รู้ได้อย่างไรว่า consumer ตัวไหนเป็นทีมเดียวกันที่ต้องแบ่งงานกัน และตัวไหนต้องการอ่านครบทุก message? ให้ consumer บอกชื่อทีมของตัวเอง → <strong>14 consumer group</strong></li>
+<li>message ชิ้นหนึ่งจะลง partition ไหน และงานของแถวเดียวกันจะแซงกันไหม? ให้ producer แนบ key ไปกับ message แล้วใช้ key เลือก partition → <strong>15 message key</strong></li>
+<li>ถ้า consumer ตัวหนึ่งดับ หรือเปิดเพิ่มกลางทาง partition ที่มันถืออยู่จะเป็นอย่างไร? Kafka แจก partition ใหม่ให้ตัวที่เหลือ → <strong>16 rebalance</strong></li>
+</ol>
+
+<h2>3. Concept หลัก 4 ข้อ</h2>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">13</span>
+<h3>Partition: หน่วยที่ใช้แบ่งงาน</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 300,
+ "nodes": [
+  {"id": "p0", "label": "P0", "sub": "", "x": 10, "y": 46, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "p1", "label": "P1", "sub": "", "x": 10, "y": 118, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "p2", "label": "P2", "sub": "", "x": 10, "y": 190, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "c1", "label": "consumer 1", "sub": "", "x": 400, "y": 10, "w": 230, "h": 62, "kind": "consumer"},
+  {"id": "c2", "label": "consumer 2", "sub": "ยังไม่เปิด", "x": 400, "y": 82, "w": 230, "h": 62, "kind": "consumer"},
+  {"id": "c3", "label": "consumer 3", "sub": "ยังไม่เปิด", "x": 400, "y": 154, "w": 230, "h": 62, "kind": "consumer"},
+  {"id": "c4", "label": "consumer 4", "sub": "ยังไม่เปิด", "x": 400, "y": 226, "w": 230, "h": 62, "kind": "consumer"}
+ ],
+ "edges": [],
+ "steps": [
+  {
+   "caption": "topic หนึ่งแบ่งเป็น 3 partition แต่ละ partition เรียง message ตามลำดับที่เข้ามา มี consumer ตัวเดียวจึงได้ครบทั้ง 3 partition และทำได้ทีละงาน",
+   "tokens": [
+    {"id": "f1", "label": "f1", "at": "c1", "kind": "msg"},
+    {"id": "f4", "label": "f4", "at": "p0", "kind": "msg"},
+    {"id": "f2", "label": "f2", "at": "p1", "kind": "msg"},
+    {"id": "f3", "label": "f3", "at": "p2", "kind": "msg"}
+   ],
+   "nodes": {
+    "c1": {"state": "active", "sub": "ได้ P0, P1, P2"},
+    "c2": {"state": "dim"}, "c3": {"state": "dim"}, "c4": {"state": "dim"}
+   }
+  },
+  {
+   "caption": "เปิด consumer ตัวที่ 2 Kafka แบ่ง partition ใหม่ ตอนนี้ทำ f1 กับ f3 ได้พร้อมกัน ส่วน f2 ยังรอ consumer 1",
+   "tokens": [
+    {"id": "f1", "label": "f1", "at": "c1", "kind": "msg"},
+    {"id": "f4", "label": "f4", "at": "p0", "kind": "msg"},
+    {"id": "f2", "label": "f2", "at": "p1", "kind": "msg"},
+    {"id": "f3", "label": "f3", "at": "c2", "kind": "msg"}
+   ],
+   "nodes": {
+    "c1": {"sub": "ได้ P0, P1"},
+    "c2": {"state": "active", "sub": "ได้ P2"}
+   }
+  },
+  {
+   "caption": "consumer ตัวที่ 3 ได้ partition ละตัวพอดี f1, f2, f3 ทำพร้อมกันได้ทั้งหมด",
+   "tokens": [
+    {"id": "f1", "label": "f1", "at": "c1", "kind": "msg"},
+    {"id": "f4", "label": "f4", "at": "p0", "kind": "msg"},
+    {"id": "f2", "label": "f2", "at": "c2", "kind": "msg"},
+    {"id": "f3", "label": "f3", "at": "c3", "kind": "msg"}
+   ],
+   "nodes": {
+    "c1": {"sub": "ได้ P0"},
+    "c2": {"sub": "ได้ P1"},
+    "c3": {"state": "active", "sub": "ได้ P2"}
+   }
+  },
+  {
+   "caption": "เปิดตัวที่ 4 แต่ partition หมดแล้ว จะมี consumer หนึ่งตัวที่ไม่ได้ partition เลยและได้แต่รอ จำนวน partition จึงเป็นเพดานของจำนวนงานที่ทำพร้อมกันได้",
+   "tokens": [
+    {"id": "f1", "label": "f1", "at": "c1", "kind": "msg"},
+    {"id": "f4", "label": "f4", "at": "p0", "kind": "msg"},
+    {"id": "f2", "label": "f2", "at": "c2", "kind": "msg"},
+    {"id": "f3", "label": "f3", "at": "c3", "kind": "msg"}
+   ],
+   "nodes": {
+    "c4": {"state": "down", "sub": "ไม่ได้ partition"}
+   }
+  },
+  {
+   "caption": "f4 อยู่ใน P0 ต่อจาก f1 จึงต้องรอ f1 เสร็จก่อน ถึงจะมี consumer ว่างอยู่ก็ช่วยไม่ได้ เพราะ partition หนึ่งมีเจ้าของได้ตัวเดียว",
+   "tokens": [
+    {"id": "f4", "label": "f4", "at": "c1", "kind": "msg"},
+    {"id": "f2", "label": "f2", "at": "c2", "kind": "msg"},
+    {"id": "f3", "label": "f3", "at": "c3", "kind": "msg"}
+   ],
+   "nodes": {
+    "c1": {"sub": "ได้ P0 · f1 เสร็จแล้ว"}
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>Kafka แบ่ง topic เป็น partition และให้ consumer ในทีมเดียวกันถือ partition ละหนึ่งตัวเท่านั้น <a href="https://developer.confluent.io/courses/apache-kafka/consumers/">[Confluent]</a> จำนวน consumer ที่ทำงานพร้อมกันได้จริงจึงไม่เกินจำนวน partition <a href="https://kafka.apache.org/39/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html">[KafkaConsumer javadoc]</a> ส่วน message ใน partition เดียวกันทำทีละชิ้นตามลำดับ</p>
+</div>
+
+<div class="concept">
+<span class="num">14</span>
+<h3>Consumer group: ทีมที่แบ่งงานกัน</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 290,
+ "nodes": [
+  {"id": "t", "label": "mapping.file-import", "sub": "", "x": 10, "y": 100, "w": 190, "h": 70, "kind": "queue"},
+  {"id": "a1", "label": "consumer 1", "sub": "group mapping-file-import", "x": 380, "y": 10, "w": 250, "h": 70, "kind": "consumer"},
+  {"id": "a2", "label": "consumer 2", "sub": "group mapping-file-import", "x": 380, "y": 90, "w": 250, "h": 70, "kind": "consumer"},
+  {"id": "b1", "label": "consumer ของรายงาน (สมมติ)", "sub": "group report", "x": 380, "y": 205, "w": 250, "h": 70, "kind": "consumer"}
+ ],
+ "edges": [
+  {"from": "t", "to": "a1"},
+  {"from": "t", "to": "a2"},
+  {"from": "t", "to": "b1", "dashed": true}
+ ],
+ "steps": [
+  {
+   "caption": "message #1 เข้ามาใน topic มี consumer อ่านอยู่สองกลุ่ม คือ group mapping-file-import (2 ตัว) และ group report ที่สมมติขึ้น (1 ตัว)",
+   "tokens": [
+    {"id": "m1", "label": "#1", "at": "t", "kind": "msg"}
+   ]
+  },
+  {
+   "caption": "ในแต่ละ group มี consumer ได้ #1 แค่ตัวเดียว แต่ทั้งสอง group ได้ #1 คนละชุด",
+   "tokens": [
+    {"id": "g1", "label": "#1", "at": "t", "kind": "ghost"},
+    {"id": "m1", "label": "#1", "at": "a1", "kind": "msg"},
+    {"id": "r1", "label": "#1", "at": "b1", "kind": "msg"}
+   ],
+   "nodes": {"a1": {"state": "active"}, "b1": {"state": "active"}}
+  },
+  {
+   "caption": "#2 อยู่ใน partition อื่น ฝั่ง mapping-file-import จึงให้ consumer 2 ทำ ส่วน group report ยังทำ #1 ไม่เสร็จ #2 จึงรออยู่",
+   "tokens": [
+    {"id": "g1", "label": "#1", "at": "t", "kind": "ghost"},
+    {"id": "g2", "label": "#2", "at": "t", "kind": "ghost"},
+    {"id": "m1", "label": "#1", "at": "a1", "kind": "msg"},
+    {"id": "m2", "label": "#2", "at": "a2", "kind": "msg"},
+    {"id": "r1", "label": "#1", "at": "b1", "kind": "msg"}
+   ],
+   "nodes": {"a2": {"state": "active"}}
+  },
+  {
+   "caption": "แต่ละ group จำตำแหน่งที่อ่านถึงของตัวเอง group report จะช้าหรือปิดไปก็ไม่ทำให้ import ช้าลง",
+   "tokens": [
+    {"id": "g2", "label": "#2", "at": "t", "kind": "ghost"},
+    {"id": "r1", "label": "#1", "at": "b1", "kind": "msg"}
+   ],
+   "nodes": {
+    "a1": {"state": "ok", "sub": "#1 เสร็จ"},
+    "a2": {"state": "ok", "sub": "#2 เสร็จ"},
+    "b1": {"sub": "ยังทำ #1"}
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>consumer บอก Kafka ว่าตัวเองอยู่ group ไหนผ่าน <code>GroupId</code> ตัวที่อยู่ group เดียวกันจะแบ่ง partition กันและได้ message คนละชิ้น (competing consumers) ส่วนคนละ group จะได้ message ครบทุกชิ้นเหมือน publish-subscribe <a href="https://kafka.apache.org/39/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html">[KafkaConsumer javadoc]</a></p>
+</div>
+
+<div class="concept">
+<span class="num">15</span>
+<h3>Message key: กำหนดว่า message ลง partition ไหน</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 230,
+ "nodes": [
+  {"id": "d", "label": "OutboxDispatcher", "sub": "producer", "x": 10, "y": 80, "w": 190, "h": 70, "kind": "producer"},
+  {"id": "p0", "label": "P0", "sub": "", "x": 400, "y": 10, "w": 230, "h": 62, "kind": "queue"},
+  {"id": "p1", "label": "P1", "sub": "", "x": 400, "y": 84, "w": 230, "h": 62, "kind": "queue"},
+  {"id": "p2", "label": "P2", "sub": "", "x": 400, "y": 158, "w": 230, "h": 62, "kind": "queue"}
+ ],
+ "edges": [
+  {"from": "d", "to": "p0"},
+  {"from": "d", "to": "p1"},
+  {"from": "d", "to": "p2"}
+ ],
+ "steps": [
+  {
+   "caption": "จะส่งงาน normalize ของแถว 7 ใน topic mapping.row-normalize key ของ message คือ sourceRowId = 7",
+   "tokens": [
+    {"id": "k7", "label": "7", "at": "d", "kind": "row"}
+   ],
+   "nodes": {"d": {"state": "active"}}
+  },
+  {
+   "caption": "producer คำนวณ hash จาก key แล้วได้ partition หนึ่ง สมมติว่าได้ P1",
+   "tokens": [
+    {"id": "k7", "label": "7", "at": "p1", "kind": "row"},
+    {"id": "k9", "label": "9", "at": "d", "kind": "row"}
+   ]
+  },
+  {
+   "caption": "แถว 9 มี key ต่างกัน จึงอาจไปลง partition อื่น ในตัวอย่างนี้ได้ P0",
+   "tokens": [
+    {"id": "k7", "label": "7", "at": "p1", "kind": "row"},
+    {"id": "k9", "label": "9", "at": "p0", "kind": "row"},
+    {"id": "k7r", "label": "7", "at": "d", "kind": "row"}
+   ]
+  },
+  {
+   "caption": "มีคนสั่ง Retry แถว 7 message ใหม่ใช้ key 7 เหมือนเดิม จึงลง P1 ต่อท้ายชิ้นแรกเสมอ",
+   "tokens": [
+    {"id": "k7", "label": "7", "at": "p1", "kind": "row"},
+    {"id": "k9", "label": "9", "at": "p0", "kind": "row"},
+    {"id": "k7r", "label": "7", "at": "p1", "kind": "row"}
+   ],
+   "nodes": {"d": {"state": null}, "p1": {"sub": "แถว 7 สองชิ้นเรียงกัน"}}
+  },
+  {
+   "caption": "P1 มี consumer ถือได้ตัวเดียวและทำทีละชิ้นตามลำดับ งานของแถว 7 จึงไม่มีทางทำซ้อนกันสองตัว และไม่แซงกัน",
+   "tokens": [
+    {"id": "k7", "label": "7", "at": "p1", "kind": "row"},
+    {"id": "k9", "label": "9", "at": "p0", "kind": "row"},
+    {"id": "k7r", "label": "7", "at": "p1", "kind": "row"}
+   ],
+   "nodes": {"p1": {"state": "ok"}}
+  }
+ ]
+}
+</script>
+</div>
+<p>message ที่มี key เดียวกันจะลง partition เดียวกันเสมอ และ consumer จะอ่าน message ใน partition ตามลำดับที่เขียนเข้าไป <a href="https://kafka.apache.org/intro">[Kafka intro]</a> ข้อแลกเปลี่ยนคือ key ต่างกันก็อาจได้ partition เดียวกันได้ เพราะมีแค่ 3 partition ให้เลือก</p>
+</div>
+
+<div class="concept">
+<span class="num">16</span>
+<h3>Rebalance: consumer เข้าหรือออก partition ก็ย้ายตาม</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 240,
+ "nodes": [
+  {"id": "p0", "label": "P0", "sub": "", "x": 10, "y": 10, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "p1", "label": "P1", "sub": "", "x": 10, "y": 88, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "p2", "label": "P2", "sub": "", "x": 10, "y": 166, "w": 190, "h": 62, "kind": "queue"},
+  {"id": "c1", "label": "consumer 1", "sub": "ได้ P0", "x": 400, "y": 10, "w": 230, "h": 62, "kind": "consumer"},
+  {"id": "c2", "label": "consumer 2", "sub": "ได้ P1", "x": 400, "y": 88, "w": 230, "h": 62, "kind": "consumer"},
+  {"id": "c3", "label": "consumer 3", "sub": "ได้ P2", "x": 400, "y": 166, "w": 230, "h": 62, "kind": "consumer"}
+ ],
+ "edges": [],
+ "steps": [
+  {
+   "caption": "consumer ทั้งสามตัวทำงานใน partition ของตัวเอง consumer 2 กำลังทำ #5 จาก P1 และยังไม่ commit",
+   "tokens": [
+    {"id": "g5", "label": "#5", "at": "p1", "kind": "ghost"},
+    {"id": "m5", "label": "#5", "at": "c2", "kind": "msg"}
+   ],
+   "nodes": {"c2": {"state": "active"}}
+  },
+  {
+   "caption": "consumer 2 ดับกลางงาน P1 จึงไม่มีใครดูแล",
+   "tokens": [
+    {"id": "g5", "label": "#5", "at": "p1", "kind": "ghost"}
+   ],
+   "nodes": {"c2": {"state": "down", "sub": "ดับ"}, "p1": {"state": "bad", "sub": "ไม่มีเจ้าของ"}}
+  },
+  {
+   "caption": "Kafka รอสัญญาณจาก consumer 2 จนหมดเวลา แล้วแจก partition ใหม่ให้ตัวที่เหลือ (rebalance) P1 ย้ายไปอยู่กับ consumer 1",
+   "tokens": [
+    {"id": "g5", "label": "#5", "at": "p1", "kind": "ghost"}
+   ],
+   "nodes": {"p1": {"state": null, "sub": ""}, "c1": {"sub": "ได้ P0, P1"}, "c2": {"sub": "ออกจาก group"}}
+  },
+  {
+   "caption": "consumer 1 อ่าน P1 ต่อจากจุดที่ commit ไว้ล่าสุด จึงได้ #5 มาทำอีกรอบ งานไม่หาย และ idempotency จากบทที่ 4 กันผลซ้ำไว้ให้",
+   "tokens": [
+    {"id": "g5", "label": "#5", "at": "p1", "kind": "ghost"},
+    {"id": "m5b", "label": "#5", "at": "c1", "kind": "msg"}
+   ],
+   "nodes": {"c1": {"state": "active"}}
+  }
+ ]
+}
+</script>
+</div>
+<p>ทุกครั้งที่มี consumer เข้าหรือออกจาก group Kafka จะแบ่ง partition ใหม่ ถ้า consumer หยุดส่งสัญญาณเกินเวลาที่ตั้งไว้ Kafka ก็นับว่าตัวนั้นออกไปแล้วและย้าย partition ไปให้ตัวอื่น <a href="https://docs.confluent.io/platform/current/clients/consumer.html">[Confluent docs]</a> การเพิ่ม worker กลางทางจึงไม่ต้องปิดระบบ</p>
+</div>
+
+</div>
+
+<h2>4. mapping-demo ใช้อย่างไร</h2>
+
+<div class="table-wrap">
+<table>
+<tr><th>Concept</th><th>ในโค้ด</th></tr>
+<tr><td><strong>13 Partition</strong></td><td><code>scripts/create-topics.ps1</code> สร้างทั้งสอง topic แบบ 3 partition และ <code>docker-compose.yml</code> ปิด auto-create ไว้ แต่ละ topic จึงทำงานพร้อมกันได้สูงสุด 3 ชิ้น</td></tr>
+<tr><td><strong>14 Consumer group</strong></td><td>import ใช้ group <code>mapping-file-import</code> (ตั้งใน <code>Program.cs</code> ของ Worker) normalize ใช้ group <code>mapping-row-normalize</code> (ใน <code>RowNormalizeConsumer</code>) สอง group นี้อ่านคนละ topic และจำตำแหน่งแยกกัน</td></tr>
+<tr><td><strong>03 Competing consumers</strong></td><td><code>Kafka:FileImportConsumers</code> และ <code>Kafka:NormalizeConsumers</code> คือจำนวน consumer ต่อ topic ใน Worker หนึ่ง process แต่ละตัวมี Kafka consumer ของตัวเองและรันใน thread แยก (<code>Task.Factory.StartNew</code> แบบ <code>LongRunning</code>) ตอนนี้ตั้งไว้ที่ 1 ใน <code>appsettings.Development.json</code></td></tr>
+<tr><td><strong>15 Message key</strong></td><td>file-import ใช้ <code>fileJobId</code> เป็น key ส่วน row-normalize ใช้ <code>sourceRowId</code> ทั้งตอน import, Retry และ Reprocess งานของแถวเดียวกันจึงอยู่ partition เดิมเสมอ</td></tr>
+<tr><td><strong>16 Rebalance</strong></td><td>ทุกครั้งที่ได้ partition ใหม่ Worker เขียน log <code>assigned partitions</code> จาก <code>SetPartitionsAssignedHandler</code> ดูได้ว่า consumer แต่ละตัวถือ partition ไหน</td></tr>
+</table>
+</div>
+
+<p>เพราะ import ช่วงหน่วง (<code>Import:DelaySeconds</code>) รออยู่ใน handler consumer ตัวนั้นจึงไม่หยิบงานอื่นระหว่างหน่วง ถ้ามี import consumer ตัวเดียว ไฟล์ B ก็ต้องรอทั้งช่วงหน่วงและช่วง import ของไฟล์ A</p>
+
+<h3>ลองเล่น: วางไฟล์ A กับ B ติดกัน</h3>
+<p>แถวบนตั้ง <code>FileImportConsumers = 1</code> แถวล่างตั้งเป็น 3 สมมติว่า key ของ A กับ B ได้คนละ partition</p>
+
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 330,
+ "nodes": [
+  {"id": "ta", "label": "mapping.file-import", "sub": "consumer 1 ตัว", "x": 10, "y": 10, "w": 180, "h": 70, "kind": "queue"},
+  {"id": "ca", "label": "consumer 1", "sub": "ได้ P0, P1, P2", "x": 240, "y": 10, "w": 190, "h": 70, "kind": "consumer"},
+  {"id": "sa", "label": "Source Table", "sub": "", "x": 480, "y": 10, "w": 150, "h": 70, "kind": "store"},
+  {"id": "tb", "label": "mapping.file-import", "sub": "consumer 3 ตัว", "x": 10, "y": 170, "w": 180, "h": 70, "kind": "queue"},
+  {"id": "cb1", "label": "consumer 1", "sub": "ได้ P0", "x": 240, "y": 125, "w": 190, "h": 70, "kind": "consumer"},
+  {"id": "cb3", "label": "consumer 3", "sub": "ได้ P2", "x": 240, "y": 250, "w": 190, "h": 70, "kind": "consumer"},
+  {"id": "sb", "label": "Source Table", "sub": "", "x": 480, "y": 170, "w": 150, "h": 70, "kind": "store"}
+ ],
+ "edges": [
+  {"from": "ta", "to": "ca"},
+  {"from": "ca", "to": "sa"},
+  {"from": "tb", "to": "cb1"},
+  {"from": "tb", "to": "cb3"},
+  {"from": "cb1", "to": "sb"},
+  {"from": "cb3", "to": "sb"}
+ ],
+ "steps": [
+  {
+   "caption": "file job A ลง P0 และ B ลง P2 ทั้งสองแบบ",
+   "tokens": [
+    {"id": "a1", "label": "A", "at": "ta", "kind": "msg"},
+    {"id": "b1", "label": "B", "at": "ta", "kind": "msg"},
+    {"id": "a3", "label": "A", "at": "tb", "kind": "msg"},
+    {"id": "b3", "label": "B", "at": "tb", "kind": "msg"}
+   ]
+  },
+  {
+   "caption": "แถวบน consumer ตัวเดียวหยิบ A ไปหน่วงก่อน B ต้องรอ แถวล่าง A กับ B ต่างมี consumer ของตัวเองและเริ่มหน่วงพร้อมกัน",
+   "tokens": [
+    {"id": "a1", "label": "A", "at": "ca", "kind": "msg"},
+    {"id": "b1", "label": "B", "at": "ta", "kind": "msg"},
+    {"id": "a3", "label": "A", "at": "cb1", "kind": "msg"},
+    {"id": "b3", "label": "B", "at": "cb3", "kind": "msg"}
+   ],
+   "nodes": {
+    "ca": {"state": "active", "sub": "A: Delaying"},
+    "cb1": {"state": "active", "sub": "A: Delaying"},
+    "cb3": {"state": "active", "sub": "B: Delaying"}
+   }
+  },
+  {
+   "caption": "หมดช่วงหน่วง แถวบน import A อยู่ B ยังไม่ได้เริ่ม แถวล่าง import ทั้งสองไฟล์พร้อมกัน",
+   "tokens": [
+    {"id": "a1", "label": "A", "at": "ca", "kind": "msg"},
+    {"id": "b1", "label": "B", "at": "ta", "kind": "msg"},
+    {"id": "a3", "label": "A", "at": "cb1", "kind": "msg"},
+    {"id": "b3", "label": "B", "at": "cb3", "kind": "msg"},
+    {"id": "ra1", "label": "A…", "at": "sa", "kind": "row"},
+    {"id": "ra3", "label": "A…", "at": "sb", "kind": "row"},
+    {"id": "rb3", "label": "B…", "at": "sb", "kind": "row"}
+   ],
+   "nodes": {
+    "ca": {"sub": "A: Importing"},
+    "cb1": {"sub": "A: Importing"},
+    "cb3": {"sub": "B: Importing"}
+   }
+  },
+  {
+   "caption": "แถวล่างเสร็จทั้งสองไฟล์แล้ว แถวบนเพิ่งเสร็จ A จึงเพิ่งเริ่มหน่วง B",
+   "tokens": [
+    {"id": "b1", "label": "B", "at": "ca", "kind": "msg"},
+    {"id": "ra1", "label": "A", "at": "sa", "kind": "ok"},
+    {"id": "ra3", "label": "A", "at": "sb", "kind": "ok"},
+    {"id": "rb3", "label": "B", "at": "sb", "kind": "ok"}
+   ],
+   "nodes": {
+    "ca": {"sub": "B: Delaying"},
+    "cb1": {"state": null, "sub": "A: Imported"},
+    "cb3": {"state": null, "sub": "B: Imported"},
+    "sb": {"state": "ok"}
+   }
+  },
+  {
+   "caption": "แถวบนใช้เวลาเกือบสองเท่า ถ้า key ของ A กับ B ลง partition เดียวกัน แถวล่างก็จะช้าเท่าแถวบน ถึงจะมี consumer 3 ตัวก็ตาม",
+   "tokens": [
+    {"id": "ra1", "label": "A", "at": "sa", "kind": "ok"},
+    {"id": "rb1", "label": "B", "at": "sa", "kind": "ok"},
+    {"id": "ra3", "label": "A", "at": "sb", "kind": "ok"},
+    {"id": "rb3", "label": "B", "at": "sb", "kind": "ok"}
+   ],
+   "nodes": {
+    "ca": {"state": null, "sub": "B: Imported"},
+    "sa": {"state": "ok"}
+   }
+  }
+ ]
+}
+</script>
+</div>
+
+<div class="callout">
+<p>เปิด Worker สอง process ก็ได้ consumer เพิ่มเหมือนกัน เพราะใช้ group เดียวกัน แต่ <code>OutboxDispatcher</code> จะทำงานสองตัวด้วย ทั้งสองตัวเลือกแถวที่ <code>sent_at</code> เป็น null โดยไม่ล็อก จึงอาจส่ง message เดียวกันซ้ำ ระบบยังถูกต้องเพราะ handler รับซ้ำได้ (บทที่ 4) เรื่อง outbox จะต่อในบทที่ 6</p>
+</div>
+
+<h2>5. ทบทวนโดยไม่เลื่อนขึ้นไปดู</h2>
+
+<div class="quiz">
+<p class="q">1. ตั้ง <code>Kafka:FileImportConsumers</code> เป็น 5 แล้ววางไฟล์ 5 ไฟล์ จะ import พร้อมกันได้มากสุดกี่ไฟล์?</p>
+<ol class="options">
+<li data-correct>3 ไฟล์ เพราะ topic มีแค่ 3 partition</li>
+<li>5 ไฟล์ เพราะเปิด consumer ไว้ 5 ตัว</li>
+<li>1 ไฟล์ เพราะ Worker มีแค่ process เดียว</li>
+<li>15 ไฟล์ เพราะ 5 consumer คูณ 3 partition</li>
+</ol>
+<div class="why">partition หนึ่งมี consumer ใน group ถือได้ตัวเดียว consumer อีก 2 ตัวจึงไม่ได้ partition และอยู่เฉย ๆ ส่วน thread แยกกันอยู่แล้ว การอยู่ process เดียวจึงไม่ได้จำกัด</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. ตั้ง consumer เป็น 3 แล้ว แต่วางไฟล์ A กับ B แล้ว B ยังรอ A อยู่ดี สาเหตุที่เป็นไปได้คืออะไร?</p>
+<ol class="options">
+<li data-correct>key ของ A กับ B ได้ partition เดียวกัน</li>
+<li>Kafka ส่ง message ให้ทีละ group เท่านั้น</li>
+<li>consumer ทุกตัวต้องรอ commit ของกันและกัน</li>
+<li>OutboxDispatcher ส่ง B หลัง A เสร็จเท่านั้น</li>
+</ol>
+<div class="why">key ต่างกันก็ hash ได้ partition เดียวกันได้ และใน partition เดียวกัน message ทำทีละชิ้นตามลำดับ B จึงต้องรอ A</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. ทำไม message ของ row-normalize ถึงใช้ <code>sourceRowId</code> เป็น key?</p>
+<ol class="options">
+<li data-correct>งานของแถวเดียวกันอยู่ partition เดิม ไม่ทำซ้อนกัน</li>
+<li>ให้ทุกแถวของไฟล์เดียวกันอยู่ partition เดียวกัน</li>
+<li>ให้ Kafka ลบ message เก่าของแถวนั้นทิ้งไปเอง</li>
+<li>ให้ consumer ที่ว่างที่สุดได้แถวนั้นไปทำก่อน</li>
+</ol>
+<div class="why">key เดียวกันลง partition เดียวกันเสมอ งาน import, Retry และ Reprocess ของแถวเดียวกันจึงเรียงกันใน partition เดียว และมี consumer ทำได้ทีละชิ้น ส่วนแถวคนละแถวของไฟล์เดียวกันกระจายไปหลาย partition ได้</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. consumer ตัวหนึ่งดับขณะทำงานที่ยังไม่ commit จะเกิดอะไรขึ้นกับงานนั้น?</p>
+<ol class="options">
+<li data-correct>partition ย้ายไปตัวอื่น แล้วงานนั้นทำใหม่อีกรอบ</li>
+<li>งานนั้นหายไป เพราะ consumer เจ้าของดับไปแล้ว</li>
+<li>partition หยุดรอจนกว่า consumer ตัวเดิมกลับมา</li>
+<li>Kafka ส่งงานนั้นให้ consumer ทุกตัวช่วยกันทำ</li>
+</ol>
+<div class="why">Kafka rebalance ให้ consumer ที่เหลือรับ partition ไป ตัวใหม่อ่านต่อจากจุดที่ commit ล่าสุด จึงได้งานเดิมมาทำซ้ำ ตรงกับ at-least-once ในบทที่ 4</div>
+</div>
+
+<div class="quiz">
+<p class="q">5. ถ้าจะเพิ่มบริการใหม่ที่ต้องอ่านทุก message ใน <code>mapping.file-import</code> โดยไม่แย่งงานจาก import ต้องตั้ง <code>GroupId</code> อย่างไร?</p>
+<ol class="options">
+<li data-correct>ตั้ง group ใหม่ของตัวเอง ไม่ซ้ำกับที่มีอยู่</li>
+<li>ใช้ group <code>mapping-file-import</code> ตัวเดิม</li>
+<li>ใช้ group <code>mapping-row-normalize</code> แทน</li>
+<li>ไม่ต้องตั้ง group เพราะ Kafka แจกให้ครบอยู่แล้ว</li>
+</ol>
+<div class="why">ถ้าใช้ group เดิม บริการใหม่จะกลายเป็นสมาชิกทีม import และแย่ง partition ไป ต้องเป็นคนละ group จึงจะได้ message ครบทุกชิ้นของตัวเอง</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
+
+<h2>6. ลองกับระบบจริง (ไม่บังคับ)</h2>
+
+<p>รันเดโมตาม <a href="../../README.md">README</a> ไว้ก่อน ยกเว้น Worker ให้เปิดตามขั้นที่ 2</p>
+
+<div class="callout ask">
+<p><strong>ทายก่อนลงมือ:</strong> ถ้าเปิด Worker ด้วย <code>Kafka:FileImportConsumers=4</code> log <code>assigned partitions</code> ของ import consumer ทั้ง 4 ตัวจะออกมาหน้าตาอย่างไร</p>
+</div>
+
+<ol class="steps">
+<li>ดูว่า topic มีกี่ partition:
+<pre><code>docker compose exec -T kafka /opt/kafka/bin/kafka-topics.sh `
+    --bootstrap-server kafka:19092 --describe --topic mapping.file-import</code></pre></li>
+<li>เปิด Worker แบบ import consumer 3 ตัว และหน่วงให้นานพอเห็น:
+<pre><code>dotnet run --project src/MappingDemo.Worker -- `
+    Kafka:FileImportConsumers=3 `
+    Import:DelaySeconds=10 `
+    Demo:ImportRowDelayMs=200</code></pre>
+รอจน log แสดง <code>assigned partitions</code> ของ consumer ทั้งสามตัว</li>
+<li>วางไฟล์ A กับ B ติดกัน:
+<pre><code>Copy-Item ./samples/acceptance/01-orders-a-invalid-2.csv ./input/orders/orders-a.csv
+Copy-Item ./samples/acceptance/01-orders-b-valid.csv ./input/orders/orders-b.csv</code></pre></li>
+<li>ดู log บรรทัด <code>consumed mapping.file-import, partition …</code> ว่า A กับ B ได้ partition ไหน และมี log <code>is delaying</code> ของทั้งสองงานห่างกันแค่ไม่กี่วินาทีหรือไม่</li>
+<li>ปิด Worker แล้วทำซ้ำด้วย <code>Kafka:FileImportConsumers=1</code> เทียบว่า B เริ่มหน่วงช้ากว่าเดิมแค่ไหน</li>
+<li>ลองเปิดด้วย <code>Kafka:FileImportConsumers=4</code> แล้วเทียบ log กับที่ทายไว้</li>
+</ol>
+
+<h2>7. อธิบายด้วยคำพูดตัวเอง</h2>
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<ol>
+<li>ถ้าอยากให้ mapping-demo import ได้พร้อมกัน 6 ไฟล์ ต้องเปลี่ยนอะไรบ้าง?</li>
+<li>ทำไมการเพิ่ม consumer ถึงไม่ทำให้งานของแถวเดียวกันทำซ้อนกัน?</li>
+</ol>
+<p>Claude จะตรวจคำตอบ แล้วใช้คำตอบนั้นวางจุดเริ่มของบทถัดไป ถ้าตรงไหนยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://developer.confluent.io/courses/apache-kafka/consumers/">Confluent Developer, Apache Kafka 101: Consumers</a> มีวิดีโอสั้นที่ภาพ partition ย้ายระหว่าง consumer ให้ดู</p>
+<p>อยากเห็นข้อความต้นฉบับ: หัวข้อ “Consumer Groups and Topic Subscriptions” ใน <a href="https://kafka.apache.org/39/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html">KafkaConsumer javadoc</a> ราว 5 นาที</p>
+
+<footer class="next">
+<span>บทที่ 5 จาก ~6</span>
+<span>ถัดไป: <a href="0006-outbox.html">บทที่ 6 กล่องจดหมายขาออก (outbox) ทำไมไม่ส่งเข้า queue ตรง ๆ →</a></span>
+</footer>
+
+</main>
+</body>
+</html>

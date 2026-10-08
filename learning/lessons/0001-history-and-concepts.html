@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 1 · ที่มาและ Concept ของ Queue</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="../reference/glossary.html">อภิธานศัพท์</a> · <a href="0002-queue-and-worker-in-mapping-demo.html">บทที่ 2 →</a></nav>
+
+<p class="kicker">บทที่ 1 · ที่มาและแนวคิด · ราว 15 นาที</p>
+<h1>คิวมาจากไหน และแก้ปัญหาอะไร</h1>
+<p class="subtitle">จากชุมสายโทรศัพท์ปี 1909 ถึง Kafka ปี 2011 แต่ละยุคแก้ปัญหาอะไร และเกิด concept อะไรที่เรายังใช้กันอยู่</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> แยกได้ว่าสถานการณ์จริงแต่ละแบบใช้ concept ไหนของ queue (decoupling, load leveling, competing consumers, publish-subscribe, at-least-once) และอธิบายได้ว่า Kafka ต่างจาก queue แบบดั้งเดิมอย่างไร ส่วนบทที่ 2 จะพาไปดูว่า mapping-demo ใช้ concept เหล่านี้อย่างไร</p>
+</div>
+
+<h2>1. ปัญหาตั้งต้น</h2>
+
+<p>ระบบที่มี “คนส่งงาน” กับ “คนทำงาน” มักเจอปัญหาเดียวกัน คืองานมาไม่สม่ำเสมอ แต่คนทำงานมีจำกัด เช่น ร้านกาแฟตอนแปดโมงเช้า ธนาคารวันเงินเดือนออก หรือระบบ import ที่มีคนโยนไฟล์ CSV เข้ามาพร้อมกันสิบไฟล์ ทางออกคือให้งานรอในคิว แล้วให้คนทำงานหยิบไปทำในจังหวะของตัวเอง</p>
+
+<h2>2. ไทม์ไลน์</h2>
+
+<ol class="timeline">
+
+<li>
+<span class="year">1909 · โคเปนเฮเกน</span>
+<h3>Erlang กับการรอสายโทรศัพท์</h3>
+<p>A. K. Erlang วิศวกรของบริษัทโทรศัพท์โคเปนเฮเกน ศึกษาว่าสายโทรศัพท์ที่โทรเข้ามาแบบสุ่มต้องรอนานแค่ไหน งานวิจัยปี 1909 ของเขาถือเป็นจุดเริ่มต้นของ <em>queueing theory</em> (ทฤษฎีการรอคิว) <a href="https://mathshistory.st-andrews.ac.uk/Biographies/Erlang/">[MacTutor]</a></p>
+<p class="gave">concept ที่ได้: <b>การรอคิวคำนวณได้ด้วยคณิตศาสตร์</b> ถ้างานเข้าเร็วกว่าที่ทำทันโดยเฉลี่ย คิวจะยาวขึ้นเรื่อย ๆ ไม่ว่าจะมีที่ให้รอมากแค่ไหน</p>
+</li>
+
+<li>
+<span class="year">ต้นทศวรรษ 1990 · IBM</span>
+<h3>IBM MQSeries ให้โปรแกรมคุยกันผ่านคิว</h3>
+<p>บริษัทใหญ่มีโปรแกรมที่รันบนเครื่องคนละชนิด คนละระบบปฏิบัติการ แต่ต้องส่งข้อมูลหากัน IBM เสนอวิธีเขียนโปรแกรมแบบ “Messaging and Queuing” คู่มือปี 1993 อธิบายชื่อนี้ไว้ว่า</p>
+<blockquote>“Messaging: because programs communicate by sending each other data in messages rather than by calling each other directly. Queuing: because the messages are placed on queues in storage, so that programs can run independently of each other, at different speeds and times…” — <a href="https://public.dhe.ibm.com/software/mqseries/pdf/horaa101.pdf">IBM, MQSeries: An Introduction to Messaging and Queuing</a></blockquote>
+<p class="gave">concept ที่ได้: <b>decoupling</b> คนส่งกับคนรับไม่ต้องเรียกหากันโดยตรง ไม่ต้องเร็วเท่ากัน และไม่ต้องออนไลน์พร้อมกัน</p>
+</li>
+
+<li>
+<span class="year">2003 · หนังสือและมาตรฐาน</span>
+<h3>ตั้งชื่อ pattern และเกิดโปรโตคอลกลาง</h3>
+<p>หนังสือ <em>Enterprise Integration Patterns</em> (Hohpe &amp; Woolf, 2003) ตั้งชื่อรูปแบบการใช้คิว เช่น Point-to-Point, Publish-Subscribe, Competing Consumers, Dead Letter Channel <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html">[EIP]</a> ปีเดียวกัน John O'Hara ที่ JPMorgan Chase เริ่มพัฒนาโปรโตคอล AMQP เพื่อลดการพึ่งระบบคิวเชิงพาณิชย์ที่แต่ละเจ้าใช้มาตรฐานของตัวเอง ต่อมาปี 2007 RabbitMQ ก็ออกมาโดยใช้โปรโตคอลนี้ <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol">[Wikipedia: AMQP]</a></p>
+<p class="gave">concept ที่ได้: <b>ศัพท์กลาง</b> เครื่องมือต่างยี่ห้อใช้ชื่อเดียวกันเรียก pattern เดียวกัน</p>
+</li>
+
+<li>
+<span class="year">2004–2006 · Amazon</span>
+<h3>Amazon SQS เปลี่ยนคิวให้เป็น cloud service</h3>
+<p>Amazon ประกาศ SQS รุ่นเบต้าปลายปี 2004 และเปิดใช้งานจริงปี 2006 <a href="https://aws.amazon.com/blogs/aws/amazon-sqs-15-years-and-still-queueing/">[AWS News Blog]</a> ทีมเล็ก ๆ ก็มีคิวใช้ได้ โดยไม่ต้องตั้งเซิร์ฟเวอร์คิวและดูแลเอง</p>
+<p class="gave">concept ที่ได้: <b>คิวเป็นโครงสร้างพื้นฐาน</b> เช่าใช้ได้เหมือนพื้นที่เก็บไฟล์หรือฐานข้อมูล</p>
+</li>
+
+<li>
+<span class="year">2009 · GitHub</span>
+<h3>GitHub ใช้ Resque ทำ background job</h3>
+<blockquote>“Resque is our Redis-backed library for creating background jobs, placing those jobs on multiple queues, and processing them later.” — <a href="https://github.blog/news-insights/the-library/introducing-resque/">GitHub Blog, 2009</a></blockquote>
+<p>เว็บตอบผู้ใช้ทันที แล้วโยนงานหนักลงคิวให้ worker ทำทีหลัง ณ วันที่เขียนโพสต์นั้น GitHub ใช้ Resque รัน background job ไปแล้วกว่า 10 ล้านงาน</p>
+<p class="gave">concept ที่ได้: <b>รูปแบบ queue + worker</b> สำหรับ background job ของเว็บแอป</p>
+</li>
+
+<li>
+<span class="year">2010–2012 · LinkedIn</span>
+<h3>LinkedIn สร้าง Kafka ซึ่งเป็นคิวที่ไม่ลบ message</h3>
+<p>LinkedIn ต้องเก็บ event (เช่น การเปิดดูหน้าเว็บ) เกือบพันล้าน message ต่อวัน Jay Kreps, Neha Narkhede และ Jun Rao พบว่าระบบคิวสำหรับองค์กรที่มีอยู่ตอนนั้นมี feature เกินจำเป็นและช้าเกินไปสำหรับงานนี้ จึงสร้าง Kafka ขึ้นมาเอง แล้วเปิดเป็น open source ในปี 2011 <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">[Kreps et al., NetDB 2011]</a> เปเปอร์อธิบายจุดที่ Kafka ต่างจากระบบอื่นไว้ว่า</p>
+<blockquote>“Unlike most other messaging systems, in Kafka, the information about how much each consumer has consumed is not maintained by the broker, but by the consumer itself.”</blockquote>
+<blockquote>“A message is automatically deleted if it has been retained in the broker longer than a certain period, typically 7 days.”</blockquote>
+<p class="gave">concept ที่ได้: <b>queue แบบ log</b> message ไม่ถูกลบเมื่อทำเสร็จ worker แต่ละกลุ่มจำเองว่าอ่านถึงไหน จึงย้อนอ่านได้ และหลายระบบอ่าน message ชุดเดียวกันได้</p>
+</li>
+
+</ol>
+
+<h2>3. Concept หลัก 5 ข้อ</h2>
+
+<p>IBM MQ, RabbitMQ, SQS และ Kafka ล้วนใช้ concept ชุดนี้ ต่างกันแค่วิธีทำ</p>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">01</span>
+<h3>Decoupling: แยกคนสั่งออกจากคนทำ</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 600,
+ "height": 100,
+ "nodes": [
+  {
+   "id": "p",
+   "label": "producer",
+   "sub": "ฝากแล้วไปต่อ",
+   "x": 10,
+   "y": 15,
+   "w": 140,
+   "h": 70,
+   "kind": "producer"
+  },
+  {
+   "id": "q",
+   "label": "queue",
+   "sub": "",
+   "x": 220,
+   "y": 15,
+   "w": 190,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "w",
+   "label": "worker",
+   "sub": "",
+   "x": 480,
+   "y": 15,
+   "w": 110,
+   "h": 70,
+   "kind": "consumer"
+  }
+ ],
+ "edges": [
+  {
+   "from": "p",
+   "to": "q"
+  },
+  {
+   "from": "q",
+   "to": "w"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "producer ฝากงาน #1 ไว้ในคิว แล้วไปทำอย่างอื่นต่อทันที ไม่รอผล",
+   "tokens": [
+    {
+     "id": "j1",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "down",
+     "sub": "ปิดอยู่"
+    }
+   }
+  },
+  {
+   "caption": "ฝากเพิ่มอีก #2 และ #3 ระหว่างที่ worker ยังปิดอยู่ งานก็แค่รอในคิว ไม่หายไปไหน",
+   "tokens": [
+    {
+     "id": "j1",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "j2",
+     "label": "#2",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "j3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "worker เปิดขึ้นมาแล้วหยิบ #1 ไปทำ producer ไม่ต้องรู้เลยว่า worker เพิ่งเปิด",
+   "tokens": [
+    {
+     "id": "j1",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "j2",
+     "label": "#2",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "j3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "active",
+     "sub": "ทำ #1"
+    }
+   }
+  },
+  {
+   "caption": "worker ทำไปตามจังหวะของตัวเองจนคิวว่าง",
+   "tokens": [],
+   "nodes": {
+    "w": {
+     "state": null,
+     "sub": "ทำครบ 3 งาน"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>producer ฝากงานไว้แล้วไปทำอย่างอื่นต่อได้ทันที ไม่ต้องรอผล และไม่ต้องสนใจว่า worker เปิดอยู่หรือเปล่า</p>
+<p class="src">ที่มา: IBM MQSeries</p>
+</div>
+
+<div class="concept">
+<span class="num">02</span>
+<h3>Load leveling: ใช้คิวพักงานช่วงพีค</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 600,
+ "height": 100,
+ "nodes": [
+  {
+   "id": "p",
+   "label": "งานเข้า",
+   "sub": "มาเป็นระลอก",
+   "x": 10,
+   "y": 15,
+   "w": 120,
+   "h": 70,
+   "kind": "producer"
+  },
+  {
+   "id": "q",
+   "label": "queue",
+   "sub": "",
+   "x": 190,
+   "y": 15,
+   "w": 250,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "w",
+   "label": "worker",
+   "sub": "ทีละชิ้น",
+   "x": 490,
+   "y": 15,
+   "w": 100,
+   "h": 70,
+   "kind": "consumer"
+  }
+ ],
+ "edges": [
+  {
+   "from": "p",
+   "to": "q"
+  },
+  {
+   "from": "q",
+   "to": "w"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "งานเข้ามาพร้อมกัน 5 ชิ้นในทีเดียว",
+   "tokens": [
+    {
+     "id": "a1",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a2",
+     "label": "#2",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "worker หยิบไปทำทีละชิ้นด้วยความเร็วเท่าเดิม",
+   "tokens": [
+    {
+     "id": "a1",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "a2",
+     "label": "#2",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "คิวค่อย ๆ สั้นลง ไม่มีใครต้องเร่ง",
+   "tokens": [
+    {
+     "id": "a2",
+     "label": "#2",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "a3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "ระลอกใหม่เข้ามาอีก 2 ชิ้น คิวรับไว้ก่อน",
+   "tokens": [
+    {
+     "id": "a3",
+     "label": "#3",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "a4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "a5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "b1",
+     "label": "#6",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "b2",
+     "label": "#7",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "ถ้าโดยเฉลี่ยงานเข้าเร็วกว่าที่ worker ทำทัน คิวจะยาวขึ้นเรื่อย ๆ ไม่ว่าคิวจะใหญ่แค่ไหน",
+   "tokens": [
+    {
+     "id": "a4",
+     "label": "#4",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "a5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "b1",
+     "label": "#6",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "b2",
+     "label": "#7",
+     "at": "q",
+     "kind": "msg"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</div>
+<p>งานเข้าเป็นระลอก แต่ worker ทำในจังหวะคงที่ของตัวเอง คิวเป็นกันชนระหว่างสองฝั่ง <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
+<p class="src">ข้อควรระวัง: ถ้า<em>โดยเฉลี่ย</em>งานเข้าเร็วกว่าที่ทำทัน คิวจะยาวขึ้นไม่สิ้นสุด (ข้อสรุปจาก queueing theory)</p>
+</div>
+
+<div class="concept">
+<span class="num">03</span>
+<h3>Competing consumers: เพิ่มจำนวน worker</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 600,
+ "height": 200,
+ "nodes": [
+  {
+   "id": "q",
+   "label": "queue",
+   "sub": "",
+   "x": 10,
+   "y": 60,
+   "w": 230,
+   "h": 80,
+   "kind": "queue"
+  },
+  {
+   "id": "a",
+   "label": "worker A",
+   "sub": "",
+   "x": 400,
+   "y": 5,
+   "w": 190,
+   "h": 58,
+   "kind": "consumer"
+  },
+  {
+   "id": "b",
+   "label": "worker B",
+   "sub": "",
+   "x": 400,
+   "y": 71,
+   "w": 190,
+   "h": 58,
+   "kind": "consumer"
+  },
+  {
+   "id": "c",
+   "label": "worker C",
+   "sub": "",
+   "x": 400,
+   "y": 137,
+   "w": 190,
+   "h": 58,
+   "kind": "consumer"
+  }
+ ],
+ "edges": [
+  {
+   "from": "q",
+   "to": "a"
+  },
+  {
+   "from": "q",
+   "to": "b"
+  },
+  {
+   "from": "q",
+   "to": "c"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "งานค้างในคิว 6 ชิ้น worker ตัวเดียวทำไม่ทัน",
+   "tokens": [
+    {
+     "id": "c1",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c2",
+     "label": "#2",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c3",
+     "label": "#3",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c6",
+     "label": "#6",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "b": {
+     "state": "dim",
+     "sub": "ยังไม่เปิด"
+    },
+    "c": {
+     "state": "dim",
+     "sub": "ยังไม่เปิด"
+    }
+   }
+  },
+  {
+   "caption": "เปิด worker เพิ่มอีก 2 ตัว ทั้งสามช่วยกันหยิบงานจากคิวเดียวกัน",
+   "tokens": [
+    {
+     "id": "c1",
+     "label": "#1",
+     "at": "a",
+     "kind": "msg"
+    },
+    {
+     "id": "c2",
+     "label": "#2",
+     "at": "b",
+     "kind": "msg"
+    },
+    {
+     "id": "c3",
+     "label": "#3",
+     "at": "c",
+     "kind": "msg"
+    },
+    {
+     "id": "c4",
+     "label": "#4",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c5",
+     "label": "#5",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "c6",
+     "label": "#6",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "b": {
+     "state": null,
+     "sub": ""
+    },
+    "c": {
+     "state": null,
+     "sub": ""
+    }
+   }
+  },
+  {
+   "caption": "งานแต่ละชิ้นมี worker ทำแค่ตัวเดียว ไม่มีชิ้นไหนที่สองตัวทำซ้ำกัน",
+   "tokens": [
+    {
+     "id": "c4",
+     "label": "#4",
+     "at": "a",
+     "kind": "msg"
+    },
+    {
+     "id": "c5",
+     "label": "#5",
+     "at": "b",
+     "kind": "msg"
+    },
+    {
+     "id": "c6",
+     "label": "#6",
+     "at": "c",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "คิวว่างเร็วขึ้นราวสามเท่า",
+   "tokens": [],
+   "nodes": {
+    "a": {
+     "sub": "ทำไป 2 งาน"
+    },
+    "b": {
+     "sub": "ทำไป 2 งาน"
+    },
+    "c": {
+     "sub": "ทำไป 2 งาน"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>ทำไม่ทันก็เพิ่ม worker ให้แย่งกันหยิบงานจากคิวเดียวกัน งานแต่ละชิ้นจะมี worker ทำแค่ตัวเดียว</p>
+<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html">EIP, Competing Consumers</a></p>
+</div>
+
+<div class="concept">
+<span class="num">04</span>
+<h3>Point-to-point กับ Publish-subscribe</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 600,
+ "height": 355,
+ "nodes": [
+  {
+   "id": "q",
+   "label": "คิวงาน",
+   "sub": "point-to-point",
+   "x": 10,
+   "y": 40,
+   "w": 170,
+   "h": 64,
+   "kind": "queue"
+  },
+  {
+   "id": "wa",
+   "label": "worker A",
+   "sub": "",
+   "x": 330,
+   "y": 5,
+   "w": 200,
+   "h": 56,
+   "kind": "consumer"
+  },
+  {
+   "id": "wb",
+   "label": "worker B",
+   "sub": "",
+   "x": 330,
+   "y": 75,
+   "w": 200,
+   "h": 56,
+   "kind": "consumer"
+  },
+  {
+   "id": "t",
+   "label": "topic ข่าว",
+   "sub": "publish-subscribe",
+   "x": 10,
+   "y": 225,
+   "w": 170,
+   "h": 64,
+   "kind": "queue"
+  },
+  {
+   "id": "s1",
+   "label": "อีเมล",
+   "sub": "",
+   "x": 330,
+   "y": 160,
+   "w": 200,
+   "h": 56,
+   "kind": "consumer"
+  },
+  {
+   "id": "s2",
+   "label": "แต้มสะสม",
+   "sub": "",
+   "x": 330,
+   "y": 225,
+   "w": 200,
+   "h": 56,
+   "kind": "consumer"
+  },
+  {
+   "id": "s3",
+   "label": "สถิติ",
+   "sub": "",
+   "x": 330,
+   "y": 290,
+   "w": 200,
+   "h": 56,
+   "kind": "consumer"
+  }
+ ],
+ "edges": [
+  {
+   "from": "q",
+   "to": "wa"
+  },
+  {
+   "from": "q",
+   "to": "wb"
+  },
+  {
+   "from": "t",
+   "to": "s1"
+  },
+  {
+   "from": "t",
+   "to": "s2"
+  },
+  {
+   "from": "t",
+   "to": "s3"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "งาน 1 ชิ้นเข้าคิวงาน และข่าว “มีสมาชิกใหม่” 1 ชิ้นเข้า topic ข่าว",
+   "tokens": [
+    {
+     "id": "p1",
+     "label": "งาน",
+     "at": "q",
+     "kind": "msg"
+    },
+    {
+     "id": "n1",
+     "label": "ข่าว",
+     "at": "t",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "งานไปถึง worker เพียงตัวเดียว ส่วนข่าวแตกเป็นสำเนา ทุกระบบได้คนละหนึ่งชิ้น",
+   "tokens": [
+    {
+     "id": "p1",
+     "label": "งาน",
+     "at": "wa",
+     "kind": "msg"
+    },
+    {
+     "id": "n1",
+     "label": "ข่าว",
+     "at": "s1",
+     "kind": "msg"
+    },
+    {
+     "id": "n2",
+     "label": "ข่าว",
+     "at": "s2",
+     "kind": "msg"
+    },
+    {
+     "id": "n3",
+     "label": "ข่าว",
+     "at": "s3",
+     "kind": "msg"
+    }
+   ]
+  },
+  {
+   "caption": "งานชิ้นถัดไปอาจไปที่ worker B แต่ก็ยังไปถึงแค่ตัวเดียวเหมือนเดิม",
+   "tokens": [
+    {
+     "id": "p1",
+     "label": "งาน",
+     "at": "wa",
+     "kind": "ok"
+    },
+    {
+     "id": "p2",
+     "label": "งาน",
+     "at": "wb",
+     "kind": "msg"
+    },
+    {
+     "id": "n1",
+     "label": "ข่าว",
+     "at": "s1",
+     "kind": "ok"
+    },
+    {
+     "id": "n2",
+     "label": "ข่าว",
+     "at": "s2",
+     "kind": "ok"
+    },
+    {
+     "id": "n3",
+     "label": "ข่าว",
+     "at": "s3",
+     "kind": "ok"
+    }
+   ]
+  }
+ ]
+}
+</script>
+</div>
+<p>“งาน” ควรทำแค่ครั้งเดียว ส่วน “ข่าว” ควรถึงทุกฝ่ายที่สนใจ ฝ่ายละหนึ่งสำเนา</p>
+<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PointToPointChannel.html">EIP, Point-to-Point</a> · <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html">Publish-Subscribe</a></p>
+</div>
+
+<div class="concept">
+<span class="num">05</span>
+<h3>At-least-once: งานเดิมอาจทำซ้ำได้</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 600,
+ "height": 100,
+ "nodes": [
+  {
+   "id": "q",
+   "label": "queue",
+   "sub": "",
+   "x": 10,
+   "y": 15,
+   "w": 150,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "w",
+   "label": "worker",
+   "sub": "",
+   "x": 230,
+   "y": 15,
+   "w": 150,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "r",
+   "label": "ผลลัพธ์",
+   "sub": "",
+   "x": 450,
+   "y": 15,
+   "w": 140,
+   "h": 70,
+   "kind": "store"
+  }
+ ],
+ "edges": [
+  {
+   "from": "q",
+   "to": "w"
+  },
+  {
+   "from": "w",
+   "to": "r"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "worker หยิบงาน #1 ไปทำ คิวยังเก็บ #1 ไว้ (เส้นประ) จนกว่า worker จะแจ้งว่าเสร็จ",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "q",
+     "kind": "ghost"
+    },
+    {
+     "id": "w1",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "worker บันทึกผลไปแล้ว แต่ดับก่อนจะแจ้งคิวว่าเสร็จ",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "q",
+     "kind": "ghost"
+    },
+    {
+     "id": "r1",
+     "label": "ผล#1",
+     "at": "r",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "down",
+     "sub": "ดับ"
+    }
+   }
+  },
+  {
+   "caption": "คิวไม่ได้รับแจ้ง จึงถือว่า #1 ยังไม่เสร็จ พอ worker กลับมา คิวส่ง #1 ให้ทำอีกรอบ",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "q",
+     "kind": "ghost"
+    },
+    {
+     "id": "w2",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "ผล#1",
+     "at": "r",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "active",
+     "sub": "ทำ #1 อีกรอบ"
+    }
+   }
+  },
+  {
+   "caption": "งานไม่หาย แต่ผล #1 ซ้ำสองชุด worker จึงต้องออกแบบให้ทำซ้ำแล้วได้ผลเหมือนทำครั้งเดียว (idempotent)",
+   "tokens": [
+    {
+     "id": "r1",
+     "label": "ผล#1",
+     "at": "r",
+     "kind": "row"
+    },
+    {
+     "id": "r2",
+     "label": "ผล#1",
+     "at": "r",
+     "kind": "bad"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": null,
+     "sub": "แจ้งว่าเสร็จ"
+    },
+    "r": {
+     "state": "bad",
+     "sub": "ซ้ำ!"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>worker ต้องแจ้งคิวเมื่อทำเสร็จ ถ้าดับไปก่อนแจ้ง คิวจะส่งงานชิ้นนั้นมาให้ทำอีกรอบ งานจึงไม่หาย แต่อาจทำซ้ำ worker จึงต้องออกแบบให้ทำงานเดิมซ้ำได้โดยไม่เกิดผลซ้ำ (<em>idempotent</em>) <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
+<p class="src">งานที่ลองกี่รอบก็พัง ระบบมักย้ายไปพักไว้ใน dead-letter queue จะได้ไม่ขวางงานอื่น <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/DeadLetterChannel.html">[EIP]</a></p>
+</div>
+
+</div>
+
+<h2>4. ฝึกแยก concept จากสถานการณ์</h2>
+<p>อ่านสถานการณ์แล้วเลือก concept ที่ตรงที่สุด อย่าเลื่อนขึ้นไปดู การนึกเองช่วยให้จำได้นานกว่าการอ่านซ้ำ แม้จะตอบผิดก็ตาม</p>
+
+<div class="quiz">
+<p class="q">1. ร้านออนไลน์ช่วง 11.11 มีออเดอร์เข้ามามากกว่าปกติ 50 เท่าในชั่วโมงเดียว แต่ระบบตัดสต็อกยังทำงานด้วยความเร็วเท่าเดิม ออเดอร์จึงรออยู่ในคิว แล้วระบบก็ค่อย ๆ ทำจนหมดภายในคืนนั้น</p>
+<ol class="options">
+<li data-correct>Load leveling: ใช้คิวพักงานช่วงพีค</li>
+<li>Competing consumers: เพิ่มจำนวน worker</li>
+<li>Publish-subscribe: ส่งสำเนาให้ทุกคน</li>
+<li>At-least-once: งานเดิมอาจทำซ้ำได้</li>
+</ol>
+<div class="why">ไม่ได้เพิ่ม worker และไม่ได้ส่งสำเนา คิวแค่รับงานที่ทะลักเข้ามาไว้ก่อน แล้วทยอยปล่อยออกในจังหวะที่ระบบปลายทางรับไหว</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. คิวงานส่งอีเมลยาวขึ้นเรื่อย ๆ ทีมจึงเปิดโปรแกรมส่งอีเมลเพิ่มอีก 3 ตัว ให้ช่วยกันหยิบงานจากคิวเดียวกัน อีเมลแต่ละฉบับส่งออกไปแค่ครั้งเดียว</p>
+<ol class="options">
+<li data-correct>Competing consumers: เพิ่มจำนวน worker</li>
+<li>Publish-subscribe: ส่งสำเนาให้ทุกคน</li>
+<li>Decoupling: แยกคนสั่งออกจากคนทำ</li>
+<li>Load leveling: ใช้คิวพักงานช่วงพีค</li>
+</ol>
+<div class="why">worker หลายตัวแย่งกันหยิบงานจากคิวเดียว และงานแต่ละชิ้นมี worker ทำแค่ตัวเดียว</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. เมื่อลูกค้าสมัครสมาชิก ระบบอีเมลต้อนรับ ระบบแต้มสะสม และระบบสถิติ ต่างได้รับข่าว “มีสมาชิกใหม่” ชิ้นเดียวกัน ระบบละหนึ่งสำเนา</p>
+<ol class="options">
+<li data-correct>Publish-subscribe: ส่งสำเนาให้ทุกคน</li>
+<li>Competing consumers: เพิ่มจำนวน worker</li>
+<li>At-least-once: งานเดิมอาจทำซ้ำได้</li>
+<li>Decoupling: แยกคนสั่งออกจากคนทำ</li>
+</ol>
+<div class="why">สามระบบไม่ได้แย่งงานกัน แต่ละระบบต้องได้ข่าวครบทุกชิ้น ข่าวใช้ publish-subscribe ส่วนงานที่ควรทำครั้งเดียวใช้ point-to-point</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. worker ตัดบัตรเครดิตสำเร็จ แต่เครื่องดับก่อนจะแจ้งคิวว่าเสร็จ พอเปิดเครื่องใหม่ งานเดิมก็กลับมาอีกรอบ ทีมจึงต้องเช็กก่อนว่าเคยตัดเงินรายการนี้ไปแล้วหรือยัง</p>
+<ol class="options">
+<li data-correct>At-least-once: งานเดิมอาจทำซ้ำได้</li>
+<li>Load leveling: ใช้คิวพักงานช่วงพีค</li>
+<li>Decoupling: แยกคนสั่งออกจากคนทำ</li>
+<li>Publish-subscribe: ส่งสำเนาให้ทุกคน</li>
+</ol>
+<div class="why">คิวรับประกันว่างานไม่หาย แต่ไม่รับประกันว่างานไม่ซ้ำ การเช็กว่าเคยตัดเงินไปแล้วหรือยังทำให้ worker เป็น idempotent</div>
+</div>
+
+<div class="quiz">
+<p class="q">5. เว็บอัปโหลดรูปตอบผู้ใช้ทันทีว่า “รับไฟล์แล้ว” ส่วนการย่อรูปให้อีกโปรแกรมหนึ่งทำทีหลัง ต่อให้โปรแกรมย่อรูปปิดอยู่ ผู้ใช้ก็ยังอัปโหลดได้ตามปกติ</p>
+<ol class="options">
+<li data-correct>Decoupling: แยกคนสั่งออกจากคนทำ</li>
+<li>Competing consumers: เพิ่มจำนวน worker</li>
+<li>At-least-once: งานเดิมอาจทำซ้ำได้</li>
+<li>Load leveling: ใช้คิวพักงานช่วงพีค</li>
+</ol>
+<div class="why">ฝั่งรับไฟล์ไม่ต้องรอ และไม่ต้องสนใจว่าฝั่งย่อรูปเปิดอยู่หรือเปล่า ตรงกับที่คู่มือ MQSeries เขียนว่า “run independently of each other, at different speeds and times”</div>
+</div>
+
+<div class="quiz">
+<p class="q">6. Kafka ต่างจาก queue แบบดั้งเดิมอย่างไร?</p>
+<ol class="options">
+<li data-correct>เก็บ message ไว้ และให้ consumer จำตำแหน่งเอง</li>
+<li>ลบ message ทันทีที่ consumer ยืนยันว่าทำเสร็จ</li>
+<li>ส่ง message ให้ consumer ได้เพียงตัวเดียวเสมอ</li>
+<li>บังคับให้ producer กับ consumer ออนไลน์พร้อมกัน</li>
+</ol>
+<div class="why">เปเปอร์ Kafka ปี 2011 เขียนว่า consumer เก็บตำแหน่งที่ตัวเองอ่านถึงเอง และ Kafka ลบ message ตามระยะเวลาที่ตั้งไว้ ไม่ได้ลบเมื่อมีคนอ่าน</div>
+</div>
+
+<div class="quiz">
+<p class="q">7. ปัญหาตั้งต้นที่ Erlang ศึกษาในปี 1909 คืออะไร?</p>
+<ol class="options">
+<li data-correct>สายโทรศัพท์ที่โทรเข้ามาแบบสุ่มต้องรอนานแค่ไหน</li>
+<li>ลูกค้าธนาคารที่มาแบบสุ่มต้องรอคิวนานแค่ไหน</li>
+<li>สินค้าบนสายพานในโรงงานต้องรอนานแค่ไหน</li>
+<li>จดหมายในที่ทำการไปรษณีย์ต้องรอนานแค่ไหน</li>
+</ol>
+<div class="why">Erlang ทำงานที่บริษัทโทรศัพท์โคเปนเฮเกน และใช้ทฤษฎีความน่าจะเป็นศึกษาเวลาที่สายโทรศัพท์ต้องรอ งานนี้เป็นจุดเริ่มต้นของ queueing theory</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
+
+<h2>5. ทายก่อนเข้าบทที่ 2</h2>
+
+<div class="callout ask">
+<p>mapping-demo ใช้ทั้ง 5 concept ลองเดาว่าแต่ละข้ออยู่ตรงไหนของโปรเจกต์ จดคำตอบไว้ แล้วไปดูเฉลยในบทที่ 2</p>
+<ol>
+<li>Decoupling: ใครฝากงาน ใครทำงาน?</li>
+<li>Load leveling: ถ้ามีคนโยนไฟล์เข้ามาพร้อมกัน 20 ไฟล์ จะเกิดอะไร?</li>
+<li>Competing consumers: ถ้าอยากให้ import เร็วขึ้น จะปรับค่าอะไร?</li>
+<li>Point-to-point หรือ publish-subscribe: งาน import หนึ่งไฟล์ควรทำกี่ครั้ง?</li>
+<li>At-least-once: ถ้า Worker ดับกลางงาน ระบบรับมือยังไง?</li>
+</ol>
+</div>
+
+<h2>6. อธิบายด้วยคำพูดตัวเอง</h2>
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค เหมือนเล่าให้เพื่อนร่วมทีมฟังว่า <em>queue แก้ปัญหาอะไร และ Kafka ต่างจาก queue แบบเดิมตรงไหน</em></p>
+<p>Claude จะตรวจและบอกว่าตรงไหนยังคลาดเคลื่อน ถ้าตรงไหนในบทนี้ยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">Microsoft, Queue-Based Load Leveling pattern</a> ครอบคลุม concept ข้อ 1, 2, 3 และ 5 ในหน้าเดียว พร้อมข้อควรระวังเวลาใช้จริง (ลำดับของ message, dead-letter, idempotent) อ่านราว 10 นาที</p>
+<p>อยากรู้ที่มาของ Kafka จากปากผู้สร้าง: <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">Kreps, Narkhede &amp; Rao, “Kafka: a Distributed Messaging System for Log Processing” (2011)</a> อ่านแค่หัวข้อ 1–2 ก็พอ</p>
+
+<footer class="next">
+<span>บทที่ 1 จาก ~6</span>
+<span>ถัดไป: <a href="0002-queue-and-worker-in-mapping-demo.html">บทที่ 2 Queue กับ Worker ใน mapping-demo</a></span>
+</footer>
+
+</main>
+</body>
+</html>

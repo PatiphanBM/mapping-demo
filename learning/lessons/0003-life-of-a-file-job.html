@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 3 · Lifecycle ของ file job</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+<script src="../assets/job-timeline.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="0002-queue-and-worker-in-mapping-demo.html">← บทที่ 2</a> · <a href="../reference/job-status.html">สรุปสถานะงาน</a> · <a href="../reference/glossary.html">อภิธานศัพท์</a></nav>
+
+<p class="kicker">บทที่ 3 · ภาพรวม · ราว 15 นาที</p>
+<h1>Lifecycle ของ file job</h1>
+<p class="subtitle">ฝากงานไว้ในคิวแล้ว จะรู้ได้อย่างไรว่างานเสร็จหรือยัง ตามรอย <code>orders-a.csv</code> ตั้งแต่วางไฟล์จนได้ผลลัพธ์ครบทุกแถว</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> อ่านผลของ <code>GET /file-jobs/{id}</code> แล้วบอกได้ว่าไฟล์อยู่ขั้นไหน ทำไมสถานะถึงเป็นแบบนั้น และงานจบแล้วหรือยัง</p>
+</div>
+
+<h2>1. ปัญหาเกิดจากอะไร</h2>
+
+<p>ในบทที่ 1 และ 2 เราได้ข้อดีของ decoupling มาแล้ว คือ producer ฝากงานแล้วไปทำอย่างอื่นต่อได้ทันที แต่ข้อดีนี้มีราคา producer ไม่ได้รอ จึงไม่รู้ผล File Watcher สร้างงานเสร็จก็ไปทำอย่างอื่นต่อ ไม่มีใครบอกเราว่าไฟล์ <code>orders-a.csv</code> import ครบหรือยัง มีกี่แถวที่ไม่ผ่าน หรือพังไปกลางทางหรือเปล่า</p>
+
+<h2>2. ที่มาของ concept</h2>
+
+<p>ร้านซักรีดเจอปัญหาเดียวกัน ลูกค้าฝากผ้าแล้วกลับบ้าน ร้านไม่ได้โทรบอกเมื่อซักเสร็จ ลองไล่ดูว่าร้านต้องตอบคำถามอะไรบ้าง แต่ละคำตอบคือ concept หนึ่งข้อ</p>
+
+<ol>
+<li>ฝากไปแล้ว จะอ้างถึงงานชิ้นนี้ทีหลังได้อย่างไร? ร้านออกใบรับที่มีเลข และจดลงสมุดของร้าน → <strong>06 job record</strong></li>
+<li>ถามแล้ว ร้านจะตอบว่าอะไร? ร้านต้องจดความคืบหน้าไว้เป็นขั้น เช่น รับแล้ว กำลังซัก เสร็จแล้ว และรู้ว่าขั้นไหนคือจบ → <strong>07 สถานะ</strong></li>
+<li>ร้านไม่บอกเอง ลูกค้าจะรู้ได้อย่างไร? ลูกค้ามาถามเองด้วยเลขบนใบรับ ถามซ้ำจนได้คำตอบว่าเสร็จ → <strong>08 status endpoint + polling</strong></li>
+</ol>
+
+
+<h2>3. Concept หลัก 3 ข้อ</h2>
+
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 210,
+ "nodes": [
+  {
+   "id": "c",
+   "label": "client",
+   "sub": "อยากรู้ผล",
+   "x": 10,
+   "y": 20,
+   "w": 140,
+   "h": 64,
+   "kind": "producer"
+  },
+  {
+   "id": "api",
+   "label": "API",
+   "sub": "",
+   "x": 200,
+   "y": 20,
+   "w": 120,
+   "h": 64,
+   "kind": "producer"
+  },
+  {
+   "id": "q",
+   "label": "queue",
+   "sub": "",
+   "x": 370,
+   "y": 20,
+   "w": 120,
+   "h": 64,
+   "kind": "queue"
+  },
+  {
+   "id": "w",
+   "label": "worker",
+   "sub": "",
+   "x": 530,
+   "y": 20,
+   "w": 100,
+   "h": 64,
+   "kind": "consumer"
+  },
+  {
+   "id": "db",
+   "label": "ตาราง jobs",
+   "sub": "ยังว่าง",
+   "x": 200,
+   "y": 135,
+   "w": 290,
+   "h": 64,
+   "kind": "store"
+  }
+ ],
+ "edges": [
+  {
+   "from": "c",
+   "to": "api"
+  },
+  {
+   "from": "api",
+   "to": "q"
+  },
+  {
+   "from": "q",
+   "to": "w"
+  },
+  {
+   "from": "api",
+   "to": "db",
+   "dashed": true
+  },
+  {
+   "from": "w",
+   "to": "db",
+   "dashed": true
+  }
+ ],
+ "steps": [
+  {
+   "caption": "client ส่งงานเข้ามา API บันทึก job #1 ลงตาราง แล้วตอบกลับทันทีพร้อมเลข #1 เลขนี้คือใบรับงาน (job record)",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "db": {
+     "sub": "job #1: Queued"
+    },
+    "api": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "client ถามสถานะด้วยเลข #1 ได้คำตอบว่า Queued เพราะยังไม่มี worker หยิบไป",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "q",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "c": {
+     "sub": "ได้: Queued"
+    }
+   }
+  },
+  {
+   "caption": "worker หยิบงานไปทำ และอัปเดตสถานะในตารางเป็น Running",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "api": {
+     "state": null
+    },
+    "w": {
+     "state": "active"
+    },
+    "db": {
+     "sub": "job #1: Running"
+    }
+   }
+  },
+  {
+   "caption": "client ถามอีกรอบ ได้ Running ซึ่งยังไม่ใช่สถานะสุดท้าย จึงต้องถามต่อ",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "c": {
+     "sub": "ได้: Running"
+    },
+    "api": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "worker ทำเสร็จ อัปเดตเป็น Succeeded ซึ่งเป็นสถานะสุดท้าย (terminal)",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    }
+   ],
+   "nodes": {
+    "api": {
+     "state": null
+    },
+    "w": {
+     "state": null
+    },
+    "db": {
+     "sub": "job #1: Succeeded",
+     "state": "ok"
+    }
+   }
+  },
+  {
+   "caption": "client ถามอีกรอบ ได้ Succeeded จึงหยุดถาม การถามซ้ำแบบนี้เรียกว่า polling",
+   "tokens": [
+    {
+     "id": "tk",
+     "label": "#1",
+     "at": "c",
+     "kind": "ok"
+    }
+   ],
+   "nodes": {
+    "c": {
+     "sub": "ได้: Succeeded",
+     "state": "ok"
+    },
+    "api": {
+     "state": "active"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">06</span>
+<h3>Job record: ใบรับงาน</h3>
+<p>ตอนรับงาน ระบบบันทึก job ไว้ในฐานข้อมูลก่อน แล้วใช้ id ของ job เป็นเลขอ้างอิงทั้งใน message และตอนถามสถานะ ถ้ารับงานผ่าน HTTP มักตอบด้วย <code>202 Accepted</code> ซึ่งแปลว่า “รับงานแล้ว แต่ยังทำไม่เสร็จ” <a href="https://www.rfc-editor.org/rfc/rfc9110.html#name-202-accepted">[HTTP spec]</a></p>
+</div>
+
+<div class="concept">
+<span class="num">07</span>
+<h3>สถานะที่ยังไปต่อได้ กับสถานะสุดท้าย</h3>
+<p>สถานะของงานเดินไปข้างหน้าทีละขั้น บางสถานะยังไปต่อได้ (non-terminal) บางสถานะคือจุดจบ (terminal) Microsoft แนะนำให้กำหนดชุดสถานะให้ชัดและเขียนเอกสารไว้ <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/asynchronous-request-reply">[Microsoft]</a></p>
+</div>
+
+<div class="concept">
+<span class="num">08</span>
+<h3>Status endpoint + polling</h3>
+<p>ฝั่งที่ทำงานไม่ส่งผลกลับมาเอง client จึงต้องถามซ้ำเป็นระยะ (polling) จนสถานะเป็น terminal คำตอบควรมีข้อมูลพอให้รู้ว่างานอยู่ขั้นไหน เช่น <code>status</code>, <code>createdAt</code>, <code>lastUpdatedAt</code> และ <code>error</code> <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/asynchronous-request-reply">[Microsoft]</a> ถ้าไม่อยากให้ client ถามบ่อย ๆ ก็มีทางเลือกแบบ push เช่น webhook หรือ Server-Sent Events แต่ต้องทำเพิ่ม</p>
+</div>
+
+</div>
+
+<h2>4. mapping-demo ใช้ concept เหล่านี้อย่างไร</h2>
+
+<div class="table-wrap">
+<table>
+<tr><th>Concept</th><th>ใน mapping-demo</th></tr>
+<tr><td><strong>06 Job record</strong></td><td>File Watcher สร้างแถวใน <code>file_jobs</code> พร้อม message ใน transaction เดียวกัน (<code>FileIntake.CreateJobAsync</code>) และ message มีแค่ <code>fileJobId</code> ส่วนตอน import แต่ละแถว Worker สร้าง row job ใน <code>row_jobs</code> แถวละหนึ่ง job</td></tr>
+<tr><td><strong>07 สถานะ</strong></td><td>file job มีสถานะสามแกนแยกกัน (ดูด้านล่าง) ส่วน row job มีแกนเดียว</td></tr>
+<tr><td><strong>08 Status endpoint</strong></td><td><code>GET /file-jobs</code> (เรียงงานใหม่สุดก่อน), <code>GET /file-jobs/{id}</code>, <code>GET /file-jobs/{id}/errors</code> และ <code>GET /file-jobs/{id}/rows/{rowNumber}/history</code></td></tr>
+</table>
+</div>
+
+<p>ต่างจากระบบทั่วไปตรงที่งานไม่ได้เข้ามาทาง HTTP แต่เข้ามาเป็นไฟล์ในโฟลเดอร์ จึงไม่มีใครได้ <code>202</code> กลับไป ต้องหา id ของงานเองจาก <code>GET /file-jobs</code></p>
+
+<h3>สถานะของ file job: สามแกนที่เดินแยกกัน</h3>
+
+<p><strong>importStatus</strong> บอกว่า Import worker ทำถึงไหน</p>
+<div class="states">
+  <span class="state">Queued</span><span class="arrow">→</span>
+  <span class="state">Delaying</span><span class="arrow">→</span>
+  <span class="state">Importing</span><span class="arrow">→</span>
+  <span class="state final">Imported</span><span class="or">หรือ</span>
+  <span class="state bad">ImportFailed</span><span class="or">หรือ</span>
+  <span class="state final">Duplicate</span>
+</div>
+<p><code>Queued</code> ตั้งโดย File Watcher ตอนสร้างงาน ที่เหลือตั้งโดย <code>FileImportHandler</code> ส่วน <code>Duplicate</code> คือไฟล์ที่เนื้อหาซ้ำกับไฟล์ที่เคยรับไว้แล้วภายใต้ config เดียวกัน</p>
+
+<p><strong>archiveStatus</strong> บอกว่าย้ายไฟล์ต้นฉบับไป archive แล้วหรือยัง</p>
+<div class="states">
+  <span class="state">NotArchived</span><span class="arrow">→</span>
+  <span class="state final">Archived</span><span class="or">หรือ</span>
+  <span class="state bad">ArchiveFailed</span><span class="or">หรือ</span>
+  <span class="state bad">ChangedAfterRead</span>
+</div>
+<p><code>ArchiveFailed</code> กับ <code>ChangedAfterRead</code> (ไฟล์ต้นฉบับถูกแก้หลังระบบอ่านไปแล้ว) เป็นกรณีพิเศษ ดูได้ใน<a href="../reference/failure-playbook.html">สรุปเมื่อมีอะไรพัง</a></p>
+
+<p><strong>normalizationStatus</strong> ไม่ได้เก็บในตาราง แต่ API คำนวณจากจำนวน row job ทุกครั้งที่ถาม (<code>NormalizationStatusCalculator</code>)</p>
+<div class="states">
+  <span class="state">InProgress</span><span class="arrow">→</span>
+  <span class="state final">Completed</span><span class="or">หรือ</span>
+  <span class="state bad">CompletedWithErrors</span>
+</div>
+<p>กติกามีสองข้อ ถ้า import ยังไม่ <code>Imported</code> หรือยังมี <code>pendingRows</code> มากกว่า 0 ให้เป็น <code>InProgress</code> ถ้าจบแล้วแต่มีแถว <code>Invalid</code> หรือ <code>Failed</code> ให้เป็น <code>CompletedWithErrors</code></p>
+
+<h3>สถานะของ row job</h3>
+<div class="states">
+  <span class="state">Pending</span><span class="arrow">→</span>
+  <span class="state final">Done</span><span class="or">หรือ</span>
+  <span class="state bad">Invalid</span><span class="or">หรือ</span>
+  <span class="state bad">Failed</span>
+</div>
+<p><code>Invalid</code> คือข้อมูลในแถวไม่ผ่านกฎ normalize เช่น วันที่ผิดรูปแบบ ระบบบันทึกรายละเอียดเป็น Row Error <code>Failed</code> คือระบบพังระหว่างทำ Normalize worker ลองใหม่เองอีก 3 รอบ (เว้น 1, 2 และ 4 วินาที) ถ้ายังพังจึงตั้งเป็น <code>Failed</code></p>
+
+<p>สถานะสุดท้ายยังช่วยกันงานซ้ำด้วย ถ้า Kafka ส่ง message ของ row job ที่เป็น <code>Done</code>, <code>Invalid</code> หรือ <code>Failed</code> อยู่แล้วมาอีกรอบ <code>RowNormalizeHandler</code> จะข้ามไปเลย นี่คือวิธีหนึ่งที่ mapping-demo รับมือกับ at-least-once ซึ่งจะเจาะต่อในบทที่ 4</p>
+
+<h2>5. ลองเล่น: ดู <code>orders-a.csv</code> เปลี่ยนสถานะ</h2>
+
+<p>ไทม์ไลน์นี้จำลองผลของ <code>GET /file-jobs/1</code> ระหว่างที่ระบบทำ <code>orders-a.csv</code> (100 แถว แถว 25 วันที่ผิด แถว 75 จำนวนเงินผิด) เวลาเป็นค่าประมาณตาม README (หน่วง 30 วินาที, ราว 100 ms ต่อแถว) แผนภาพสถานะด้านบนจะไฮไลต์สถานะปัจจุบัน และ field ใน JSON ที่เปลี่ยนจากขั้นก่อนหน้าจะมีสีเน้น</p>
+
+<div class="job-timeline" data-job-timeline data-endpoint="GET /file-jobs/1" data-states='{"importStatus": [["Queued"], ["Delaying"], ["Importing"], ["Imported", "final"], ["ImportFailed", "bad"], ["Duplicate", "final"]], "archiveStatus": [["NotArchived"], ["Archived", "final"], ["ArchiveFailed", "bad"], ["ChangedAfterRead", "bad"]], "normalizationStatus": [["InProgress"], ["Completed", "final"], ["CompletedWithErrors", "bad"]]}'>
+<script type="application/json">
+[
+ {"t": "0 วินาที", "caption": "File Watcher เจอไฟล์ สร้างแถวใน file_jobs และเขียน message ลง outbox ใน transaction เดียวกัน แล้วไปทำอย่างอื่นต่อ",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Queued", "archiveStatus": "NotArchived", "totalRows": null, "normalizationStatus": "InProgress", "pendingRows": 0, "doneRows": 0, "invalidRows": 0, "failedRows": 0, "lastError": null}},
+ {"t": "~1 วินาที", "caption": "OutboxDispatcher ส่ง message เข้า mapping.file-import แล้ว Import worker หยิบไปทำ ตั้งสถานะเป็น Delaying แล้วรอ 30 วินาทีให้ไฟล์เขียนเสร็จ",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Delaying", "archiveStatus": "NotArchived", "totalRows": null, "normalizationStatus": "InProgress", "pendingRows": 0, "doneRows": 0, "invalidRows": 0, "failedRows": 0, "lastError": null}},
+ {"t": "~31 วินาที", "caption": "หน่วงครบแล้ว เริ่มอ่านไฟล์ แต่ละแถวที่บันทึกลง Source จะได้ row job (Pending) และ message ใน mapping.row-normalize ทันที totalRows ยังเป็น null เพราะยังไม่รู้ว่าไฟล์มีกี่แถว",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Importing", "archiveStatus": "NotArchived", "totalRows": null, "normalizationStatus": "InProgress", "pendingRows": 3, "doneRows": 2, "invalidRows": 0, "failedRows": 0, "lastError": null}},
+ {"t": "~36 วินาที", "caption": "import ไปได้ครึ่งไฟล์ Normalize worker ทำตามมาติด ๆ แถว 25 ไม่ผ่านกฎวันที่ จึงเป็น Invalid ทั้งที่ import ยังไม่จบ",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Importing", "archiveStatus": "NotArchived", "totalRows": null, "normalizationStatus": "InProgress", "pendingRows": 2, "doneRows": 47, "invalidRows": 1, "failedRows": 0, "lastError": null}},
+ {"t": "~41 วินาที", "caption": "import ครบ 100 แถว ได้ totalRows แล้ว แต่ normalizationStatus ยังเป็น InProgress เพราะยังมีแถวที่ Pending",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Imported", "archiveStatus": "NotArchived", "totalRows": 100, "normalizationStatus": "InProgress", "pendingRows": 4, "doneRows": 94, "invalidRows": 2, "failedRows": 0, "lastError": null}},
+ {"t": "~42 วินาที", "caption": "ย้ายไฟล์ต้นฉบับไป archive แล้ว ทั้งที่ normalize ยังไม่จบ ตรงกับนิยาม Archive Folder ใน CONTEXT.md",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Imported", "archiveStatus": "Archived", "totalRows": 100, "normalizationStatus": "InProgress", "pendingRows": 2, "doneRows": 96, "invalidRows": 2, "failedRows": 0, "lastError": null}},
+ {"t": "~43 วินาที", "caption": "ทุกแถวถึงสถานะสุดท้ายแล้ว Done 98 แถว Invalid 2 แถว จึงได้ CompletedWithErrors ทุกแกนเป็นสถานะสุดท้าย งานนี้จบแล้ว",
+  "state": {"id": 1, "fileName": "orders-a.csv", "importStatus": "Imported", "archiveStatus": "Archived", "totalRows": 100, "normalizationStatus": "CompletedWithErrors", "pendingRows": 0, "doneRows": 98, "invalidRows": 2, "failedRows": 0, "lastError": null}}
+]
+</script>
+</div>
+
+<p class="legend">ตัด field บางตัวออกให้อ่านง่าย ของจริงมี <code>configId</code>, <code>configVersionId</code>, <code>createdAt</code> และ <code>updatedAt</code> ด้วย</p>
+
+<p>ลองตอบจากไทม์ไลน์: ในช่วงไหนที่ import กับ normalize ทำงานพร้อมกัน และทำไม <code>totalRows</code> ถึงเพิ่งมีค่าตอน <code>Imported</code></p>
+
+<h2>6. ทบทวนโดยไม่เลื่อนขึ้นไปดู</h2>
+
+<div class="quiz">
+<p class="q">1. วาง <code>orders-a.csv</code> ลง <code>input/</code> ขณะที่ Worker ปิดอยู่ แล้วเรียก <code>GET /file-jobs/{id}</code> จะเห็น <code>importStatus</code> เป็นอะไร?</p>
+<ol class="options">
+<li data-correct><code>Queued</code></li>
+<li><code>Delaying</code></li>
+<li><code>Importing</code></li>
+<li><code>Imported</code></li>
+</ol>
+<div class="why">File Watcher อยู่ใน API จึงยังสร้างงานได้และตั้งสถานะ <code>Queued</code> แต่สถานะถัดไปทั้งหมดตั้งโดย Worker ซึ่งปิดอยู่</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. <code>importStatus=Imported</code>, <code>pendingRows=0</code>, <code>invalidRows=2</code>, <code>failedRows=0</code> แล้ว <code>normalizationStatus</code> เป็นอะไร?</p>
+<ol class="options">
+<li data-correct>CompletedWithErrors เพราะมีแถวไม่ผ่าน</li>
+<li>Completed เพราะไม่มีแถวค้างแล้ว</li>
+<li>InProgress เพราะยังต้องแก้แถวที่ผิด</li>
+<li>ImportFailed เพราะบางแถวมีข้อผิดพลาด</li>
+</ol>
+<div class="why">import จบและไม่มีแถว Pending แล้ว แต่มีแถว Invalid จึงเป็น <code>CompletedWithErrors</code> แถวที่ผิดไม่ได้ทำให้ import ล้ม เพราะแถวอื่นยังบันทึกได้</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. <code>importStatus=Importing</code>, <code>pendingRows=0</code>, <code>doneRows=40</code> แล้ว <code>normalizationStatus</code> เป็นอะไร?</p>
+<ol class="options">
+<li data-correct>InProgress เพราะ import ยังไม่จบ</li>
+<li>Completed เพราะไม่มีแถวค้างแล้ว</li>
+<li>CompletedWithErrors เพราะยังไม่ครบ</li>
+<li>Delaying เพราะ Worker ยังหน่วงอยู่</li>
+</ol>
+<div class="why">กติกาข้อแรก ถ้า import ยังไม่ <code>Imported</code> ให้เป็น <code>InProgress</code> เสมอ ช่วงที่ pendingRows เป็น 0 แปลว่า Normalize worker ทำทัน Import worker เท่านั้น ยังไม่ได้แปลว่าจบ</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. เห็น <code>archiveStatus=Archived</code> แต่ <code>normalizationStatus=InProgress</code> เป็นไปได้ไหม?</p>
+<ol class="options">
+<li data-correct>ได้ เพราะ archive ไม่ต้องรอ normalize</li>
+<li>ไม่ได้ ต้อง normalize เสร็จก่อน archive</li>
+<li>ได้ แต่เฉพาะตอนที่ Worker ล่มอยู่เท่านั้น</li>
+<li>ไม่ได้ เพราะสองสถานะนี้ขัดแย้งกันเอง</li>
+</ol>
+<div class="why">Import worker ย้ายไฟล์ไป archive ทันทีที่ import ครบ ส่วน normalize เป็นงานอีก queue หนึ่งที่เดินแยกกัน</div>
+</div>
+
+<div class="quiz">
+<p class="q">5. ทำไม mapping-demo ต้องเก็บสถานะงานไว้ใน PostgreSQL ทั้งที่มี Kafka อยู่แล้ว?</p>
+<ol class="options">
+<li data-correct>Kafka ไม่รู้ว่างานแต่ละชิ้นได้ผลอย่างไร</li>
+<li>Kafka ลบ message ทันทีที่อ่านเสร็จแล้ว</li>
+<li>Kafka เก็บ message ไว้ได้ไม่เกินหนึ่งวัน</li>
+<li>ตาราง file_jobs ช่วยให้ Kafka ทำงานเร็วขึ้น</li>
+</ol>
+<div class="why">Kafka รู้แค่ว่ามี message อะไร และ consumer อ่านถึงไหนแล้ว แต่ไม่รู้ว่าทำแล้วได้ผลอย่างไร ผลอย่าง “Invalid 2 แถว” มีแต่ worker ที่รู้ จึงต้องบันทึกลงฐานข้อมูล ส่วนตัวเลือกข้อ 2 ผิดตามที่เรียนในบทที่ 1 ว่า Kafka ไม่ลบ message หลังอ่าน</div>
+</div>
+
+<div class="quiz">
+<p class="q">6. row job ที่เป็น <code>Invalid</code> ต่างจาก <code>Failed</code> อย่างไร?</p>
+<ol class="options">
+<li data-correct>Invalid คือข้อมูลผิดกฎ Failed คือระบบพัง</li>
+<li>Invalid คือระบบพัง Failed คือข้อมูลผิดกฎ</li>
+<li>Invalid ยังรอ retry ส่วน Failed จบแล้ว</li>
+<li>ทั้งสองอย่างหมายถึงสิ่งเดียวกันทุกประการ</li>
+</ol>
+<div class="why">Invalid มาจากกฎ normalize ซึ่งลองใหม่กี่รอบก็ได้ผลเดิม Failed มาจาก exception ที่ยังพังหลังลองครบ 4 รอบ ทั้งสองเป็นสถานะสุดท้ายเหมือนกัน</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
+
+<h2>7. ลองกับระบบจริง (ไม่บังคับ)</h2>
+
+<p>รันเดโมตาม <a href="../../README.md">README</a> ให้ครบทั้ง API และ Worker แล้วเปิด PowerShell อีกหน้าต่างหนึ่ง</p>
+
+<div class="callout ask">
+<p><strong>ทายก่อนลงมือ:</strong> ระหว่างที่ <code>importStatus</code> ยังเป็น <code>Importing</code> ตัวเลข <code>doneRows</code> จะขยับไหม?</p>
+</div>
+
+<ol class="steps">
+<li>รัน <code>pwsh ./scripts/generate-sample.ps1</code></li>
+<li>poll สถานะของงานล่าสุดทุก 2 วินาที (กด <kbd>Ctrl</kbd>+<kbd>C</kbd> เพื่อหยุด):
+<pre><code>$id = (Invoke-RestMethod http://localhost:5181/file-jobs)[0].id
+while ($true) {
+  Invoke-RestMethod "http://localhost:5181/file-jobs/$id" |
+    Format-Table importStatus,archiveStatus,normalizationStatus,pendingRows,doneRows,invalidRows,failedRows
+  Start-Sleep 2
+}</code></pre></li>
+<li>พอ <code>normalizationStatus</code> เป็นสถานะสุดท้ายแล้ว ให้ดูว่าแถวไหนไม่ผ่านเพราะอะไร:
+<pre><code>Invoke-RestMethod "http://localhost:5181/file-jobs/$id/errors" | Format-Table</code></pre></li>
+</ol>
+<p><code>[0]</code> คืองานล่าสุด เพราะ <code>GET /file-jobs</code> เรียงจาก id มากไปน้อย ถ้า <code>generate-sample.ps1</code> สร้างสองไฟล์ ให้ลองเปลี่ยนเป็น <code>[1]</code> เพื่อดูอีกไฟล์</p>
+
+<h2>8. อธิบายด้วยคำพูดตัวเอง</h2>
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<ol>
+<li>เมื่อใช้ queue แล้ว ทำไมต้องมีตารางเก็บสถานะงานด้วย?</li>
+<li>ถ้าเห็น <code>importStatus=Imported</code> แต่ <code>normalizationStatus=InProgress</code> แปลว่าระบบกำลังทำอะไรอยู่?</li>
+</ol>
+<p>Claude จะตรวจคำตอบ แล้วใช้คำตอบนั้นวางจุดเริ่มของบทถัดไป ถ้าตรงไหนยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/asynchronous-request-reply">Microsoft, Asynchronous Request-Reply pattern</a> อ่านส่วน “Context and problem”, “Solution” และตาราง field ของ status endpoint ใน “Problems and considerations” แล้วลองเทียบกับ field ของ <code>FileJobResponse</code> ราว 10 นาที</p>
+<p>สรุปสถานะทั้งหมดในหน้าเดียวอยู่ที่ <a href="../reference/job-status.html">สรุปสถานะงาน</a></p>
+
+<footer class="next">
+<span>บทที่ 3 จาก ~6</span>
+<span>ถัดไป: <a href="0004-when-things-fail.html">บทที่ 4 เมื่อมีอะไรพัง</a></span>
+</footer>
+
+</main>
+</body>
+</html>

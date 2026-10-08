@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สารบัญ · Queue & Worker</title>
+<link rel="stylesheet" href="assets/course.css">
+<style>
+.concept a.title { color: inherit; text-decoration: none; }
+.concept a.title:hover { text-decoration: underline; }
+.concept .meta { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.concept .tags { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · Queue & Worker · สารบัญ</nav>
+
+<p class="kicker">สารบัญ · 6 บท · ราว 1 ชั่วโมง 45 นาที</p>
+<h1>Queue & Worker ใน mapping-demo</h1>
+<p class="subtitle">คอร์สภาพรวมว่า queue กับ worker ทำงานร่วมกันอย่างไรในโปรเจกต์นี้ และทำไมถึงออกแบบแบบนี้ เรียนตามลำดับบทได้เลย ส่วน reference ใช้เปิดดูตอนลืม</p>
+
+<h2>บทเรียน</h2>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">บทที่ 1 · ราว 15 นาที</span>
+<h3><a class="title" href="lessons/0001-history-and-concepts.html">ที่มาและ Concept ของ Queue</a></h3>
+<p>แต่ละยุคแก้ปัญหาอะไร และเกิด concept อะไรที่เรายังใช้กันอยู่</p>
+<p class="tags">concept 01–05</p>
+</div>
+
+<div class="concept">
+<span class="num">บทที่ 2 · ราว 15 นาที</span>
+<h3><a class="title" href="lessons/0002-queue-and-worker-in-mapping-demo.html">Queue กับ Worker ใน mapping-demo</a></h3>
+<p>ทำไม mapping-demo มีสองโปรแกรม และมี Kafka อยู่ตรงกลาง มีตัวจำลอง queue ให้ลองปิดเปิด Worker</p>
+<p class="tags">ใช้ concept 01–05 กับโปรเจกต์</p>
+</div>
+
+<div class="concept">
+<span class="num">บทที่ 3 · ราว 15 นาที</span>
+<h3><a class="title" href="lessons/0003-life-of-a-file-job.html">Lifecycle ของ file job</a></h3>
+<p>ฝากงานไว้ในคิวแล้ว จะรู้ได้อย่างไรว่างานเสร็จหรือยัง ตามรอย <code>orders-a.csv</code> จนได้ผลครบทุกแถว</p>
+<p class="tags">concept 06–08</p>
+</div>
+
+<div class="concept">
+<span class="num">บทที่ 4 · ราว 20 นาที</span>
+<h3><a class="title" href="lessons/0004-when-things-fail.html">เมื่อมีอะไรพัง: failure, retry และ reprocess</a></h3>
+<p>Worker ดับกลางงาน ข้อมูลบางแถวผิด Kafka ล่ม ระบบรับมืออย่างไรให้งานไม่หายและไม่เกิดผลซ้ำ</p>
+<p class="tags">concept 09–12</p>
+</div>
+
+<div class="concept">
+<span class="num">บทที่ 5 · ราว 20 นาที</span>
+<h3><a class="title" href="lessons/0005-many-workers.html">หลาย worker ช่วยกัน: partition, consumer group และ rebalance</a></h3>
+<p>เพิ่ม consumer แล้วเร็วขึ้นได้แค่ไหน ทำไมบางงานยังต้องรอกัน และ consumer ดับแล้วงานไปไหน</p>
+<p class="tags">concept 13–16</p>
+</div>
+
+<div class="concept">
+<span class="num">บทที่ 6 · ราว 20 นาที</span>
+<h3><a class="title" href="lessons/0006-outbox.html">กล่องจดหมายขาออก: ทำไมไม่ส่งเข้า queue ตรง ๆ</a></h3>
+<p>บันทึกงานกับส่ง message ต้องสำเร็จไปด้วยกัน outbox ทำให้เป็นแบบนั้นได้อย่างไร และแลกมากับอะไร</p>
+<p class="tags">concept 17–20</p>
+</div>
+
+</div>
+
+<h2>Concept ทั้งหมด</h2>
+
+<div class="table-wrap">
+<table>
+<tr><th>#</th><th>Concept</th><th>บท</th></tr>
+<tr><td>01</td><td>Decoupling</td><td><a href="lessons/0001-history-and-concepts.html">1</a></td></tr>
+<tr><td>02</td><td>Load leveling</td><td><a href="lessons/0001-history-and-concepts.html">1</a></td></tr>
+<tr><td>03</td><td>Competing consumers</td><td><a href="lessons/0001-history-and-concepts.html">1</a>, <a href="lessons/0005-many-workers.html">5</a></td></tr>
+<tr><td>04</td><td>Point-to-point กับ publish-subscribe</td><td><a href="lessons/0001-history-and-concepts.html">1</a></td></tr>
+<tr><td>05</td><td>At-least-once</td><td><a href="lessons/0001-history-and-concepts.html">1</a></td></tr>
+<tr><td>06</td><td>Job record</td><td><a href="lessons/0003-life-of-a-file-job.html">3</a></td></tr>
+<tr><td>07</td><td>Terminal / non-terminal state</td><td><a href="lessons/0003-life-of-a-file-job.html">3</a></td></tr>
+<tr><td>08</td><td>Status endpoint + polling</td><td><a href="lessons/0003-life-of-a-file-job.html">3</a></td></tr>
+<tr><td>09</td><td>Delivery semantics</td><td><a href="lessons/0004-when-things-fail.html">4</a></td></tr>
+<tr><td>10</td><td>Idempotent receiver</td><td><a href="lessons/0004-when-things-fail.html">4</a></td></tr>
+<tr><td>11</td><td>Transient กับ permanent error</td><td><a href="lessons/0004-when-things-fail.html">4</a></td></tr>
+<tr><td>12</td><td>งานที่พังถาวรต้องให้คนตัดสินใจ</td><td><a href="lessons/0004-when-things-fail.html">4</a></td></tr>
+<tr><td>13</td><td>Partition</td><td><a href="lessons/0005-many-workers.html">5</a></td></tr>
+<tr><td>14</td><td>Consumer group</td><td><a href="lessons/0005-many-workers.html">5</a></td></tr>
+<tr><td>15</td><td>Message key</td><td><a href="lessons/0005-many-workers.html">5</a></td></tr>
+<tr><td>16</td><td>Rebalance</td><td><a href="lessons/0005-many-workers.html">5</a></td></tr>
+<tr><td>17</td><td>Dual write</td><td><a href="lessons/0006-outbox.html">6</a></td></tr>
+<tr><td>18</td><td>Transactional outbox</td><td><a href="lessons/0006-outbox.html">6</a></td></tr>
+<tr><td>19</td><td>Message relay</td><td><a href="lessons/0006-outbox.html">6</a></td></tr>
+<tr><td>20</td><td>Outbox ส่งซ้ำได้ ฝั่งรับต้อง idempotent</td><td><a href="lessons/0006-outbox.html">6</a></td></tr>
+</table>
+</div>
+
+<h2>Reference</h2>
+
+<div class="table-wrap">
+<table>
+<tr><th>หน้า</th><th>ใช้ตอนไหน</th></tr>
+<tr><td><a href="reference/glossary.html">อภิธานศัพท์</a></td><td>ลืมว่าศัพท์คำไหนหมายถึงอะไร หรือควรเรียกว่าอะไรในคอร์สนี้</td></tr>
+<tr><td><a href="reference/message-map.html">แผนที่ message</a></td><td>อยากรู้ว่าแต่ละ topic ใครเขียน ใครส่ง ใครอ่าน</td></tr>
+<tr><td><a href="reference/job-status.html">สรุปสถานะงาน</a></td><td>เห็นสถานะใน API แล้วไม่แน่ใจว่าหมายถึงอะไร ใครตั้ง</td></tr>
+<tr><td><a href="reference/failure-playbook.html">สรุปเมื่อมีอะไรพัง</a></td><td>งานค้างหรือพัง แล้วต้องตัดสินใจว่าจะรอ, Retry หรือ Reprocess</td></tr>
+</table>
+</div>
+
+<h2>เอกสารประกอบ</h2>
+
+<p>ไฟล์ Markdown ด้านล่างเปิดใน VS Code จะอ่านง่ายกว่าเปิดในเบราว์เซอร์</p>
+
+<div class="table-wrap">
+<table>
+<tr><th>ไฟล์</th><th>มีอะไร</th></tr>
+<tr><td><a href="MISSION.md">MISSION.md</a></td><td>เป้าหมายของคอร์ส สิ่งที่ต้องทำได้เมื่อเรียนจบ และสิ่งที่อยู่นอกขอบเขต</td></tr>
+<tr><td><a href="RESOURCES.md">RESOURCES.md</a></td><td>แหล่งอ้างอิงที่ตรวจแล้ว พร้อมบอกว่าใช้กับบทไหน</td></tr>
+<tr><td><a href="NOTES.md">NOTES.md</a></td><td>ความชอบด้านภาษาและรูปแบบบทเรียน ข้อเท็จจริงของโค้ดที่ตรวจแล้ว และแผนบท</td></tr>
+<tr><td><a href="learning-records/">learning-records/</a></td><td>บันทึกว่าเข้าใจอะไรแล้ว และแต่ละครั้งปรับแผนการเรียนเพราะอะไร</td></tr>
+</table>
+</div>
+
+<div class="callout ask">
+<p><strong>เรียนจบแล้วทำอะไรต่อ:</strong> ตอบคำถามส่วน “อธิบายด้วยคำพูดตัวเอง” ท้ายแต่ละบทในแชทกับ Claude คำตอบจะใช้ตรวจว่าตรงไหนเข้าใจแล้ว และตรงไหนยังต้องเสริม</p>
+</div>
+
+</main>
+</body>
+</html>

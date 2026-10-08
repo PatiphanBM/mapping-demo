@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 6 · กล่องจดหมายขาออก</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="0005-many-workers.html">← บทที่ 5</a> · <a href="../reference/glossary.html">อภิธานศัพท์</a> · <a href="../reference/message-map.html">แผนที่ message</a> · <a href="../reference/failure-playbook.html">สรุปเมื่อมีอะไรพัง</a></nav>
+
+<p class="kicker">บทที่ 6 · ภาพรวม · ราว 20 นาที</p>
+<h1>กล่องจดหมายขาออก: ทำไมไม่ส่งเข้า queue ตรง ๆ</h1>
+<p class="subtitle">ทุกครั้งที่ mapping-demo สร้างงาน ต้องทำสองอย่างคือบันทึกงานลงฐานข้อมูลและส่ง message ให้ Worker ถ้าอย่างหนึ่งสำเร็จแต่อีกอย่างพัง งานจะค้างหรือหายไปโดยไม่มีใครรู้</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> อธิบายได้ว่าทำไม File Watcher เขียนแค่ PostgreSQL แล้วให้ <code>OutboxDispatcher</code> ส่งเข้า Kafka ทีหลัง และเล่าได้ว่า outbox ทำให้ message ซ้ำได้ตรงไหน และระบบรับมืออย่างไร</p>
+</div>
+
+<h2>1. ปัญหาเกิดจากอะไร</h2>
+
+<p>ข้อ 6 ใน quiz บทที่ 4 ถามว่าถ้า Kafka ล่มตอนมีไฟล์ใหม่เข้ามา จะเกิดอะไรขึ้น คำตอบคือไม่มีอะไรหาย เพราะ File Watcher ไม่ได้คุยกับ Kafka เลย ในโค้ดก็เป็นแบบนั้นจริง โปรเจกต์ API ไม่ได้อ้างถึง Confluent.Kafka สักบรรทัด มีแค่ Worker ที่ต่อ Kafka</p>
+
+<p>ถ้าให้ API บันทึกงานแล้วส่ง Kafka เองจะง่ายกว่า แต่ PostgreSQL กับ Kafka เป็นระบบแยกกันสองตัว ไม่มี transaction ที่ครอบทั้งสองตัวได้ การเขียนลงสองที่ให้สำเร็จพร้อมกันหรือพังพร้อมกันจึงทำไม่ได้ตรง ๆ</p>
+
+<h2>2. ที่มาของ concept</h2>
+
+<p>เริ่มจากคำถามว่า “บันทึกงานแล้วส่ง message ต่อเลยไม่ได้หรือ” แล้วไล่คำถามที่ตามมา</p>
+
+<ol>
+<li>ถ้าเขียนฐานข้อมูลสำเร็จแต่ส่ง Kafka ไม่สำเร็จ หรือกลับกัน จะเกิดอะไร? งานค้างโดยไม่มีใครมาทำ หรือมี message ของงานที่ไม่มีอยู่จริง → <strong>17 dual write</strong></li>
+<li>ถ้าทำให้สองอย่างเป็น transaction เดียวกันไม่ได้ จะทำให้เหลือที่เดียวได้ไหม? เก็บ message ลงตารางในฐานข้อมูลเดียวกับงาน แล้ว commit พร้อมกัน → <strong>18 transactional outbox</strong></li>
+<li>message อยู่ในตารางแล้ว ใครส่งเข้า Kafka? ต้องมีตัวที่คอยอ่านตารางแล้วส่งต่อ ส่งไม่ผ่านก็ลองใหม่ → <strong>19 message relay</strong></li>
+<li>ตัวส่งต่อดับหลังส่งแล้วแต่ก่อนจดว่าส่งแล้ว จะเป็นอย่างไร? มันจะส่งซ้ำ ฝั่งรับต้องรับซ้ำได้ → <strong>20 outbox ส่งซ้ำได้ ฝั่งรับต้อง idempotent</strong></li>
+</ol>
+
+<h2>3. Concept หลัก 4 ข้อ</h2>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">17</span>
+<h3>Dual write: เขียนสองที่ แต่พังได้ทีละที่</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 215,
+ "nodes": [
+  {"id": "wa", "label": "File Watcher", "sub": "DB ก่อน แล้ว Kafka", "x": 10, "y": 15, "w": 170, "h": 70, "kind": "producer"},
+  {"id": "da", "label": "PostgreSQL", "sub": "", "x": 240, "y": 15, "w": 170, "h": 70, "kind": "store"},
+  {"id": "ka", "label": "Kafka", "sub": "", "x": 470, "y": 15, "w": 160, "h": 70, "kind": "queue"},
+  {"id": "wb", "label": "File Watcher", "sub": "Kafka ก่อน แล้ว DB", "x": 10, "y": 130, "w": 170, "h": 70, "kind": "producer"},
+  {"id": "kb", "label": "Kafka", "sub": "", "x": 240, "y": 130, "w": 170, "h": 70, "kind": "queue"},
+  {"id": "db", "label": "PostgreSQL", "sub": "", "x": 470, "y": 130, "w": 160, "h": 70, "kind": "store"}
+ ],
+ "edges": [
+  {"from": "wa", "to": "da", "label": "1"},
+  {"from": "da", "to": "ka", "label": "2"},
+  {"from": "wb", "to": "kb", "label": "1"},
+  {"from": "kb", "to": "db", "label": "2"}
+ ],
+ "steps": [
+  {
+   "caption": "สมมติว่าไม่มี outbox และ File Watcher เขียนสองที่เอง แถวบนบันทึกงานก่อนแล้วส่ง Kafka แถวล่างส่ง Kafka ก่อนแล้วค่อยบันทึกงาน",
+   "tokens": [
+    {"id": "ja", "label": "#7", "at": "wa", "kind": "msg"},
+    {"id": "jb", "label": "#7", "at": "wb", "kind": "msg"}
+   ],
+   "nodes": {"wa": {"state": "active"}, "wb": {"state": "active"}}
+  },
+  {
+   "caption": "ขั้นแรกผ่านทั้งคู่ แถวบนมี file job #7 ในฐานข้อมูลแล้ว แถวล่างมี message #7 ใน Kafka แล้ว",
+   "tokens": [
+    {"id": "ja", "label": "#7", "at": "da", "kind": "ok"},
+    {"id": "jb", "label": "#7", "at": "kb", "kind": "msg"}
+   ],
+   "nodes": {"da": {"sub": "file job #7: Queued"}}
+  },
+  {
+   "caption": "ขั้นที่สองพังทั้งคู่ แถวบน Kafka ล่มอยู่ ส่งไม่ได้ แถวล่างฐานข้อมูลสะดุด commit ไม่ผ่าน",
+   "tokens": [
+    {"id": "ja", "label": "#7", "at": "da", "kind": "ok"},
+    {"id": "jb", "label": "#7", "at": "kb", "kind": "msg"}
+   ],
+   "nodes": {"ka": {"state": "down", "sub": "ล่ม"}, "db": {"state": "bad", "sub": "rollback"}}
+  },
+  {
+   "caption": "แถวบน งาน #7 เป็น Queued ตลอดไป เพราะไม่มี message ให้ Worker แถวล่าง Worker ได้ message #7 แต่หางานนี้ในฐานข้อมูลไม่เจอ",
+   "tokens": [
+    {"id": "ja", "label": "#7", "at": "da", "kind": "bad"},
+    {"id": "jb", "label": "#7", "at": "kb", "kind": "bad"}
+   ],
+   "nodes": {
+    "wa": {"state": null}, "wb": {"state": null},
+    "da": {"state": "bad", "sub": "งานค้าง ไม่มีใครทำ"},
+    "kb": {"state": "bad", "sub": "message ของงานที่ไม่มีอยู่"}
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>การเขียนลงสองระบบที่ไม่มี transaction ร่วมกันเรียกว่า dual write ไม่ว่าจะเรียงลำดับแบบไหน ก็มีจังหวะที่สำเร็จแค่ฝั่งเดียว ส่วนการใช้ distributed transaction (2PC) ครอบทั้งสองฝั่งมักทำไม่ได้ เพราะฐานข้อมูลหรือ broker ไม่รองรับ <a href="https://microservices.io/patterns/data/transactional-outbox.html">[microservices.io]</a></p>
+</div>
+
+<div class="concept">
+<span class="num">18</span>
+<h3>Transactional outbox: เก็บ message ไว้ที่เดียวกับงาน</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 190,
+ "nodes": [
+  {"id": "w", "label": "File Watcher", "sub": "", "x": 10, "y": 60, "w": 160, "h": 70, "kind": "producer"},
+  {"id": "fj", "label": "file_jobs", "sub": "", "x": 240, "y": 10, "w": 180, "h": 70, "kind": "store"},
+  {"id": "ob", "label": "outbox", "sub": "", "x": 240, "y": 105, "w": 180, "h": 70, "kind": "store"},
+  {"id": "k", "label": "Kafka", "sub": "", "x": 480, "y": 105, "w": 150, "h": 70, "kind": "queue"}
+ ],
+ "edges": [
+  {"from": "w", "to": "fj"},
+  {"from": "w", "to": "ob"},
+  {"from": "ob", "to": "k", "dashed": true, "label": "ทีหลัง"}
+ ],
+ "steps": [
+  {
+   "caption": "File Watcher เปิด transaction แล้ว insert file job #7 กับ message ของงานนี้ลงตาราง outbox ในฐานข้อมูลเดียวกัน ถ้าพังก่อน commit ทั้งสองแถวหายไปพร้อมกัน",
+   "tokens": [
+    {"id": "j", "label": "#7", "at": "fj", "kind": "ghost"},
+    {"id": "m", "label": "#7", "at": "ob", "kind": "ghost"}
+   ],
+   "nodes": {"w": {"state": "active", "sub": "ใน transaction"}}
+  },
+  {
+   "caption": "commit ครั้งเดียว ได้ทั้งงานและ message พร้อมกัน ไม่มีทางที่จะเหลือแค่อย่างใดอย่างหนึ่ง",
+   "tokens": [
+    {"id": "j", "label": "#7", "at": "fj", "kind": "ok"},
+    {"id": "m", "label": "#7", "at": "ob", "kind": "msg"}
+   ],
+   "nodes": {"w": {"state": null, "sub": "commit แล้ว"}, "fj": {"sub": "Queued"}, "ob": {"sub": "sent_at ว่าง"}}
+  },
+  {
+   "caption": "Kafka ล่มอยู่ก็ไม่เป็นไร message รออยู่ใน outbox อย่างปลอดภัย ส่วนการส่งต่อเป็นหน้าที่ของอีกตัวหนึ่ง (concept 19)",
+   "tokens": [
+    {"id": "j", "label": "#7", "at": "fj", "kind": "ok"},
+    {"id": "m", "label": "#7", "at": "ob", "kind": "msg"}
+   ],
+   "nodes": {"k": {"state": "down", "sub": "ล่ม"}}
+  }
+ ]
+}
+</script>
+</div>
+<p>แทนที่จะส่ง message ตรง ๆ ให้เขียน message ลงตาราง outbox ใน transaction เดียวกับข้อมูลงาน แล้วให้อีก process หนึ่งส่งเข้า broker ภายหลัง ถ้า transaction commit ผ่าน message ก็จะไปถึง broker แน่นอน <a href="https://microservices.io/patterns/data/transactional-outbox.html">[microservices.io]</a></p>
+</div>
+
+<div class="concept">
+<span class="num">19</span>
+<h3>Message relay: ตัวที่คอยส่ง outbox ออกไป</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 160,
+ "nodes": [
+  {"id": "ob", "label": "outbox", "sub": "", "x": 10, "y": 40, "w": 190, "h": 80, "kind": "store"},
+  {"id": "d", "label": "OutboxDispatcher", "sub": "ทุก 500 ms", "x": 250, "y": 40, "w": 170, "h": 80, "kind": "producer"},
+  {"id": "k", "label": "Kafka", "sub": "", "x": 470, "y": 40, "w": 160, "h": 80, "kind": "queue"}
+ ],
+ "edges": [
+  {"from": "ob", "to": "d"},
+  {"from": "d", "to": "k"}
+ ],
+ "steps": [
+  {
+   "caption": "ทุกครึ่งวินาที dispatcher อ่านแถวที่ sent_at ยังว่าง เรียงตาม id ทีละไม่เกิน 100 แถว รอบนี้เจอ 3 แถว",
+   "tokens": [
+    {"id": "a", "label": "21", "at": "ob", "kind": "msg"},
+    {"id": "b", "label": "22", "at": "ob", "kind": "msg"},
+    {"id": "c", "label": "23", "at": "ob", "kind": "msg"}
+   ],
+   "nodes": {"d": {"state": "active"}}
+  },
+  {
+   "caption": "ส่ง 21 เข้า Kafka พอ Kafka ตอบรับแล้วจึงบันทึก sent_at ของแถว 21",
+   "tokens": [
+    {"id": "ga", "label": "21", "at": "ob", "kind": "ghost"},
+    {"id": "b", "label": "22", "at": "ob", "kind": "msg"},
+    {"id": "c", "label": "23", "at": "ob", "kind": "msg"},
+    {"id": "a", "label": "21", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"ob": {"sub": "21 ส่งแล้ว"}}
+  },
+  {
+   "caption": "Kafka ล่มตอนส่ง 22 dispatcher หยุดรอบนี้ทันที ไม่ข้ามไปส่ง 23 ก่อน แถว 22 กับ 23 ยังรออยู่ใน outbox",
+   "tokens": [
+    {"id": "ga", "label": "21", "at": "ob", "kind": "ghost"},
+    {"id": "b", "label": "22", "at": "ob", "kind": "msg"},
+    {"id": "c", "label": "23", "at": "ob", "kind": "msg"},
+    {"id": "a", "label": "21", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"k": {"state": "down", "sub": "ล่ม"}, "d": {"state": "bad", "sub": "หยุดรอบนี้"}}
+  },
+  {
+   "caption": "รอบต่อ ๆ ไปลองใหม่จากแถว 22 เสมอ พอ Kafka กลับมา 22 กับ 23 ก็ออกไปตามลำดับเดิม",
+   "tokens": [
+    {"id": "ga", "label": "21", "at": "ob", "kind": "ghost"},
+    {"id": "gb", "label": "22", "at": "ob", "kind": "ghost"},
+    {"id": "gc", "label": "23", "at": "ob", "kind": "ghost"},
+    {"id": "a", "label": "21", "at": "k", "kind": "msg"},
+    {"id": "b", "label": "22", "at": "k", "kind": "msg"},
+    {"id": "c", "label": "23", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"k": {"state": null, "sub": ""}, "d": {"state": "active", "sub": "ทุก 500 ms"}, "ob": {"sub": "ส่งครบแล้ว"}}
+  }
+ ]
+}
+</script>
+</div>
+<p>ตัวที่อ่าน outbox แล้วส่งต่อเรียกว่า message relay วิธีที่ง่ายที่สุดคือ poll ตาราง outbox เป็นระยะ (polling publisher) ข้อเสียคือส่งให้ถูกลำดับได้ยาก <a href="https://microservices.io/patterns/data/polling-publisher.html">[microservices.io]</a> อีกวิธีคืออ่านจาก transaction log ของฐานข้อมูล (transaction log tailing)</p>
+</div>
+
+<div class="concept">
+<span class="num">20</span>
+<h3>Outbox ส่งซ้ำได้ ฝั่งรับต้อง idempotent</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 205,
+ "nodes": [
+  {"id": "ob", "label": "outbox", "sub": "แถว 30 (row 7)", "x": 10, "y": 15, "w": 140, "h": 70, "kind": "store"},
+  {"id": "d", "label": "OutboxDispatcher", "sub": "", "x": 185, "y": 15, "w": 160, "h": 70, "kind": "producer"},
+  {"id": "k", "label": "Kafka", "sub": "", "x": 380, "y": 15, "w": 110, "h": 70, "kind": "queue"},
+  {"id": "c", "label": "normalize", "sub": "", "x": 500, "y": 15, "w": 130, "h": 70, "kind": "consumer"},
+  {"id": "nj", "label": "row job", "sub": "Pending", "x": 500, "y": 125, "w": 130, "h": 65, "kind": "store"}
+ ],
+ "edges": [
+  {"from": "ob", "to": "d"},
+  {"from": "d", "to": "k"},
+  {"from": "k", "to": "c"},
+  {"from": "c", "to": "nj"}
+ ],
+ "steps": [
+  {
+   "caption": "dispatcher ส่งแถว 30 เข้า Kafka สำเร็จ",
+   "tokens": [
+    {"id": "g", "label": "30", "at": "ob", "kind": "ghost"},
+    {"id": "m1", "label": "30", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"d": {"state": "active"}}
+  },
+  {
+   "caption": "Worker ดับก่อนบันทึก sent_at ในมุมของ outbox แถว 30 จึงยังไม่ได้ส่ง",
+   "tokens": [
+    {"id": "g", "label": "30", "at": "ob", "kind": "ghost"},
+    {"id": "m1", "label": "30", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"d": {"state": "down", "sub": "ดับ"}, "ob": {"sub": "แถว 30 sent_at ว่าง"}}
+  },
+  {
+   "caption": "เปิด Worker ใหม่ dispatcher เห็นแถว 30 ยังว่าง จึงส่งอีกรอบ ตอนนี้ Kafka มี message ของแถว 30 สองชิ้น",
+   "tokens": [
+    {"id": "g", "label": "30", "at": "ob", "kind": "ghost"},
+    {"id": "m1", "label": "30", "at": "k", "kind": "msg"},
+    {"id": "m2", "label": "30", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"d": {"state": "active", "sub": "ส่งซ้ำ"}, "ob": {"sub": "แถว 30 ส่งแล้ว"}}
+  },
+  {
+   "caption": "ชิ้นแรกถึง handler ก่อน normalize แถว 7 สำเร็จ row job เป็น Done",
+   "tokens": [
+    {"id": "m1", "label": "30", "at": "c", "kind": "msg"},
+    {"id": "m2", "label": "30", "at": "k", "kind": "msg"}
+   ],
+   "nodes": {"d": {"state": null, "sub": ""}, "c": {"state": "active"}, "nj": {"state": "ok", "sub": "Done"}}
+  },
+  {
+   "caption": "ชิ้นที่สองมาถึง handler เห็นว่า row job เป็น Done แล้วจึงข้าม ผลใน Normalized Table ไม่ซ้ำ",
+   "tokens": [
+    {"id": "m2", "label": "30", "at": "c", "kind": "ghost"}
+   ],
+   "nodes": {"c": {"state": null, "sub": "Skipping row job"}}
+  }
+ ]
+}
+</script>
+</div>
+<p>relay อาจส่ง message เดิมมากกว่าหนึ่งครั้ง consumer จึงต้อง idempotent <a href="https://microservices.io/patterns/data/transactional-outbox.html">[microservices.io]</a> outbox จึงต้องใช้คู่กับ concept 10 จากบทที่ 4 ทุกครั้ง</p>
+</div>
+
+</div>
+
+<h2>4. mapping-demo ใช้อย่างไร</h2>
+
+<p>ตาราง <code>outbox</code> สร้างใน <code>0003_file_jobs_outbox.sql</code> มีคอลัมน์ <code>topic</code>, <code>message_key</code>, <code>payload</code> (jsonb), <code>created_at</code> และ <code>sent_at</code> ทุกจุดที่สร้างงานเรียก <code>OutboxWriter.AddAsync</code> ซึ่งบังคับให้ส่ง transaction เข้ามาด้วย message จึงไปกับ transaction ของงานเสมอ</p>
+
+<div class="table-wrap">
+<table>
+<tr><th>ผู้เขียน outbox</th><th>เขียนพร้อมกับอะไร</th><th>topic · key</th></tr>
+<tr><td><code>FileIntake</code> (API, เรียกจาก File Watcher)</td><td>insert file job ใหม่</td><td>file-import · <code>fileJobId</code></td></tr>
+<tr><td><code>FileJobService</code> Retry (API)</td><td>ตั้ง file job กลับเป็น <code>Queued</code></td><td>file-import · <code>fileJobId</code></td></tr>
+<tr><td><code>FileJobService</code> Reprocess (API)</td><td>สร้าง row job ใหม่ทุกแถว</td><td>row-normalize · <code>sourceRowId</code></td></tr>
+<tr><td><code>RowJobService</code> Retry (API)</td><td>ตั้ง row job กลับเป็น <code>Pending</code></td><td>row-normalize · <code>sourceRowId</code></td></tr>
+<tr><td><code>FileImportHandler</code> (Worker)</td><td>Source row และ row job ของแถวนั้น ทีละแถว</td><td>row-normalize · <code>sourceRowId</code></td></tr>
+</table>
+</div>
+
+<p><code>OutboxDispatcher</code> เป็นตัวเดียวที่ produce เข้า Kafka เป็น polling publisher ที่อ่านแถว <code>sent_at IS NULL</code> ทุก 500 ms เรียงตาม <code>id</code> ทีละไม่เกิน 100 แถว ส่งไม่ผ่านก็ <code>break</code> ออกจากรอบนั้น และไม่มีโค้ดลบแถวที่ส่งแล้ว ตาราง outbox จึงใช้ดูย้อนหลังได้ว่าเคยส่งอะไรไปเมื่อไร</p>
+
+<h3>ลองเล่น: ทำไม normalize เริ่มได้ก่อน import จบ</h3>
+<p><code>FileImportHandler</code> เปิด transaction ใหม่ทุกแถว ใน transaction นั้นเขียน Source row, row job และ outbox แล้ว commit ทันที</p>
+
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 215,
+ "nodes": [
+  {"id": "h", "label": "FileImportHandler", "sub": "Importing", "x": 10, "y": 15, "w": 170, "h": 70, "kind": "consumer"},
+  {"id": "db", "label": "PostgreSQL", "sub": "Source · row_jobs · outbox", "x": 240, "y": 15, "w": 180, "h": 70, "kind": "store"},
+  {"id": "d", "label": "OutboxDispatcher", "sub": "", "x": 470, "y": 15, "w": 160, "h": 70, "kind": "producer"},
+  {"id": "k", "label": "mapping.row-normalize", "sub": "", "x": 470, "y": 130, "w": 160, "h": 70, "kind": "queue"},
+  {"id": "n", "label": "RowNormalizeHandler", "sub": "", "x": 240, "y": 130, "w": 180, "h": 70, "kind": "consumer"}
+ ],
+ "edges": [
+  {"from": "h", "to": "db"},
+  {"from": "db", "to": "d"},
+  {"from": "d", "to": "k"},
+  {"from": "k", "to": "n"}
+ ],
+ "steps": [
+  {
+   "caption": "handler import แถว 1 เขียนสามตารางใน transaction เดียวแล้ว commit",
+   "tokens": [
+    {"id": "r1", "label": "1", "at": "db", "kind": "row"},
+    {"id": "r2", "label": "2", "at": "h", "kind": "row"}
+   ],
+   "nodes": {"h": {"state": "active"}}
+  },
+  {
+   "caption": "ระหว่างที่ handler ทำแถว 2 dispatcher เจอ outbox ของแถว 1 ในรอบถัดไป แล้วส่งเข้า mapping.row-normalize",
+   "tokens": [
+    {"id": "r1", "label": "1", "at": "k", "kind": "row"},
+    {"id": "r2", "label": "2", "at": "db", "kind": "row"},
+    {"id": "r3", "label": "3", "at": "h", "kind": "row"}
+   ],
+   "nodes": {"d": {"state": "active"}}
+  },
+  {
+   "caption": "แถว 1 เริ่ม normalize แล้ว ทั้งที่ file job ยังเป็น Importing",
+   "tokens": [
+    {"id": "r1", "label": "1", "at": "n", "kind": "row"},
+    {"id": "r2", "label": "2", "at": "k", "kind": "row"},
+    {"id": "r3", "label": "3", "at": "db", "kind": "row"},
+    {"id": "r4", "label": "4", "at": "h", "kind": "row"}
+   ],
+   "nodes": {"n": {"state": "active"}}
+  },
+  {
+   "caption": "ถ้า Worker ดับตอนนี้ แถว 1–4 commit แล้วพร้อม message ของตัวเอง ไม่มีแถวไหนที่มีข้อมูลแต่ไม่มีงาน normalize รออยู่",
+   "tokens": [
+    {"id": "r1", "label": "1", "at": "n", "kind": "ok"},
+    {"id": "r2", "label": "2", "at": "k", "kind": "row"},
+    {"id": "r3", "label": "3", "at": "db", "kind": "row"},
+    {"id": "r4", "label": "4", "at": "db", "kind": "row"}
+   ],
+   "nodes": {"h": {"state": "down", "sub": "ดับ"}, "d": {"state": "down"}, "n": {"state": "down"}}
+  }
+ ]
+}
+</script>
+</div>
+
+<div class="callout">
+<p>ถ้าเปิด Worker สอง process จะมี <code>OutboxDispatcher</code> สองตัว ทั้งคู่อ่านแถวเดียวกันได้เพราะไม่มีการล็อก จึงส่งซ้ำได้ และลำดับก็อาจสลับ ความถูกต้องยังอยู่ได้เพราะ handler idempotent (concept 20) แต่จะเสีย message โดยเปล่าประโยชน์</p>
+</div>
+
+<h2>5. ทบทวนโดยไม่เลื่อนขึ้นไปดู</h2>
+
+<div class="quiz">
+<p class="q">1. ทำไม File Watcher ไม่ส่ง message เข้า Kafka เองหลังบันทึก file job?</p>
+<ol class="options">
+<li data-correct>ถ้าส่งไม่ผ่านหลัง commit งานจะค้างโดยไม่มีใครทำ</li>
+<li>Kafka รับ message จากโปรเจกต์ API โดยตรงไม่ได้</li>
+<li>ส่ง Kafka ช้ากว่าการเขียนฐานข้อมูลหลายเท่าตัว</li>
+<li>File Watcher ไม่รู้ว่าจะต้องส่งไปที่ topic ไหน</li>
+</ol>
+<div class="why">PostgreSQL กับ Kafka ไม่มี transaction ร่วมกัน (dual write) ถ้าบันทึกงานแล้วส่ง message ไม่ผ่าน งานจะเป็น <code>Queued</code> ตลอดไป outbox แก้ด้วยการเก็บ message ไว้ใน transaction เดียวกับงาน</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. Kafka ล่มอยู่ 10 นาที ระหว่างนั้นวางไฟล์ใหม่ 3 ไฟล์ ตาราง outbox จะเป็นอย่างไร?</p>
+<ol class="options">
+<li data-correct>มี 3 แถวใหม่ที่ sent_at ยังว่าง รอส่ง</li>
+<li>ว่างเปล่า เพราะ File Watcher รอ Kafka ก่อน</li>
+<li>มี 3 แถวที่ sent_at มีค่าแต่ส่งไม่สำเร็จ</li>
+<li>มีแถวเดียว เพราะส่งไม่ผ่านจึงรวมเป็นชุด</li>
+</ol>
+<div class="why">File Watcher ใช้แค่ PostgreSQL จึงสร้างงานและ outbox ได้ปกติ <code>OutboxDispatcher</code> ส่งไม่ผ่านก็ยังไม่บันทึก <code>sent_at</code> แล้วลองใหม่ทุก 500 ms</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. message ใน outbox ถูกส่งซ้ำได้ในจังหวะไหน?</p>
+<ol class="options">
+<li data-correct>ส่งเข้า Kafka แล้ว แต่ดับก่อนบันทึก sent_at</li>
+<li>บันทึก sent_at แล้ว แต่ดับก่อนส่งเข้า Kafka</li>
+<li>File Watcher เขียน outbox ซ้ำทุก 500 ms</li>
+<li>Kafka ลบ message เก่าแล้วให้ส่งมาใหม่</li>
+</ol>
+<div class="why">dispatcher ส่งก่อนแล้วค่อยบันทึก <code>sent_at</code> ถ้าดับตรงกลาง รอบหน้าจะเห็นแถวนั้นยังว่างแล้วส่งอีกครั้ง ลำดับนี้เลือกให้ message ไม่หายโดยยอมให้ซ้ำ</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. Kafka ล่มตอนส่งแถว 22 จาก 22, 23, 24 dispatcher ทำอะไรต่อ?</p>
+<ol class="options">
+<li data-correct>หยุดรอบนี้ แล้วรอบหน้าเริ่มใหม่จากแถว 22</li>
+<li>ข้าม 22 ไปส่ง 23 กับ 24 ก่อนแล้วค่อยกลับมา</li>
+<li>ลบแถว 22 ทิ้งแล้วตั้ง file job เป็น Failed</li>
+<li>ตั้ง sent_at ของ 22 ไว้แล้วส่งซ้ำวันถัดไป</li>
+</ol>
+<div class="why">ใน <code>OutboxDispatcher</code> เมื่อเจอ <code>ProduceException</code> จะ <code>break</code> ออกจากรอบ รอบถัดไปอ่านแถวที่ <code>sent_at</code> ว่างเรียงตาม <code>id</code> ใหม่ จึงเริ่มที่ 22 ก่อนเสมอ</div>
+</div>
+
+<div class="quiz">
+<p class="q">5. ทำไม normalize แถวแรกเริ่มได้ ก่อนที่ import ทั้งไฟล์จะจบ?</p>
+<ol class="options">
+<li data-correct>แต่ละแถว commit Source, row job, outbox ทันที</li>
+<li>Worker ส่ง message ทั้งไฟล์ไปตั้งแต่ก่อน import</li>
+<li>normalize อ่านไฟล์ CSV ตรงโดยไม่รอ Source Table</li>
+<li>File Watcher สร้าง row job ไว้ตอนวางไฟล์แล้ว</li>
+</ol>
+<div class="why"><code>FileImportHandler</code> เปิด transaction ใหม่ทุกแถว พอแถวหนึ่ง commit แล้ว outbox ของแถวนั้นก็พร้อมให้ dispatcher ส่งในรอบถัดไป</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
+
+<h2>6. ลองกับระบบจริง (ไม่บังคับ)</h2>
+
+<p>ทำตามสถานการณ์ B1 และ B3 ใน <a href="../../docs/acceptance-test-guide.md">acceptance-test-guide.md</a> รัน API กับ docker compose ตาม <a href="../../README.md">README</a> แต่ยังไม่เปิด Worker</p>
+
+<div class="callout ask">
+<p><strong>ทายก่อนลงมือ:</strong> ตอนที่ Worker ยังปิดอยู่ แถวใน outbox ของไฟล์นี้จะมีกี่แถว และมี topic อะไรบ้าง</p>
+</div>
+
+<ol class="steps">
+<li>วางไฟล์แล้วดู outbox:
+<pre><code>Copy-Item ./samples/acceptance/02-outbox-restart.csv ./input/orders/orders-restart.csv
+docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT id, topic, message_key, sent_at FROM outbox ORDER BY id;"</code></pre></li>
+<li>เปิด Worker แล้วดู log <code>Dispatched outbox message … partition … offset …</code> จากนั้นรันคำสั่ง SELECT เดิมอีกรอบ ดูว่า <code>sent_at</code> มีค่าแล้ว และมีแถว <code>mapping.row-normalize</code> เพิ่มเข้ามาทีละแถวระหว่าง import</li>
+<li>จำลองการส่งซ้ำ ตั้งแถว row-normalize แถวแรกกลับเป็นยังไม่ส่ง:
+<pre><code>docker compose exec -T postgres psql -U mapping -d mapping -c "UPDATE outbox SET sent_at = NULL WHERE id = (SELECT id FROM outbox WHERE topic = 'mapping.row-normalize' ORDER BY id LIMIT 1);"</code></pre></li>
+<li>ดู log ของ Worker ว่ามี <code>Skipping row job … because status is Done</code> และนับ <code>normalized_orders</code> ของไฟล์นี้ว่ายังเท่าเดิม</li>
+</ol>
+
+<h2>7. อธิบายด้วยคำพูดตัวเอง</h2>
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<ol>
+<li>ถ้าลบตาราง outbox ออก แล้วให้ทุกจุดส่ง Kafka ตรง ๆ จะเกิดปัญหาอะไรได้บ้าง?</li>
+<li>outbox ทำให้ message ไม่หาย แต่แลกมากับอะไร และ mapping-demo จ่ายราคานั้นอย่างไร?</li>
+</ol>
+<p>Claude จะตรวจคำตอบ ถ้าตรงไหนยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://microservices.io/patterns/data/transactional-outbox.html">microservices.io, Pattern: Transactional outbox</a> หน้าเดียวจบ มีแผนภาพ ส่วนปัญหาและข้อเสียของ pattern ราว 10 นาที</p>
+<p>อยากรู้ทางเลือกของ relay: <a href="https://microservices.io/patterns/data/polling-publisher.html">Polling publisher</a> (แบบที่ mapping-demo ใช้) และ <a href="https://microservices.io/patterns/data/transaction-log-tailing.html">Transaction log tailing</a></p>
+
+<footer class="next">
+<span>บทที่ 6 จาก 6</span>
+<span>จบเนื้อหาตามแผน ถัดไป: ตอบคำถาม “อธิบายด้วยคำพูดตัวเอง” ของบทที่ 1–6 เพื่อตรวจว่าตรงไหนยังต้องเสริม</span>
+</footer>
+
+</main>
+</body>
+</html>

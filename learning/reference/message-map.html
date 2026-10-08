@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แผนที่ Message</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · reference · <a href="glossary.html">อภิธานศัพท์</a> · <a href="../lessons/0001-history-and-concepts.html">บทที่ 1</a> · <a href="../lessons/0002-queue-and-worker-in-mapping-demo.html">บทที่ 2</a></nav>
+<p class="kicker">Reference · ตรวจกับโค้ดเมื่อ 2026-10-08</p>
+<h1>แผนที่ message ของ mapping-demo</h1>
+<p class="subtitle">ทุก topic ใครเขียน ใครส่ง ใครอ่าน ในหน้าเดียว</p>
+
+<h2>ภาพรวม</h2>
+
+<div class="flow">
+  <div class="node producer"><b>File Watcher / API</b><small>OutboxWriter.AddAsync</small></div>
+  <div class="arrow">→</div>
+  <div class="node store"><b>outbox</b><small>PostgreSQL · sent_at IS NULL</small></div>
+  <div class="arrow">→</div>
+  <div class="node producer"><b>OutboxDispatcher</b><small>Worker · ทุก 500 ms · ทีละ ≤100</small></div>
+  <div class="arrow">→</div>
+  <div class="node queue"><b>mapping.file-import</b><small>3 partitions</small></div>
+  <div class="arrow">→</div>
+  <div class="node consumer"><b>FileImportConsumer</b><small>group mapping-file-import</small></div>
+</div>
+<div class="flow">
+  <div class="node consumer"><b>FileImportHandler</b><small>บันทึก Source ทีละแถว + outbox</small></div>
+  <div class="arrow">→</div>
+  <div class="node store"><b>outbox</b><small>PostgreSQL</small></div>
+  <div class="arrow">→</div>
+  <div class="node producer"><b>OutboxDispatcher</b><small>Worker</small></div>
+  <div class="arrow">→</div>
+  <div class="node queue"><b>mapping.row-normalize</b><small>3 partitions</small></div>
+  <div class="arrow">→</div>
+  <div class="node consumer"><b>RowNormalizeConsumer</b><small>group mapping-row-normalize</small></div>
+</div>
+<p class="legend"><span class="producer">ส่ง message</span> · <span class="store">ฐานข้อมูล</span> · <span class="queue">Kafka topic</span> · <span class="consumer">consumer / worker</span></p>
+
+<h2>Topics</h2>
+<div class="table-wrap">
+<table>
+<tr><th></th><th><code>mapping.file-import</code></th><th><code>mapping.row-normalize</code></th></tr>
+<tr><td>หมายถึง</td><td>ขอให้ import ไฟล์หนึ่งไฟล์ (File Import Job)</td><td>ขอให้ normalize Source แถวหนึ่ง (Row Normalization Job)</td></tr>
+<tr><td>Payload (C#)</td><td><code>FileImportRequested(long FileJobId)</code></td><td><code>RowNormalizeRequested(long RowJobId)</code></td></tr>
+<tr><td>Value บน Kafka</td><td><code>{"fileJobId":1}</code></td><td><code>{"rowJobId":1}</code></td></tr>
+<tr><td>Key</td><td>fileJobId</td><td>sourceRowId (ไม่ใช่ rowJobId)</td></tr>
+<tr><td>เขียน outbox จาก</td><td><code>FileIntake.CreateJobAsync</code> (Watcher)<br><code>FileJobService</code> — retry file job</td><td><code>FileImportHandler</code> — ทุกแถวที่บันทึก Source<br><code>FileJobService</code> — reprocess<br><code>RowJobService</code> — retry row job</td></tr>
+<tr><td>Consumer group</td><td><code>mapping-file-import</code></td><td><code>mapping-row-normalize</code></td></tr>
+<tr><td>จำนวน consumer</td><td><code>Kafka:FileImportConsumers</code></td><td><code>Kafka:NormalizeConsumers</code></td></tr>
+<tr><td>Handler</td><td><code>FileImportHandler</code> (คืน <code>false</code> → <code>Pause</code> partition)</td><td><code>RowNormalizeHandler</code></td></tr>
+</table>
+</div>
+<p>นิยามชื่อ topic อยู่ที่ <code>src/MappingDemo.Shared/Messaging/Topics.cs</code> สร้างด้วย <code>scripts/create-topics.ps1</code> (3 partitions, replication factor 1) เพราะ compose ปิด <code>KAFKA_AUTO_CREATE_TOPICS_ENABLE</code></p>
+
+<h2>ค่า config ของ Kafka client</h2>
+<div class="table-wrap">
+<table>
+<tr><th>ค่า</th><th>ที่</th><th>ความหมายสั้น ๆ</th></tr>
+<tr><td><code>BootstrapServers = localhost:9092</code></td><td>appsettings</td><td>ที่อยู่ Kafka จากเครื่อง host (ใน Docker ใช้ <code>kafka:19092</code>)</td></tr>
+<tr><td><code>Acks = All</code>, <code>EnableIdempotence = true</code></td><td>Worker Program.cs (producer)</td><td>ให้ Kafka ยืนยันว่าเก็บ message แล้วจริงและไม่บันทึกซ้ำ (เชิงลึก)</td></tr>
+<tr><td><code>EnableAutoCommit = false</code></td><td>consumer ทั้งสอง</td><td>แจ้ง Kafka ว่าทำเสร็จ <em>หลัง</em> handler ทำงานจบเท่านั้น</td></tr>
+<tr><td><code>AutoOffsetReset = Earliest</code></td><td>consumer ทั้งสอง</td><td>worker กลุ่มใหม่เริ่มอ่านจาก message แรกสุดใน topic</td></tr>
+</table>
+</div>
+
+<h2>ดูของจริงได้ที่ไหน</h2>
+<ul>
+<li><strong>Kafka UI</strong> <a href="http://localhost:8080">localhost:8080</a> → Topics → ชื่อ topic → Messages</li>
+<li><strong>outbox ที่ยังไม่ส่ง</strong>:
+<pre><code>docker compose exec postgres psql -U mapping -d mapping -c "SELECT id, topic, message_key, created_at, sent_at FROM outbox WHERE sent_at IS NULL ORDER BY id;"</code></pre></li>
+<li><strong>log ของ Worker</strong>: <code>Dispatched outbox message …</code> (ส่งแล้ว) และ <code>Consumer N consumed …, partition P, offset O, key K</code> (อ่านแล้ว)</li>
+</ul>
+
+</main>
+</body>
+</html>

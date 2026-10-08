@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สรุปเมื่อมีอะไรพัง</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · reference · <a href="job-status.html">สรุปสถานะงาน</a> · <a href="message-map.html">แผนที่ message</a> · <a href="glossary.html">อภิธานศัพท์</a> · <a href="../lessons/0004-when-things-fail.html">บทที่ 4</a></nav>
+<p class="kicker">Reference · ตรวจกับโค้ดเมื่อ 2026-10-08</p>
+<h1>สรุปเมื่อมีอะไรพัง</h1>
+<p class="subtitle">เกิดอะไรขึ้น ระบบทำอะไรเอง และคนต้องทำอะไรต่อ</p>
+
+<h2>หลักที่ระบบใช้</h2>
+<ul>
+<li><strong>At-least-once:</strong> consumer commit offset หลัง handler ทำเสร็จ (<code>EnableAutoCommit = false</code>) ถ้าดับก่อน commit งานจะกลับมาให้ทำซ้ำ</li>
+<li><strong>Idempotent receiver:</strong> Source ใช้ <code>ON CONFLICT (file_job_id, row_number) DO NOTHING</code>, Normalized ใช้ upsert ตาม <code>source_row_id</code> และ handler ข้าม row job ที่อยู่ในสถานะสุดท้ายแล้ว</li>
+<li><strong>หนึ่งแถว หนึ่ง transaction:</strong> Source row + row job + outbox commit พร้อมกัน ดับกลางทางจึงไม่มีแถวที่บันทึกครึ่งเดียว</li>
+</ul>
+
+<h2>สถานการณ์</h2>
+<div class="table-wrap">
+<table>
+<tr><th>เกิดอะไรขึ้น</th><th>ระบบทำเอง</th><th>คนทำต่อ</th></tr>
+<tr><td>Worker ดับกลาง import</td><td>message ยังไม่ commit จึงได้รับซ้ำ handler เริ่มใหม่ตั้งแต่ขั้นหน่วง ข้ามแถวที่มีแล้ว</td><td>ไม่ต้องทำ</td></tr>
+<tr><td>Worker ดับกลาง normalize</td><td>transaction ย้อนกลับ row job ยัง <code>Pending</code> ได้ message ซ้ำแล้วทำใหม่</td><td>ไม่ต้องทำ</td></tr>
+<tr><td>Kafka ล่ม</td><td>Watcher ยังสร้างงานได้ message ค้างใน <code>outbox</code> (<code>sent_at</code> เป็น null) <code>OutboxDispatcher</code> ลองส่งใหม่ทุก 500 ms</td><td>ไม่ต้องทำ</td></tr>
+<tr><td>ข้อมูลในแถวผิดกฎ</td><td>row job เป็น <code>Invalid</code> + Row Error ไม่ retry</td><td>แก้ไฟล์ต้นทาง หรือสร้าง config version ใหม่แล้ว Reprocess</td></tr>
+<tr><td>normalize พังชั่วคราว</td><td>retry ใน handler หลัง 1, 2, 4 วินาที ครบ 4 รอบแล้วเป็น <code>Failed</code></td><td>แก้สาเหตุ แล้ว <code>POST /row-jobs/{id}/retry</code></td></tr>
+<tr><td>import ล้ม (header ไม่ครบ, exception)</td><td>file job เป็น <code>ImportFailed</code> + <code>lastError</code></td><td>ถ้าสาเหตุมาจากระบบ <code>POST /file-jobs/{id}/retry</code> (อ่าน snapshot เดิม จึงไม่ช่วยถ้าไฟล์ผิด)</td></tr>
+<tr><td>ย้ายไฟล์ไป archive ไม่ได้ (IO error)</td><td>ลองใหม่ทุก 1 วินาที รวม 3 รอบ แล้วเป็น <code>ArchiveFailed</code></td><td>ดู <code>lastError</code> แก้สิทธิ์หรือพื้นที่ดิสก์</td></tr>
+<tr><td>ไฟล์ต้นฉบับถูกแก้หลังระบบอ่านไปแล้ว</td><td>hash ไม่ตรงกับ snapshot จึงไม่ย้ายไฟล์ ตั้ง <code>ChangedAfterRead</code> และเก็บทั้งไฟล์ต้นฉบับกับ snapshot ไว้</td><td>ตรวจว่าไฟล์ไหนถูกต้อง</td></tr>
+</table>
+</div>
+
+<h2>Retry กับ Reprocess</h2>
+<div class="table-wrap">
+<table>
+<tr><th></th><th>Retry</th><th>Reprocess</th></tr>
+<tr><td>ใช้เมื่อ</td><td>ระบบพัง ข้อมูลและกฎถูกแล้ว</td><td>อยากใช้กฎ normalize รุ่นอื่น</td></tr>
+<tr><td>งานที่รับ</td><td><code>ImportFailed</code> (file) หรือ <code>Failed</code> (row)</td><td>ทุกแถวใน Source ของไฟล์</td></tr>
+<tr><td>config version</td><td>รุ่นเดิม</td><td>เลือกได้</td></tr>
+<tr><td>row job</td><td>ใช้ตัวเดิม กลับเป็น <code>Pending</code>, <code>attempts = 0</code></td><td>สร้างใหม่ <code>kind = Reprocess</code></td></tr>
+<tr><td>endpoint</td><td><code>POST /file-jobs/{id}/retry</code><br><code>POST /row-jobs/{id}/retry</code></td><td><code>POST /file-jobs/{id}/reprocess</code> body <code>{"versionId": N}</code></td></tr>
+</table>
+</div>
+<p>แถวที่ reprocess ไม่ผ่าน ยังเก็บผล normalize ที่สำเร็จล่าสุดไว้ (Current Normalized Result) ส่วนการตั้งค่าจำลองความล้มเหลวมี <code>Demo:FailImportAtRow</code> และ <code>Demo:FailNormalizeRowNumbers:0=N</code> ดูขั้นตอนเต็มใน <a href="../../docs/acceptance-test-guide.md">acceptance-test-guide.md</a></p>
+
+</main>
+</body>
+</html>

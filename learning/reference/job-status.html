@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>สรุปสถานะงาน</title>
+<link rel="stylesheet" href="../assets/course.css">
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · reference · <a href="message-map.html">แผนที่ message</a> · <a href="glossary.html">อภิธานศัพท์</a> · <a href="../lessons/0003-life-of-a-file-job.html">บทที่ 3</a></nav>
+<p class="kicker">Reference · ตรวจกับโค้ดเมื่อ 2026-10-08</p>
+<h1>สรุปสถานะงานของ mapping-demo</h1>
+<p class="subtitle">สถานะทุกแกน ใครเป็นคนตั้ง และดูได้จาก endpoint ไหน</p>
+
+<p class="legend">วงเดียว = ยังไปต่อได้ (non-terminal) · วงคู่สีเขียว = จบแบบปกติ · วงคู่สีแดง = จบแบบมีปัญหา</p>
+
+<h2>File job (<code>file_jobs</code>)</h2>
+
+<h3>importStatus</h3>
+<div class="states">
+  <span class="state">Queued</span><span class="arrow">→</span>
+  <span class="state">Delaying</span><span class="arrow">→</span>
+  <span class="state">Importing</span><span class="arrow">→</span>
+  <span class="state final">Imported</span><span class="or">หรือ</span>
+  <span class="state bad">ImportFailed</span><span class="or">หรือ</span>
+  <span class="state final">Duplicate</span>
+</div>
+<div class="table-wrap">
+<table>
+<tr><th>สถานะ</th><th>ใครตั้ง</th><th>เมื่อไร</th></tr>
+<tr><td><code>Queued</code></td><td><code>FileIntake</code> (API)</td><td>Watcher เจอไฟล์และสร้างงาน หรือมีคนสั่ง Retry งานที่ <code>ImportFailed</code></td></tr>
+<tr><td><code>Delaying</code></td><td><code>FileImportHandler</code></td><td>หยิบงานแล้ว กำลังรอตาม <code>Import:DelaySeconds</code></td></tr>
+<tr><td><code>Importing</code></td><td><code>FileImportHandler</code></td><td>กำลังอ่านไฟล์ลง Source ทีละแถว</td></tr>
+<tr><td><code>Imported</code></td><td><code>FileImportHandler</code></td><td>อ่านครบทุกแถว ได้ <code>totalRows</code></td></tr>
+<tr><td><code>ImportFailed</code></td><td><code>FileImportHandler</code></td><td>header ไม่ครบหรือเกิด exception ระหว่าง import ดูสาเหตุที่ <code>lastError</code></td></tr>
+<tr><td><code>Duplicate</code></td><td><code>FileImportHandler</code></td><td>เนื้อหา (SHA-256) ซ้ำกับไฟล์ที่รับไว้แล้วภายใต้ config เดียวกัน</td></tr>
+</table>
+</div>
+
+<h3>archiveStatus</h3>
+<div class="states">
+  <span class="state">NotArchived</span><span class="arrow">→</span>
+  <span class="state final">Archived</span><span class="or">หรือ</span>
+  <span class="state bad">ArchiveFailed</span><span class="or">หรือ</span>
+  <span class="state bad">ChangedAfterRead</span>
+</div>
+<p>Import worker ย้ายไฟล์ไป <code>archive/&lt;ddMMyyyy&gt;/</code> ทันทีหลัง import จบ ไม่รอ normalize</p>
+
+<h3>normalizationStatus (คำนวณตอนถาม ไม่ได้เก็บในตาราง)</h3>
+<div class="states">
+  <span class="state">InProgress</span><span class="arrow">→</span>
+  <span class="state final">Completed</span><span class="or">หรือ</span>
+  <span class="state bad">CompletedWithErrors</span>
+</div>
+<div class="table-wrap">
+<table>
+<tr><th>เงื่อนไข (ตามลำดับ)</th><th>ผล</th></tr>
+<tr><td><code>importStatus</code> ไม่ใช่ <code>Imported</code> หรือ <code>pendingRows &gt; 0</code></td><td><code>InProgress</code></td></tr>
+<tr><td><code>invalidRows &gt; 0</code> หรือ <code>failedRows &gt; 0</code></td><td><code>CompletedWithErrors</code></td></tr>
+<tr><td>นอกนั้น</td><td><code>Completed</code></td></tr>
+</table>
+</div>
+<p>ที่มา: <code>src/MappingDemo.Shared/Jobs/NormalizationStatusCalculator.cs</code> ตัวนับใช้ row job ล่าสุดของแต่ละแถว</p>
+
+<h2>Row job (<code>row_jobs</code>)</h2>
+<div class="states">
+  <span class="state">Pending</span><span class="arrow">→</span>
+  <span class="state final">Done</span><span class="or">หรือ</span>
+  <span class="state bad">Invalid</span><span class="or">หรือ</span>
+  <span class="state bad">Failed</span>
+</div>
+<div class="table-wrap">
+<table>
+<tr><th>สถานะ</th><th>ความหมาย</th></tr>
+<tr><td><code>Pending</code></td><td>บันทึก Source แล้ว รอ Normalize worker</td></tr>
+<tr><td><code>Done</code></td><td>ผ่านกฎทุกข้อ บันทึกลง Normalized Table แล้ว</td></tr>
+<tr><td><code>Invalid</code></td><td>ข้อมูลไม่ผ่านกฎ normalize รายละเอียดอยู่ใน Row Error</td></tr>
+<tr><td><code>Failed</code></td><td>เกิด exception ครบ 4 รอบ (ลองใหม่หลัง 1, 2, 4 วินาที) ดูสาเหตุที่ <code>lastError</code></td></tr>
+</table>
+</div>
+<p>handler ข้าม message ของ row job ที่อยู่ในสถานะสุดท้ายแล้ว จึงรับ message ซ้ำได้โดยไม่เกิดผลซ้ำ</p>
+
+<h2>Endpoint สำหรับดูสถานะ</h2>
+<div class="table-wrap">
+<table>
+<tr><th>Endpoint</th><th>ได้อะไร</th></tr>
+<tr><td><code>GET /file-jobs</code></td><td>ทุกงาน เรียงจากใหม่ไปเก่า</td></tr>
+<tr><td><code>GET /file-jobs/{id}</code></td><td>สถานะสามแกน, <code>totalRows</code>, ตัวนับ pending/done/invalid/failed, <code>lastError</code>, <code>createdAt</code>, <code>updatedAt</code></td></tr>
+<tr><td><code>GET /file-jobs/{id}/errors</code></td><td>Row Error ทุกแถว (เลขแถว, field, สาเหตุ)</td></tr>
+<tr><td><code>GET /file-jobs/{id}/rows/{rowNumber}/history</code></td><td>ประวัติ row job ทุกรอบของแถวนั้น รวม retry และ reprocess</td></tr>
+</table>
+</div>
+
+</main>
+</body>
+</html>

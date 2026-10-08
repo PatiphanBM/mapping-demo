@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>บทที่ 4 · เมื่อมีอะไรพัง</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/quiz.js" defer></script>
+<script src="../assets/step-diagram.js" defer></script>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="0003-life-of-a-file-job.html">← บทที่ 3</a> · <a href="../reference/failure-playbook.html">สรุปเมื่อมีอะไรพัง</a> · <a href="../reference/job-status.html">สรุปสถานะงาน</a></nav>
+
+<p class="kicker">บทที่ 4 · ภาพรวม · ราว 20 นาที</p>
+<h1>เมื่อมีอะไรพัง: failure, retry และ reprocess</h1>
+<p class="subtitle">Worker ดับกลางงาน ข้อมูลบางแถวผิด Kafka ล่ม ระบบที่ใช้ queue ต้องรับมือกับเรื่องพวกนี้ได้ โดยงานไม่หายและไม่เกิดผลซ้ำ</p>
+
+<div class="callout goal">
+<p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> ทำนายได้ว่า mapping-demo ทำอะไรเมื่อเกิดความล้มเหลวแต่ละแบบ และเลือกได้ว่าเมื่อไรควรใช้ Retry เมื่อไรควรใช้ Reprocess</p>
+</div>
+
+<h2>1. ปัญหาเกิดจากอะไร</h2>
+
+<p>ในตัวจำลองของบทที่ 2 ถ้าปิด Worker ระหว่างที่งานกำลังทำอยู่ พอเปิดใหม่ Worker จะทำงานชิ้นนั้นอีกรอบ นี่คือ at-least-once จากบทที่ 1 ซึ่งทำให้เกิดคำถามตามมาสองข้อ งานที่ทำไปครึ่งทางจะเป็นอย่างไร และถ้าทำซ้ำ ข้อมูลจะซ้ำไหม</p>
+
+<p>ใน mapping-demo มี API, Worker, Kafka และ PostgreSQL รันแยก process และคุยกันผ่านเครือข่าย ตัวไหนก็ดับหรือช้าได้ทุกเมื่อ ความล้มเหลวจึงเป็นเรื่องปกติที่ต้องออกแบบรองรับไว้ก่อน ไม่ใช่ข้อยกเว้น</p>
+
+<h2>2. ที่มาของ concept</h2>
+
+<p>เริ่มจากข้อเท็จจริงว่า worker ดับได้ทุกเมื่อ แล้วไล่คำถามที่ตามมาทีละข้อ แต่ละคำตอบคือ concept หนึ่งข้อ</p>
+
+<ol>
+<li>worker ควรบอก queue ว่า “เสร็จแล้ว” ตอนไหน? ถ้าบอกก่อนทำ แล้วดับกลางทาง งานหาย ถ้าบอกหลังทำ งานไม่หาย แต่ worker อาจได้งานเดิมกลับมาทำซ้ำ → <strong>09 delivery semantics</strong></li>
+<li>ถ้าเลือกให้งานไม่หาย ก็ต้องยอมให้ทำซ้ำได้ แล้วจะกันข้อมูลซ้ำอย่างไร? ฝั่งรับต้องออกแบบให้ทำซ้ำแล้วได้ผลเหมือนทำครั้งเดียว → <strong>10 idempotent receiver</strong></li>
+<li>งานพังแล้ว ควรลองใหม่ทุกครั้งไหม? ไม่เสมอไป บาง error ลองใหม่อาจผ่าน บาง error ลองกี่รอบก็ผิด → <strong>11 transient กับ permanent error</strong></li>
+<li>ลองครบแล้วยังพัง จะเอางานนั้นไปไว้ไหน? ปล่อยวนไปเรื่อย ๆ ก็ขวางงานอื่น ทิ้งไปก็หาย จึงต้องพักไว้ให้คนดู → <strong>12 งานที่พังถาวรต้องให้คนตัดสินใจ</strong></li>
+</ol>
+
+
+<h2>3. Concept หลัก 4 ข้อ</h2>
+
+<div class="concepts">
+
+<div class="concept">
+<span class="num">09</span>
+<h3>Delivery semantics: commit ก่อนหรือหลัง</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 210,
+ "nodes": [
+  {
+   "id": "qa",
+   "label": "queue",
+   "sub": "commit ก่อนทำ",
+   "x": 10,
+   "y": 15,
+   "w": 160,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "wa",
+   "label": "worker",
+   "sub": "",
+   "x": 240,
+   "y": 15,
+   "w": 150,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "ra",
+   "label": "ผลลัพธ์",
+   "sub": "",
+   "x": 460,
+   "y": 15,
+   "w": 170,
+   "h": 70,
+   "kind": "store"
+  },
+  {
+   "id": "qb",
+   "label": "queue",
+   "sub": "commit หลังทำ",
+   "x": 10,
+   "y": 125,
+   "w": 160,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "wb",
+   "label": "worker",
+   "sub": "",
+   "x": 240,
+   "y": 125,
+   "w": 150,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "rb",
+   "label": "ผลลัพธ์",
+   "sub": "",
+   "x": 460,
+   "y": 125,
+   "w": 170,
+   "h": 70,
+   "kind": "store"
+  }
+ ],
+ "edges": [
+  {
+   "from": "qa",
+   "to": "wa"
+  },
+  {
+   "from": "wa",
+   "to": "ra"
+  },
+  {
+   "from": "qb",
+   "to": "wb"
+  },
+  {
+   "from": "wb",
+   "to": "rb"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "ทั้งสองแบบหยิบงาน #1 จากคิวไปทำ",
+   "tokens": [
+    {
+     "id": "ga",
+     "label": "#1",
+     "at": "qa",
+     "kind": "ghost"
+    },
+    {
+     "id": "a1",
+     "label": "#1",
+     "at": "wa",
+     "kind": "msg"
+    },
+    {
+     "id": "gb",
+     "label": "#1",
+     "at": "qb",
+     "kind": "ghost"
+    },
+    {
+     "id": "b1",
+     "label": "#1",
+     "at": "wb",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "wa": {
+     "state": "active"
+    },
+    "wb": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "แบบบน commit ทันทีที่หยิบ คิวจึงถือว่า #1 เสร็จแล้ว แบบล่างยังไม่ commit คิวจึงยังเก็บ #1 ไว้",
+   "tokens": [
+    {
+     "id": "a1",
+     "label": "#1",
+     "at": "wa",
+     "kind": "msg"
+    },
+    {
+     "id": "gb",
+     "label": "#1",
+     "at": "qb",
+     "kind": "ghost"
+    },
+    {
+     "id": "b1",
+     "label": "#1",
+     "at": "wb",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "qa": {
+     "sub": "commit #1 แล้ว"
+    }
+   }
+  },
+  {
+   "caption": "worker ทั้งสองดับกลางงาน ก่อนบันทึกผล",
+   "tokens": [
+    {
+     "id": "gb",
+     "label": "#1",
+     "at": "qb",
+     "kind": "ghost"
+    }
+   ],
+   "nodes": {
+    "wa": {
+     "state": "down",
+     "sub": "ดับ"
+    },
+    "wb": {
+     "state": "down",
+     "sub": "ดับ"
+    }
+   }
+  },
+  {
+   "caption": "เปิด worker ใหม่ แบบบนไม่เหลืองานในคิว #1 หายไปเลย (at-most-once) แบบล่างได้ #1 กลับมาทำใหม่ (at-least-once)",
+   "tokens": [
+    {
+     "id": "gb",
+     "label": "#1",
+     "at": "qb",
+     "kind": "ghost"
+    },
+    {
+     "id": "b2",
+     "label": "#1",
+     "at": "wb",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "wa": {
+     "state": null,
+     "sub": "ไม่มีงาน"
+    },
+    "ra": {
+     "state": "bad",
+     "sub": "ไม่มีผล #1"
+    },
+    "wb": {
+     "state": "active",
+     "sub": "ทำ #1 อีกรอบ"
+    }
+   }
+  },
+  {
+   "caption": "แบบล่างทำเสร็จแล้วจึง commit งานไม่หาย แต่ถ้าดับหลังบันทึกผลก่อน commit ก็จะได้งานซ้ำ จึงต้องมี idempotency",
+   "tokens": [
+    {
+     "id": "rb1",
+     "label": "ผล#1",
+     "at": "rb",
+     "kind": "ok"
+    }
+   ],
+   "nodes": {
+    "wb": {
+     "state": null,
+     "sub": "commit แล้ว"
+    },
+    "rb": {
+     "state": "ok"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>consumer เลือกได้ว่าจะบันทึกตำแหน่งที่อ่านถึง (commit) ก่อนหรือหลังทำงาน ถ้า commit ก่อนแล้วดับ งานนั้นหาย ถ้า commit หลังแล้วดับ งานนั้นจะกลับมาให้ทำซ้ำ <a href="https://kafka.apache.org/documentation/#semantics">[Kafka docs]</a> ส่วนใหญ่เลือก at-least-once เพราะงานซ้ำแก้ได้ด้วย idempotency แต่งานที่หายไปแล้วกู้คืนไม่ได้</p>
+</div>
+
+<div class="concept">
+<span class="num">10</span>
+<h3>Idempotent receiver: รับซ้ำได้ไม่เกิดผลซ้ำ</h3>
+<p>เมื่อเลือก at-least-once ฝั่งรับต้องรับ message เดิมซ้ำได้อย่างปลอดภัย <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/IdempotentReceiver.html">[EIP]</a> วิธีที่ใช้บ่อยมีสามแบบ เช็กสถานะก่อนทำ, ใช้ unique key ให้ insert ซ้ำไม่มีผล และ upsert ทับของเดิมด้วยค่าเดียวกัน</p>
+</div>
+
+<div class="concept">
+<span class="num">11</span>
+<h3>Transient กับ permanent error</h3>
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 200,
+ "nodes": [
+  {
+   "id": "pa",
+   "label": "แถว 25",
+   "sub": "วันที่ผิดรูปแบบ",
+   "x": 10,
+   "y": 15,
+   "w": 150,
+   "h": 70,
+   "kind": "plain"
+  },
+  {
+   "id": "ha",
+   "label": "normalize",
+   "sub": "",
+   "x": 230,
+   "y": 15,
+   "w": 190,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "ja",
+   "label": "row job",
+   "sub": "Pending",
+   "x": 490,
+   "y": 15,
+   "w": 140,
+   "h": 70,
+   "kind": "store"
+  },
+  {
+   "id": "pb",
+   "label": "แถว 40",
+   "sub": "ฐานข้อมูลสะดุด",
+   "x": 10,
+   "y": 115,
+   "w": 150,
+   "h": 70,
+   "kind": "plain"
+  },
+  {
+   "id": "hb",
+   "label": "normalize",
+   "sub": "",
+   "x": 230,
+   "y": 115,
+   "w": 190,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "jb",
+   "label": "row job",
+   "sub": "Pending",
+   "x": 490,
+   "y": 115,
+   "w": 140,
+   "h": 70,
+   "kind": "store"
+  }
+ ],
+ "edges": [
+  {
+   "from": "pa",
+   "to": "ha"
+  },
+  {
+   "from": "ha",
+   "to": "ja"
+  },
+  {
+   "from": "pb",
+   "to": "hb"
+  },
+  {
+   "from": "hb",
+   "to": "jb"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "สองแถวเข้า normalize พร้อมกัน แต่พังด้วยสาเหตุต่างกัน",
+   "tokens": [
+    {
+     "id": "a",
+     "label": "25",
+     "at": "ha",
+     "kind": "row"
+    },
+    {
+     "id": "b",
+     "label": "40",
+     "at": "hb",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "ha": {
+     "state": "active"
+    },
+    "hb": {
+     "state": "active"
+    }
+   }
+  },
+  {
+   "caption": "แถว 25 ผิดกฎ ลองกี่รอบก็ผิด (permanent) จึงตั้ง Invalid ทันทีโดยไม่ retry ส่วนแถว 40 พังในรอบแรก",
+   "tokens": [
+    {
+     "id": "b",
+     "label": "40",
+     "at": "hb",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "ha": {
+     "state": null
+    },
+    "ja": {
+     "sub": "Invalid",
+     "state": "bad"
+    },
+    "hb": {
+     "sub": "รอบ 1 พัง"
+    }
+   }
+  },
+  {
+   "caption": "แถว 40 เป็น error ชั่วคราว (transient) รอ 1 วินาทีแล้วลองใหม่ ยังพัง",
+   "tokens": [
+    {
+     "id": "b",
+     "label": "40",
+     "at": "hb",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "hb": {
+     "sub": "รอ 1 วิ → รอบ 2 พัง"
+    }
+   }
+  },
+  {
+   "caption": "รอนานขึ้นเป็น 2 วินาที (exponential backoff) แล้วลองรอบที่ 3",
+   "tokens": [
+    {
+     "id": "b",
+     "label": "40",
+     "at": "hb",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "hb": {
+     "sub": "รอ 2 วิ → รอบ 3"
+    }
+   }
+  },
+  {
+   "caption": "ฐานข้อมูลกลับมาแล้ว รอบนี้จึงผ่าน ถ้าลองครบ 4 รอบแล้วยังพัง จะตั้ง Failed ไว้ให้คนมาดู",
+   "tokens": [],
+   "nodes": {
+    "hb": {
+     "state": null,
+     "sub": "ผ่านในรอบ 3"
+    },
+    "jb": {
+     "sub": "Done",
+     "state": "ok"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+<p>error ชั่วคราวควร retry โดยรอนานขึ้นทุกรอบ (exponential backoff) และสุ่มระยะรอเพิ่มเล็กน้อย (jitter) เพื่อไม่ให้ทุกตัว retry พร้อมกันจนซ้ำเติมระบบ <a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">[AWS]</a> ส่วน error ที่เกิดจากข้อมูลไม่ควร retry เพราะเสียเวลาเปล่า ให้บันทึกไว้แล้วไปทำงานอื่นต่อ</p>
+</div>
+
+<div class="concept">
+<span class="num">12</span>
+<h3>งานที่พังถาวรต้องให้คนตัดสินใจ</h3>
+<div class="pic">ลองครบแล้วยังพัง → พักไว้ → คนดูสาเหตุ → สั่งทำใหม่</div>
+<p>ระบบส่วนใหญ่ย้ายงานแบบนี้ไป dead-letter queue (บทที่ 1) mapping-demo ใช้วิธีบันทึกสถานะ <code>Failed</code> ลงฐานข้อมูลแทน แล้วเปิด API ให้คนสั่งทำใหม่</p>
+</div>
+
+</div>
+
+<h2>4. mapping-demo รับมืออย่างไร</h2>
+
+<p>mapping-demo commit offset ของ Kafka <em>หลัง</em> handler ทำงานเสร็จ (<code>EnableAutoCommit = false</code> แล้วเรียก <code>consumer.Commit</code> เอง) จึงเป็น at-least-once และทุก handler ต้องรับ message ซ้ำได้</p>
+
+<div class="table-wrap">
+<table>
+<tr><th>Handler</th><th>ทำให้รับซ้ำได้อย่างไร</th></tr>
+<tr><td><code>FileImportHandler</code></td><td>Source Table มี unique key <code>(file_job_id, row_number)</code> insert แถวที่มีแล้วจะได้ <code>ON CONFLICT DO NOTHING</code> และไม่สร้าง row job กับ message ซ้ำ ส่วนไฟล์ที่ <code>Imported</code> หรือ archive แล้วจะข้ามไปทำแค่ขั้นที่เหลือ</td></tr>
+<tr><td><code>RowNormalizeHandler</code></td><td>เช็กสถานะก่อน ถ้า row job เป็น <code>Done</code>, <code>Invalid</code> หรือ <code>Failed</code> แล้วก็ข้าม และเขียน Normalized Table แบบ upsert ตาม <code>source_row_id</code> ทั้งหมดอยู่ใน transaction เดียว</td></tr>
+</table>
+</div>
+
+<h3>ลองเล่น: Worker ดับกลาง import</h3>
+<p>แผนภาพนี้ตามสถานการณ์ B2 ใน <a href="../../docs/acceptance-test-guide.md">acceptance-test-guide.md</a> คือกด <kbd>Ctrl</kbd>+<kbd>C</kbd> ที่ Worker ตอน import ไปได้ 60 แถว แล้วเปิดใหม่</p>
+
+<div class="step-diagram" data-step-diagram>
+<script type="application/json">
+{
+ "width": 640,
+ "height": 205,
+ "nodes": [
+  {
+   "id": "t",
+   "label": "mapping.file-import",
+   "sub": "",
+   "x": 10,
+   "y": 15,
+   "w": 170,
+   "h": 70,
+   "kind": "queue"
+  },
+  {
+   "id": "w",
+   "label": "Import worker",
+   "sub": "",
+   "x": 240,
+   "y": 15,
+   "w": 170,
+   "h": 70,
+   "kind": "consumer"
+  },
+  {
+   "id": "s",
+   "label": "Source Table",
+   "sub": "0 แถว",
+   "x": 470,
+   "y": 15,
+   "w": 160,
+   "h": 70,
+   "kind": "store"
+  },
+  {
+   "id": "f",
+   "label": "orders-a.csv",
+   "sub": "100 แถว",
+   "x": 240,
+   "y": 130,
+   "w": 170,
+   "h": 60,
+   "kind": "plain"
+  }
+ ],
+ "edges": [
+  {
+   "from": "t",
+   "to": "w"
+  },
+  {
+   "from": "f",
+   "to": "w",
+   "dashed": true
+  },
+  {
+   "from": "w",
+   "to": "s"
+  }
+ ],
+ "steps": [
+  {
+   "caption": "Import worker หยิบ message #1 ไปทำ แต่ยังไม่ commit เพราะงานยังไม่จบ",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "t",
+     "kind": "ghost"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "active",
+     "sub": "Importing"
+    }
+   }
+  },
+  {
+   "caption": "บันทึกไปแล้ว 60 แถว แต่ละแถว commit ลงฐานข้อมูลทันทีพร้อม row job และ outbox",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "t",
+     "kind": "ghost"
+    },
+    {
+     "id": "m",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "1–60",
+     "at": "s",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "s": {
+     "sub": "60 แถว"
+    }
+   }
+  },
+  {
+   "caption": "กด Ctrl+C Worker ดับ แถว 1–60 อยู่ในฐานข้อมูลแล้ว แต่ Kafka ยังไม่ได้รับ commit",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "t",
+     "kind": "ghost"
+    },
+    {
+     "id": "r1",
+     "label": "1–60",
+     "at": "s",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "down",
+     "sub": "ดับ"
+    }
+   }
+  },
+  {
+   "caption": "เปิด Worker ใหม่ Kafka ส่ง #1 มาอีกรอบ handler เริ่มงานนี้ใหม่ตั้งแต่ขั้นหน่วง",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "t",
+     "kind": "ghost"
+    },
+    {
+     "id": "m2",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "1–60",
+     "at": "s",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": "active",
+     "sub": "Delaying → Importing"
+    }
+   }
+  },
+  {
+   "caption": "อ่านแถว 1–60 อีกรอบ แต่มีอยู่แล้ว ON CONFLICT DO NOTHING จึงไม่ insert ซ้ำ และไม่สร้าง message ซ้ำ",
+   "tokens": [
+    {
+     "id": "g",
+     "label": "#1",
+     "at": "t",
+     "kind": "ghost"
+    },
+    {
+     "id": "m2",
+     "label": "#1",
+     "at": "w",
+     "kind": "msg"
+    },
+    {
+     "id": "r1",
+     "label": "1–60",
+     "at": "s",
+     "kind": "row"
+    },
+    {
+     "id": "d",
+     "label": "1–60",
+     "at": "s",
+     "kind": "ghost"
+    }
+   ],
+   "nodes": {
+    "s": {
+     "sub": "60 แถว (ไม่เพิ่ม)"
+    }
+   }
+  },
+  {
+   "caption": "แถว 61–100 เป็นแถวใหม่จึงบันทึกตามปกติ จบงานแล้ว consumer จึง commit ผลคือ 100 แถวพอดี",
+   "tokens": [
+    {
+     "id": "r1",
+     "label": "1–60",
+     "at": "s",
+     "kind": "row"
+    },
+    {
+     "id": "r2",
+     "label": "61–100",
+     "at": "s",
+     "kind": "row"
+    }
+   ],
+   "nodes": {
+    "w": {
+     "state": null,
+     "sub": "Imported"
+    },
+    "s": {
+     "sub": "100 แถว",
+     "state": "ok"
+    }
+   }
+  }
+ ]
+}
+</script>
+</div>
+
+
+<h3>สถานการณ์อื่นที่ควรรู้</h3>
+
+<div class="table-wrap">
+<table>
+<tr><th>สถานการณ์</th><th>สิ่งที่ระบบทำ</th><th>ต้องทำอะไรต่อ</th></tr>
+<tr><td>Worker ดับระหว่าง normalize แถวหนึ่ง</td><td>transaction ยังไม่ commit จึงย้อนกลับ row job ยังเป็น <code>Pending</code> พอ Worker กลับมา Kafka ส่ง message เดิมมาให้ทำใหม่</td><td>ไม่ต้องทำอะไร</td></tr>
+<tr><td>Kafka ล่มขณะมีไฟล์ใหม่เข้ามา</td><td>File Watcher ยังสร้างงานและเขียน outbox ได้ เพราะใช้แค่ PostgreSQL <code>OutboxDispatcher</code> ส่งไม่สำเร็จ message จึงค้างใน outbox (<code>sent_at</code> เป็น null) แล้วส่งต่อเมื่อ Kafka กลับมา</td><td>ไม่ต้องทำอะไร</td></tr>
+<tr><td>ข้อมูลในแถวผิด เช่น แถว 25 วันที่ผิดรูปแบบ</td><td>permanent error จึงไม่ retry ตั้ง row job เป็น <code>Invalid</code> บันทึก Row Error แล้วทำแถวอื่นต่อ ไฟล์จบที่ <code>CompletedWithErrors</code></td><td>แก้ข้อมูลต้นทาง หรือแก้กฎใน config version ใหม่แล้ว <strong>Reprocess</strong></td></tr>
+<tr><td>normalize พังชั่วคราว เช่น ฐานข้อมูลสะดุด</td><td>transient error จึง retry ใน handler หลัง 1, 2 และ 4 วินาที (exponential backoff ไม่มี jitter) ถ้าครบ 4 รอบยังพัง ตั้งเป็น <code>Failed</code></td><td>แก้สาเหตุแล้ว <strong>Retry</strong> row job: <code>POST /row-jobs/{id}/retry</code></td></tr>
+<tr><td>import ทั้งไฟล์ล้ม เช่น header ไม่ครบ หรือเกิด exception กลางไฟล์ (จำลองได้ด้วย <code>Demo:FailImportAtRow</code>)</td><td>ตั้ง file job เป็น <code>ImportFailed</code> พร้อม <code>lastError</code> แถวที่ import ไปแล้วยังอยู่</td><td>ถ้าสาเหตุมาจากระบบ แก้แล้ว <strong>Retry</strong> file job: <code>POST /file-jobs/{id}/retry</code> ระบบจะข้ามแถวที่มีอยู่แล้ว แต่ Retry อ่าน snapshot เดิมของไฟล์ จึงไม่ช่วยถ้าปัญหาอยู่ที่ตัวไฟล์ เช่น header ไม่ครบ</td></tr>
+</table>
+</div>
+
+<h3>Retry กับ Reprocess ต่างกันอย่างไร</h3>
+
+<p><a href="../../CONTEXT.md">CONTEXT.md</a> แยกสองคำนี้ไว้ชัด และโค้ดก็ทำตามนั้น</p>
+
+<div class="table-wrap">
+<table>
+<tr><th></th><th>Retry</th><th>Reprocess</th></tr>
+<tr><td>ใช้เมื่อ</td><td>ระบบพัง แต่ข้อมูลและกฎถูกแล้ว (ใช้ข้อมูลชุดเดิม)</td><td>กฎ normalize เปลี่ยน หรืออยากรันผลใหม่ด้วยกฎรุ่นอื่น</td></tr>
+<tr><td>config version</td><td>รุ่นเดิม</td><td>เลือกได้ (<code>versionId</code> ใน request)</td></tr>
+<tr><td>ทำกับงานไหน</td><td>เฉพาะงานที่ <code>Failed</code> หรือ <code>ImportFailed</code></td><td>ทุกแถวใน Source ของไฟล์นั้น ไม่ต้อง import ใหม่</td></tr>
+<tr><td>row job</td><td>ใช้ row job เดิม ตั้งกลับเป็น <code>Pending</code> และ <code>attempts = 0</code></td><td>สร้าง row job ใหม่ทุกแถว (<code>kind = Reprocess</code>) ประวัติเดิมยังอยู่</td></tr>
+<tr><td>endpoint</td><td><code>POST /file-jobs/{id}/retry</code><br><code>POST /row-jobs/{id}/retry</code></td><td><code>POST /file-jobs/{id}/reprocess</code></td></tr>
+</table>
+</div>
+
+<p>ถ้า reprocess แล้วแถวไหนไม่ผ่าน ผล normalize ที่สำเร็จล่าสุดของแถวนั้นยังอยู่ เพราะ handler upsert ลง Normalized Table เฉพาะตอนผ่านเท่านั้น CONTEXT.md เรียกผลนี้ว่า Current Normalized Result</p>
+
+<h2>5. ทบทวนโดยไม่เลื่อนขึ้นไปดู</h2>
+
+<div class="quiz">
+<p class="q">1. Worker ดับตอน import ไปได้ 60 แถวจาก 100 แล้วเปิดใหม่ เมื่องานจบ Source Table มีแถวของไฟล์นี้กี่แถว?</p>
+<ol class="options">
+<li data-correct>100 แถว เพราะระบบข้ามแถวที่มีอยู่แล้ว</li>
+<li>160 แถว เพราะ import ใหม่ตั้งแต่แถวแรก</li>
+<li>60 แถว เพราะงานจบไปตอนที่ Worker ดับ</li>
+<li>40 แถว เพราะเริ่มใหม่จากแถวที่ 61 เท่านั้น</li>
+</ol>
+<div class="why">handler อ่านไฟล์ใหม่ตั้งแต่แถวแรกจริง แต่ unique key <code>(file_job_id, row_number)</code> ทำให้ระบบไม่ insert แถว 1–60 ซ้ำ ผลรวมจึงเป็น 100</div>
+</div>
+
+<div class="quiz">
+<p class="q">2. mapping-demo commit offset ของ Kafka ตอนไหน และได้ semantics แบบไหน?</p>
+<ol class="options">
+<li data-correct>หลังทำงานเสร็จ จึงเป็น at-least-once</li>
+<li>ก่อนเริ่มทำงาน จึงเป็น at-least-once</li>
+<li>หลังทำงานเสร็จ จึงเป็น at-most-once</li>
+<li>ก่อนเริ่มทำงาน จึงเป็น exactly-once</li>
+</ol>
+<div class="why">commit หลังทำงาน ถ้าดับก่อน commit งานจะกลับมาให้ทำซ้ำ งานจึงไม่หายแต่อาจซ้ำ ตามนิยาม at-least-once ใน Kafka docs</div>
+</div>
+
+<div class="quiz">
+<p class="q">3. แถว 25 มีวันที่ผิดรูปแบบ ระบบทำอย่างไรกับแถวนี้?</p>
+<ol class="options">
+<li data-correct>ตั้งเป็น Invalid ทันที โดยไม่ลองใหม่</li>
+<li>ลองใหม่ 4 รอบ แล้วจึงตั้งเป็น Failed</li>
+<li>หยุด import ทั้งไฟล์เป็น ImportFailed</li>
+<li>ส่งแถวนี้ไปพักใน dead-letter queue</li>
+</ol>
+<div class="why">ข้อมูลผิดเป็น permanent error ลองกี่รอบก็ได้ผลเดิม ระบบจึงบันทึก Row Error แล้วทำแถวอื่นต่อ และ mapping-demo ก็ไม่มี dead-letter queue</div>
+</div>
+
+<div class="quiz">
+<p class="q">4. normalize แถวหนึ่งพังเพราะฐานข้อมูลสะดุดชั่วคราว ระบบทำอย่างไร?</p>
+<ol class="options">
+<li data-correct>ลองใหม่หลัง 1, 2, 4 วินาที ก่อนตั้ง Failed</li>
+<li>ตั้งเป็น Invalid ทันทีและบันทึก Row Error</li>
+<li>ลองใหม่ไปเรื่อย ๆ จนกว่าจะทำสำเร็จ</li>
+<li>ข้ามแถวนั้นไปโดยไม่บันทึกอะไรไว้เลย</li>
+</ol>
+<div class="why">transient error ควร retry แบบ backoff แต่ต้องมีเพดาน ไม่อย่างนั้นแถวที่พังจริงจะวนไม่จบ ครบ 4 รอบแล้วจึงตั้ง <code>Failed</code> ให้คนตัดสินใจ</div>
+</div>
+
+<div class="quiz">
+<p class="q">5. แก้กฎวันที่ใน config version ใหม่แล้ว อยากให้แถว 25 ผ่าน ต้องทำอย่างไร?</p>
+<ol class="options">
+<li data-correct>Reprocess ไฟล์นั้นพร้อมเลือก version ใหม่</li>
+<li>Retry row job ของแถว 25 ด้วย version เดิม</li>
+<li>วางไฟล์เดิมลง input/ ซ้ำอีกครั้งหนึ่ง</li>
+<li>รอให้ Worker ลองใหม่เองโดยอัตโนมัติ</li>
+</ol>
+<div class="why">Retry ใช้กฎรุ่นเดิมและใช้ได้เฉพาะงานที่ <code>Failed</code> ส่วนแถว 25 เป็น <code>Invalid</code> ถ้าวางไฟล์เดิมซ้ำ เนื้อหาจะซ้ำกับไฟล์เก่าและได้ <code>Duplicate</code> ทางเดียวที่ใช้กฎใหม่คือ Reprocess</div>
+</div>
+
+<div class="quiz">
+<p class="q">6. Kafka ล่ม 5 นาที ขณะที่มีไฟล์ใหม่เข้ามา จะเกิดอะไรขึ้น?</p>
+<ol class="options">
+<li data-correct>งานรออยู่ใน outbox แล้วส่งเมื่อ Kafka กลับมา</li>
+<li>File Watcher ปฏิเสธไฟล์จน Kafka กลับมา</li>
+<li>งานหายไป ต้องวางไฟล์ใหม่อีกรอบทั้งหมด</li>
+<li>Worker import ไฟล์จาก input/ เองโดยตรง</li>
+</ol>
+<div class="why">File Watcher ไม่ได้คุยกับ Kafka โดยตรง แค่เขียน <code>file_jobs</code> กับ <code>outbox</code> ลง PostgreSQL ส่วน <code>OutboxDispatcher</code> ส่งไม่สำเร็จก็ลองใหม่ทุกครึ่งวินาที บทที่ 6 จะดูว่าทำไมออกแบบแบบนี้</div>
+</div>
+
+<p class="quiz-score" data-quiz-score></p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
+
+<h2>6. ลองกับระบบจริง (ไม่บังคับ)</h2>
+
+<p>ทำตามสถานการณ์ B2 ใน <a href="../../docs/acceptance-test-guide.md">acceptance-test-guide.md</a> ต้องรันเดโมตาม <a href="../../README.md">README</a> ไว้ก่อน ยกเว้น Worker ให้เปิดด้วยค่าที่ทำให้ import ช้าลง</p>
+
+<div class="callout ask">
+<p><strong>ทายก่อนลงมือ:</strong> ถ้ากด <kbd>Ctrl</kbd>+<kbd>C</kbd> ตอน Source มี 40 แถว แล้วเปิด Worker ใหม่ <code>rows</code> กับ <code>distinct_rows</code> ตอนจบจะเป็นเท่าไร</p>
+</div>
+
+<ol class="steps">
+<li>เปิด Worker แบบ import ช้า:
+<pre><code>dotnet run --project src/MappingDemo.Worker -- `
+    Import:DelaySeconds=1 `
+    Demo:ImportRowDelayMs=200</code></pre></li>
+<li>รัน <code>pwsh ./scripts/generate-sample.ps1</code> แล้วเก็บ id ของงาน:
+<pre><code>$job = Invoke-RestMethod http://localhost:5181/file-jobs |
+    Where-Object fileName -eq "orders-a.csv"</code></pre></li>
+<li>นับแถวใน Source จนได้ราว 10–90 แถว:
+<pre><code>docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT count(*) FROM source_orders WHERE file_job_id = $($job.id);"</code></pre></li>
+<li>กด <kbd>Ctrl</kbd>+<kbd>C</kbd> ที่ Worker แล้วเปิดใหม่ด้วยคำสั่งเดิม ดู log ว่า Worker ได้ message เดิมกลับมา</li>
+<li>เมื่อ <code>importStatus</code> เป็น <code>Imported</code> แล้ว ตรวจว่าไม่มีแถวซ้ำ:
+<pre><code>docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT count(*) AS rows, count(DISTINCT row_number) AS distinct_rows FROM source_orders WHERE file_job_id = $($job.id);"</code></pre></li>
+</ol>
+
+<h2>7. อธิบายด้วยคำพูดตัวเอง</h2>
+<div class="callout ask">
+<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<ol>
+<li>ทำไม mapping-demo ถึงเลือก at-least-once และใช้อะไรกันไม่ให้ข้อมูลซ้ำ?</li>
+<li>แถวที่ <code>Invalid</code> กับแถวที่ <code>Failed</code> ควรแก้ด้วยวิธีเดียวกันไหม เพราะอะไร?</li>
+</ol>
+<p>Claude จะตรวจคำตอบ แล้วใช้คำตอบนั้นวางจุดเริ่มของบทถัดไป ถ้าตรงไหนยังงง ถามในแชทได้เลย</p>
+</div>
+
+<h2>อ่านต่อ</h2>
+<p><strong>แหล่งอ่านหลัก:</strong> <a href="https://kafka.apache.org/documentation/#semantics">Apache Kafka, Message Delivery Semantics</a> อ่านตั้งแต่ต้นหัวข้อถึงย่อหน้าที่อธิบายว่า consumer บันทึกตำแหน่งก่อนหรือหลังทำงาน ราว 10 นาที</p>
+<p>อยากรู้ว่าทำไม retry ต้องมี jitter: <a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">AWS Architecture Blog, “Exponential Backoff And Jitter”</a> มีกราฟเปรียบเทียบให้ดู</p>
+<p>สรุปทุกสถานการณ์ในหน้าเดียวอยู่ที่ <a href="../reference/failure-playbook.html">สรุปเมื่อมีอะไรพัง</a></p>
+
+<footer class="next">
+<span>บทที่ 4 จาก ~6</span>
+<span>ถัดไป: <a href="0005-many-workers.html">บทที่ 5 หลาย worker ช่วยกัน (partition, consumer group และ rebalance) →</a></span>
+</footer>
+
+</main>
+</body>
+</html>

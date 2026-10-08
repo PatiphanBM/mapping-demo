@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>อภิธานศัพท์ Messaging</title>
+<link rel="stylesheet" href="../assets/course.css">
+<style>
+  dl { margin: 1rem 0; }
+  dt { font-weight: 600; margin-top: 1.25rem; font-family: var(--font-mono); }
+  dd { margin: 0.2rem 0 0; max-width: 40rem; }
+  dd .avoid { display: block; font-size: 0.85rem; color: var(--muted); }
+  .status { font-family: var(--font-body); font-size: 0.72rem; font-weight: 500; padding: 0.05rem 0.45rem; border-radius: 3px; margin-left: 0.4rem; vertical-align: middle; }
+  .status.new { background: var(--accent-soft); color: var(--accent); }
+  .status.known { background: var(--ok-soft); color: var(--ok); }
+</style>
+</head>
+<body>
+<main>
+
+<nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · reference · <a href="message-map.html">แผนที่ message</a> · <a href="../lessons/0001-history-and-concepts.html">บทที่ 1</a> · <a href="../lessons/0002-queue-and-worker-in-mapping-demo.html">บทที่ 2</a> · <a href="../lessons/0003-life-of-a-file-job.html">บทที่ 3</a> · <a href="../lessons/0004-when-things-fail.html">บทที่ 4</a> · <a href="../lessons/0005-many-workers.html">บทที่ 5</a> · <a href="../lessons/0006-outbox.html">บทที่ 6</a> · <a href="job-status.html">สรุปสถานะงาน</a> · <a href="failure-playbook.html">สรุปเมื่อมีอะไรพัง</a></nav>
+<p class="kicker">Reference</p>
+<h1>อภิธานศัพท์ Queue &amp; Worker</h1>
+<p class="subtitle">ภาษากลางของคอร์สนี้ ทุกบทใช้คำตามหน้านี้ ศัพท์โดเมน (Source Table, File Import Job ฯลฯ) ดูที่ <a href="../../CONTEXT.md">CONTEXT.md</a></p>
+
+<p class="legend"><span class="status new">เคยเจอแล้ว</span> มีอยู่ในบทเรียนแล้ว · <span class="status known">เข้าใจแล้ว</span> อธิบายหรือใช้ได้ถูกต้องแล้ว</p>
+
+<h2>พื้นฐาน</h2>
+<dl>
+<dt>message <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>คำสั่งงานหรือเหตุการณ์หนึ่งชิ้นที่ส่งผ่าน queue ใน mapping-demo มีแค่ id เช่น <code>{"fileJobId":1}</code>
+<span class="avoid">เลี่ยง: event, record (Kafka docs ใช้ทั้งสองคำ คอร์สนี้ใช้ message ตามชื่อคลาสในโค้ด)</span></dd>
+
+<dt>producer <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>โปรแกรมที่ส่ง message เข้า queue ใน mapping-demo คือ File Watcher (รอบ import) และ Import worker (รอบ normalize)
+<span class="avoid">เลี่ยง: publisher, sender</span></dd>
+
+<dt>queue <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>ที่พัก message ระหว่าง producer กับ consumer ทำให้ทั้งสองฝั่งไม่ต้องรอกันและไม่ต้องทำงานพร้อมกัน</dd>
+
+<dt>topic <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>queue หนึ่งรางใน Kafka (ต่างจาก queue ทั่วไปตรงที่ message ไม่ถูกลบทันทีหลังทำเสร็จ) ใน mapping-demo มี <code>mapping.file-import</code> กับ <code>mapping.row-normalize</code>
+<span class="avoid">เลี่ยง: channel, queue (เมื่อพูดถึง Kafka โดยเฉพาะ)</span></dd>
+
+<dt>consumer <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>โปรแกรมที่อ่าน message จาก topic แล้วทำงานตามนั้น เช่น <code>FileImportConsumer</code></dd>
+
+<dt>worker <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>process ที่รันค้างไว้เพื่อทำงานเบื้องหลัง ใน mapping-demo คือ <code>MappingDemo.Worker</code> ซึ่งรัน background service สามตัว: <code>OutboxDispatcher</code>, <code>FileImportConsumer</code>, <code>RowNormalizeConsumer</code>
+<span class="avoid">เลี่ยงใช้สลับกับ consumer: worker คือโปรเซส, consumer คือบทบาทอ่าน message ภายในโปรเซส</span></dd>
+
+<dt>outbox <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>ตารางใน PostgreSQL ที่เก็บ message รอส่ง เขียนใน transaction เดียวกับข้อมูลงาน แล้ว <code>OutboxDispatcher</code> ค่อยส่งเข้า Kafka (“กล่องจดหมายขาออก” รายละเอียดบทที่ 6)</dd>
+</dl>
+
+<h2>Concept</h2>
+<dl>
+<dt>decoupling <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การแยก producer กับ worker ออกจากกันด้วย queue ทั้งสองฝั่งจึงไม่ต้องรอกัน ไม่ต้องเร็วเท่ากัน และไม่ต้องเปิดพร้อมกัน</dd>
+
+<dt>load leveling <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การใช้ queue เป็นกันชนพักงานที่เข้ามาเป็นระลอก ให้ worker ทำในจังหวะคงที่ของตัวเอง
+<span class="avoid">เลี่ยง: buffering (ใช้ได้ แต่คอร์สนี้ใช้ load leveling)</span></dd>
+
+<dt>competing consumers <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>worker หลายตัวที่ช่วยกันหยิบงานจาก queue เดียวกัน โดยงานแต่ละชิ้นมี worker ทำแค่ตัวเดียว</dd>
+
+<dt>point-to-point / publish-subscribe <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>point-to-point: message หนึ่งชิ้นไปถึงผู้รับเพียงรายเดียว (เหมาะกับ “งาน”) · publish-subscribe: ผู้ติดตามทุกรายได้คนละหนึ่งสำเนา (เหมาะกับ “ข่าว”)</dd>
+
+<dt>at-least-once <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การรับประกันว่า message แต่ละชิ้นจะได้ทำอย่างน้อยหนึ่งครั้ง ไม่หายแต่อาจซ้ำ เพราะ worker ที่ดับก่อนแจ้งว่าเสร็จจะได้งานเดิมกลับมาทำอีกรอบ</dd>
+
+<dt>idempotent <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>คุณสมบัติของ worker ที่ทำ message เดิมซ้ำกี่รอบก็ได้ผลลัพธ์เหมือนทำครั้งเดียว</dd>
+
+<dt>dead-letter queue <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>queue สำหรับพัก message ที่ทำไม่สำเร็จถาวร เพื่อไม่ให้ไปขวางงานอื่น (mapping-demo ไม่มี DLQ แต่ใช้สถานะ Failed ในฐานข้อมูลแทน)</dd>
+<dt>job record <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>แถวในฐานข้อมูลที่สร้างตอนรับงาน ใช้ id เป็นเลขอ้างอิงทั้งใน message และตอนถามสถานะ ใน mapping-demo คือแถวใน <code>file_jobs</code> และ <code>row_jobs</code>
+<span class="avoid">เลี่ยง: ticket, task (ใช้ได้ในบทเปรียบเทียบเท่านั้น)</span></dd>
+
+<dt>terminal / non-terminal state <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>terminal state คือสถานะสุดท้ายที่งานไม่เปลี่ยนต่อเอง เช่น <code>Imported</code>, <code>Done</code> ส่วน non-terminal state คือสถานะระหว่างทาง เช่น <code>Queued</code>, <code>Pending</code></dd>
+
+<dt>status endpoint / polling <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>status endpoint คือ API ที่ตอบสถานะปัจจุบันของงาน polling คือการที่ client เรียก API นี้ซ้ำเป็นระยะจนได้ terminal state ใน mapping-demo คือ <code>GET /file-jobs/{id}</code></dd>
+<dt>delivery semantics <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การรับประกันว่า message แต่ละชิ้นจะได้ทำกี่ครั้ง at-most-once (อาจหายแต่ไม่ซ้ำ), at-least-once (ไม่หายแต่อาจซ้ำ), exactly-once (ครั้งเดียวพอดี) ฝั่ง consumer กำหนดได้ด้วยการเลือกว่าจะ commit ก่อนหรือหลังทำงาน</dd>
+
+<dt>idempotent receiver <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>handler ที่รับ message เดิมซ้ำได้โดยไม่เกิดผลซ้ำ ใน mapping-demo ทำด้วยการเช็กสถานะก่อนทำ, unique key กับ <code>ON CONFLICT DO NOTHING</code> และ upsert</dd>
+
+<dt>transient / permanent error <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>transient error คือ error ชั่วคราวที่ลองใหม่อาจผ่าน เช่น ฐานข้อมูลสะดุด ส่วน permanent error ลองกี่รอบก็ได้ผลเดิม เช่น ข้อมูลผิดกฎ</dd>
+
+<dt>exponential backoff <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การ retry โดยรอนานขึ้นเป็นเท่าตัวในแต่ละรอบ เช่น 1, 2, 4 วินาที มักเติม jitter (สุ่มระยะรอเพิ่ม) เพื่อไม่ให้ client ทุกตัว retry พร้อมกัน</dd>
+
+<dt>Retry / Reprocess <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>Retry คือทำงานที่ล้มเหลวซ้ำด้วยข้อมูลและ config version เดิม Reprocess คือ normalize Source ใหม่ทั้งไฟล์โดยเลือก config version ได้ นิยามเต็มอยู่ใน <a href="../../CONTEXT.md">CONTEXT.md</a>
+<span class="avoid">เลี่ยงใช้สลับกัน: สองคำนี้มีความหมายต่างกันในโปรเจกต์นี้</span></dd>
+
+<dt>partition <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>แถวย่อยของ topic แต่ละแถวเรียง message ตามลำดับที่เข้ามา ใน consumer group หนึ่ง partition มี consumer ถือได้ตัวเดียว จำนวน partition จึงเป็นเพดานของงานที่ทำพร้อมกันได้ ทั้งสอง topic ใน mapping-demo มี 3 partition</dd>
+
+<dt>consumer group <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>ชื่อทีมของ consumer (<code>GroupId</code>) ตัวที่อยู่ group เดียวกันแบ่ง partition กัน คนละ group ได้ message ครบทุกชิ้น ใน mapping-demo คือ <code>mapping-file-import</code> และ <code>mapping-row-normalize</code></dd>
+
+<dt>message key <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>ค่าที่ producer แนบไปกับ message ใช้เลือก partition key เดียวกันลง partition เดียวกันเสมอ ใน mapping-demo คือ <code>fileJobId</code> (file-import) และ <code>sourceRowId</code> (row-normalize)</dd>
+
+<dt>rebalance <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การที่ Kafka แจก partition ใหม่ทุกครั้งที่มี consumer เข้าหรือออกจาก group Worker เขียน log <code>assigned partitions</code> ทุกครั้งที่เกิด</dd>
+
+<dt>dual write <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>การเขียนลงสองระบบที่ไม่มี transaction ร่วมกัน เช่น PostgreSQL กับ Kafka มีจังหวะที่สำเร็จแค่ฝั่งเดียวเสมอ</dd>
+
+<dt>transactional outbox <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>เขียน message ลงตาราง outbox ใน transaction เดียวกับข้อมูลงาน แล้วให้ message relay ส่งเข้า broker ทีหลัง ใน mapping-demo ทุกจุดเขียนผ่าน <code>OutboxWriter.AddAsync</code></dd>
+
+<dt>message relay / polling publisher <span class="status new">เคยเจอแล้ว</span></dt>
+<dd>ตัวที่อ่าน outbox แล้วส่งต่อเข้า broker แบบ polling คือ poll ตารางเป็นระยะ ใน mapping-demo คือ <code>OutboxDispatcher</code> (ทุก 500 ms, ทีละ 100 แถว, เรียงตาม id)</dd>
+</dl>
+
+
+
+</main>
+</body>
+</html>
