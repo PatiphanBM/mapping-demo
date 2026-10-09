@@ -24,16 +24,12 @@
 
 <h2>1. ปัญหา: งานบางอย่างช้าเกินกว่าจะรอ</h2>
 
-<p>ไฟล์หนึ่งไฟล์ใน mapping-demo ต้องผ่านขั้นตอนเยอะ: รอให้ไฟล์เขียนเสร็จ (<code>Import:DelaySeconds</code>), อ่านทีละแถวลง Source, normalize ทีละแถวลง Normalized, แล้วย้ายไฟล์ไป archive ถ้าให้ File Watcher ใน API ทำทั้งหมดเอง จะเจอปัญหาสามอย่าง</p>
-<ul>
-<li><strong>ค้าง:</strong> ระหว่างทำไฟล์หนึ่ง ไฟล์ถัดไปต้องรอคิว</li>
-<li><strong>หาย:</strong> ถ้า API ล่มกลางทาง งานที่ค้างอยู่ในหน่วยความจำหายไปด้วย</li>
-<li><strong>ขยายไม่ได้:</strong> อยากได้คนช่วยทำเพิ่ม ก็ต้องเพิ่ม API ทั้งก้อน</li>
-</ul>
+<p>ไฟล์หนึ่งไฟล์ใน mapping-demo ต้องผ่านขั้นตอนเยอะ: รอให้ไฟล์เขียนเสร็จ (<code>Import:DelaySeconds</code>), อ่านทีละแถวลง Source, normalize ทีละแถวลง Normalized, แล้วย้ายไฟล์ไป archive</p>
+<p>ถ้าให้ File Watcher ใน API ทำทั้งหมดเอง ระหว่างที่ทำไฟล์หนึ่งอยู่ ไฟล์ถัดไปต้องรอ ถ้า API ล่มกลางทาง งานที่ค้างอยู่ในหน่วยความจำก็หายไปด้วย และถ้าอยากเพิ่มคนช่วยทำ ก็ต้องเพิ่ม API ทั้งก้อน</p>
 
 <h2>2. ทางออก: แยกคนสั่งงานออกจากคนทำงาน</h2>
 
-<aside class="note">“A message queue is a form of asynchronous service-to-service communication… a component called a producer adds a message to the queue… another component called a consumer retrieves the message and does something with it.” — <a href="https://aws.amazon.com/message-queue/">AWS: Message Queues</a></aside>
+<aside class="note">“A message queue is a form of asynchronous service-to-service communication… a component called a producer adds a message to the queue… another component called a consumer retrieves the message and does something with it.” (ที่มา: <a href="https://aws.amazon.com/message-queue/">AWS: Message Queues</a>)</aside>
 
 <p>แนวคิดนี้คือ decoupling (concept ข้อ 01 ใน<a href="0001-history-and-concepts.html">บทที่ 1</a>) ลองนึกถึงร้านกาแฟ แคชเชียร์รับออเดอร์ เขียนบิลแปะไว้บนราง แล้วหันไปรับลูกค้าคนถัดไปทันที บาริสต้าหยิบบิลจากรางไปชงทีละใบ ถ้าบาริสต้าพักห้านาที บิลก็แค่รออยู่บนราง ไม่หายไปไหน</p>
 
@@ -49,7 +45,7 @@
 
 <p>message มีแค่เลขงาน เหมือนบิลที่เขียนแค่เลขออเดอร์ ส่วนรายละเอียดทั้งหมด (ไฟล์อยู่ไหน ใช้ config version ไหน) อยู่ในตาราง <code>file_jobs</code> ของ PostgreSQL Worker เอาเลขนี้ไปค้นต่อเอง</p>
 
-<aside class="note">Kafka นิยามตัวเองว่าเก็บ event ไว้ใน topic ซึ่ง “very simplified, a topic is similar to a folder in a filesystem” — <a href="https://kafka.apache.org/intro">Apache Kafka: Introduction</a></aside>
+<aside class="note">Kafka นิยามตัวเองว่าเก็บ event ไว้ใน topic ซึ่ง “very simplified, a topic is similar to a folder in a filesystem” (ที่มา: <a href="https://kafka.apache.org/intro">Apache Kafka: Introduction</a>)</aside>
 
 <p>ในโปรเจกต์นี้ Kafka คือรางแปะบิล แต่ละรางเรียกว่า topic และ mapping-demo มีสองราง</p>
 
@@ -475,11 +471,11 @@
 <ol>
 <li>Import worker เป็น worker ของรอบ 1 และเป็น producer ของรอบ 2 ไปพร้อมกัน</li>
 <li>งานหนึ่งแตกเป็นหลายงาน ไฟล์ <code>orders-a.csv</code> 100 แถวสร้าง message รอบแรก 1 อัน และรอบที่สองอีก 100 อัน</li>
-<li>แถวที่ 1 เริ่ม normalize ได้ทันทีขณะที่แถวที่ 2–100 ยัง import อยู่ ตรงกับที่ README บอกว่า normalize “ไม่ต้องรอให้ทั้งไฟล์ import เสร็จ”</li>
+<li>แถวที่ 1 เริ่ม normalize ได้ทันทีขณะที่แถวที่ 2 ถึง 100 ยัง import อยู่ ตรงกับที่ README บอกว่า normalize “ไม่ต้องรอให้ทั้งไฟล์ import เสร็จ”</li>
 </ol>
 
 <h3>ข้างในโปรแกรม Worker มีอะไรบ้าง</h3>
-<aside class="note">.NET เรียกโปรแกรมแบบนี้ว่า Worker Service; background service แต่ละตัวเป็น <code>BackgroundService</code> ที่วนทำงานไปจนโปรแกรมถูกสั่งหยุด — <a href="https://learn.microsoft.com/en-us/dotnet/core/extensions/workers">Microsoft Learn: Worker Services</a></aside>
+<aside class="note">.NET เรียกโปรแกรมแบบนี้ว่า Worker Service; background service แต่ละตัวเป็น <code>BackgroundService</code> ที่วนทำงานไปจนโปรแกรมถูกสั่งหยุด (ที่มา: <a href="https://learn.microsoft.com/en-us/dotnet/core/extensions/workers">Microsoft Learn: Worker Services</a>)</aside>
 <p>ในโปรแกรม <code>MappingDemo.Worker</code> มี background service สามตัวรันพร้อมกัน แต่ละตัววนทำงานไปเรื่อย ๆ จนกว่าจะปิดโปรแกรม (ดูที่ <code>src/MappingDemo.Worker/Program.cs</code> บรรทัด <code>AddHostedService</code>):</p>
 <div class="table-wrap">
 <table>
@@ -580,7 +576,7 @@
 </div>
 
 <p class="quiz-score" data-quiz-score></p>
-<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน จะจำได้นานกว่าการอ่านซ้ำ</p>
+<p class="no-print"><button type="button" data-quiz-reset>สลับตัวเลือกแล้วเริ่มใหม่</button> พรุ่งนี้ลองกลับมาทำอีกรอบโดยไม่อ่านเนื้อหาก่อน</p>
 
 <h2>7. ลองกับระบบจริง (ไม่บังคับ)</h2>
 
@@ -601,7 +597,7 @@
 <h2>8. อธิบายด้วยคำพูดตัวเอง</h2>
 
 <div class="callout ask">
-<p>พิมพ์ตอบ Claude ในแชทสั้น ๆ 2–3 ประโยค:</p>
+<p>พิมพ์ตอบ Claude ในแชทสั้น ๆ 2 ถึง 3 ประโยค:</p>
 <ol>
 <li>ทำไม File Watcher ถึงไม่ import ไฟล์เอง?</li>
 <li>ทำไม Import worker ถึงเป็นทั้ง “ผู้ทำงาน” และ “ผู้สั่งงาน” ในเวลาเดียวกัน?</li>

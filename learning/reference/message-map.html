@@ -48,7 +48,7 @@
 <tr><td>Payload (C#)</td><td><code>FileImportRequested(long FileJobId)</code></td><td><code>RowNormalizeRequested(long RowJobId)</code></td></tr>
 <tr><td>Value บน Kafka</td><td><code>{"fileJobId":1}</code></td><td><code>{"rowJobId":1}</code></td></tr>
 <tr><td>Key</td><td>fileJobId</td><td>sourceRowId (ไม่ใช่ rowJobId)</td></tr>
-<tr><td>เขียน outbox จาก</td><td><code>FileIntake.CreateJobAsync</code> (Watcher)<br><code>FileJobService</code> — retry file job</td><td><code>FileImportHandler</code> — ทุกแถวที่บันทึก Source<br><code>FileJobService</code> — reprocess<br><code>RowJobService</code> — retry row job</td></tr>
+<tr><td>เขียน outbox จาก</td><td><code>FileIntake.CreateJobAsync</code> (Watcher)<br><code>FileJobService</code>: retry file job</td><td><code>FileImportHandler</code>: ทุกแถวที่บันทึก Source<br><code>FileJobService</code>: reprocess<br><code>RowJobService</code>: retry row job</td></tr>
 <tr><td>Consumer group</td><td><code>mapping-file-import</code></td><td><code>mapping-row-normalize</code></td></tr>
 <tr><td>จำนวน consumer</td><td><code>Kafka:FileImportConsumers</code></td><td><code>Kafka:NormalizeConsumers</code></td></tr>
 <tr><td>Handler</td><td><code>FileImportHandler</code> (คืน <code>false</code> → <code>Pause</code> partition)</td><td><code>RowNormalizeHandler</code></td></tr>

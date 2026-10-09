@@ -25,11 +25,11 @@
 
 <p>ในตัวจำลองของบทที่ 2 ถ้าปิด Worker ระหว่างที่งานกำลังทำอยู่ พอเปิดใหม่ Worker จะทำงานชิ้นนั้นอีกรอบ นี่คือ at-least-once จากบทที่ 1 ซึ่งทำให้เกิดคำถามตามมาสองข้อ งานที่ทำไปครึ่งทางจะเป็นอย่างไร และถ้าทำซ้ำ ข้อมูลจะซ้ำไหม</p>
 
-<p>ใน mapping-demo มี API, Worker, Kafka และ PostgreSQL รันแยก process และคุยกันผ่านเครือข่าย ตัวไหนก็ดับหรือช้าได้ทุกเมื่อ ความล้มเหลวจึงเป็นเรื่องปกติที่ต้องออกแบบรองรับไว้ก่อน ไม่ใช่ข้อยกเว้น</p>
+<p>ใน mapping-demo มี API, Worker, Kafka และ PostgreSQL รันแยก process และคุยกันผ่านเครือข่าย ตัวไหนก็ดับหรือช้าได้ทุกเมื่อ ความล้มเหลวจึงเป็นเรื่องปกติที่ต้องออกแบบรองรับไว้ตั้งแต่แรก</p>
 
 <h2>2. ที่มาของ concept</h2>
 
-<p>เริ่มจากข้อเท็จจริงว่า worker ดับได้ทุกเมื่อ แล้วไล่คำถามที่ตามมาทีละข้อ แต่ละคำตอบคือ concept หนึ่งข้อ</p>
+<p>เริ่มจากข้อเท็จจริงว่า worker ดับได้ทุกเมื่อ แล้วไล่คำถามที่ตามมาทีละข้อ</p>
 
 <ol>
 <li>worker ควรบอก queue ว่า “เสร็จแล้ว” ตอนไหน? ถ้าบอกก่อนทำ แล้วดับกลางทาง งานหาย ถ้าบอกหลังทำ งานไม่หาย แต่ worker อาจได้งานเดิมกลับมาทำซ้ำ → <strong>09 delivery semantics</strong></li>
@@ -273,7 +273,7 @@
 }
 </script>
 </div>
-<p>consumer เลือกได้ว่าจะบันทึกตำแหน่งที่อ่านถึง (commit) ก่อนหรือหลังทำงาน ถ้า commit ก่อนแล้วดับ งานนั้นหาย ถ้า commit หลังแล้วดับ งานนั้นจะกลับมาให้ทำซ้ำ <a href="https://kafka.apache.org/documentation/#semantics">[Kafka docs]</a> ส่วนใหญ่เลือก at-least-once เพราะงานซ้ำแก้ได้ด้วย idempotency แต่งานที่หายไปแล้วกู้คืนไม่ได้</p>
+<p>consumer เลือกได้ว่าจะบันทึกตำแหน่งที่อ่านถึง (commit) ก่อนหรือหลังทำงาน ถ้า commit ก่อนแล้วดับ งานนั้นหาย ถ้า commit หลังแล้วดับ งานนั้นจะกลับมาให้ทำซ้ำ <a href="https://kafka.apache.org/documentation/#semantics">[Kafka docs]</a> ถ้าต้องเลือก at-least-once มักคุ้มกว่า เพราะงานซ้ำแก้ได้ด้วย idempotency แต่งานที่หายไปแล้วกู้คืนไม่ได้</p>
 </div>
 
 <div class="concept">
@@ -476,7 +476,7 @@
 <span class="num">12</span>
 <h3>งานที่พังถาวรต้องให้คนตัดสินใจ</h3>
 <div class="pic">ลองครบแล้วยังพัง → พักไว้ → คนดูสาเหตุ → สั่งทำใหม่</div>
-<p>ระบบส่วนใหญ่ย้ายงานแบบนี้ไป dead-letter queue (บทที่ 1) mapping-demo ใช้วิธีบันทึกสถานะ <code>Failed</code> ลงฐานข้อมูลแทน แล้วเปิด API ให้คนสั่งทำใหม่</p>
+<p>หลายระบบย้ายงานแบบนี้ไป dead-letter queue (บทที่ 1) mapping-demo ใช้วิธีบันทึกสถานะ <code>Failed</code> ลงฐานข้อมูลแทน แล้วเปิด API ให้คนสั่งทำใหม่</p>
 </div>
 
 </div>
@@ -599,7 +599,7 @@
     },
     {
      "id": "r1",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "row"
     }
@@ -611,7 +611,7 @@
    }
   },
   {
-   "caption": "กด Ctrl+C Worker ดับ แถว 1–60 อยู่ในฐานข้อมูลแล้ว แต่ Kafka ยังไม่ได้รับ commit",
+   "caption": "กด Ctrl+C Worker ดับ แถว 1 ถึง 60 อยู่ในฐานข้อมูลแล้ว แต่ Kafka ยังไม่ได้รับ commit",
    "tokens": [
     {
      "id": "g",
@@ -621,7 +621,7 @@
     },
     {
      "id": "r1",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "row"
     }
@@ -650,7 +650,7 @@
     },
     {
      "id": "r1",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "row"
     }
@@ -663,7 +663,7 @@
    }
   },
   {
-   "caption": "อ่านแถว 1–60 อีกรอบ แต่มีอยู่แล้ว ON CONFLICT DO NOTHING จึงไม่ insert ซ้ำ และไม่สร้าง message ซ้ำ",
+   "caption": "อ่านแถว 1 ถึง 60 อีกรอบ แต่มีอยู่แล้ว ON CONFLICT DO NOTHING จึงไม่ insert ซ้ำ และไม่สร้าง message ซ้ำ",
    "tokens": [
     {
      "id": "g",
@@ -679,13 +679,13 @@
     },
     {
      "id": "r1",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "row"
     },
     {
      "id": "d",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "ghost"
     }
@@ -697,17 +697,17 @@
    }
   },
   {
-   "caption": "แถว 61–100 เป็นแถวใหม่จึงบันทึกตามปกติ จบงานแล้ว consumer จึง commit ผลคือ 100 แถวพอดี",
+   "caption": "แถว 61 ถึง 100 เป็นแถวใหม่จึงบันทึกตามปกติ จบงานแล้ว consumer จึง commit ผลคือ 100 แถวพอดี",
    "tokens": [
     {
      "id": "r1",
-     "label": "1–60",
+     "label": "1-60",
      "at": "s",
      "kind": "row"
     },
     {
      "id": "r2",
-     "label": "61–100",
+     "label": "61-100",
      "at": "s",
      "kind": "row"
     }
@@ -769,7 +769,7 @@
 <li>60 แถว เพราะงานจบไปตอนที่ Worker ดับ</li>
 <li>40 แถว เพราะเริ่มใหม่จากแถวที่ 61 เท่านั้น</li>
 </ol>
-<div class="why">handler อ่านไฟล์ใหม่ตั้งแต่แถวแรกจริง แต่ unique key <code>(file_job_id, row_number)</code> ทำให้ระบบไม่ insert แถว 1–60 ซ้ำ ผลรวมจึงเป็น 100</div>
+<div class="why">handler อ่านไฟล์ใหม่ตั้งแต่แถวแรกจริง แต่ unique key <code>(file_job_id, row_number)</code> ทำให้ระบบไม่ insert แถว 1 ถึง 60 ซ้ำ ผลรวมจึงเป็น 100</div>
 </div>
 
 <div class="quiz">
@@ -846,7 +846,7 @@
 <li>รัน <code>pwsh ./scripts/generate-sample.ps1</code> แล้วเก็บ id ของงาน:
 <pre><code>$job = Invoke-RestMethod http://localhost:5181/file-jobs |
     Where-Object fileName -eq "orders-a.csv"</code></pre></li>
-<li>นับแถวใน Source จนได้ราว 10–90 แถว:
+<li>นับแถวใน Source จนได้ราว 10 ถึง 90 แถว:
 <pre><code>docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT count(*) FROM source_orders WHERE file_job_id = $($job.id);"</code></pre></li>
 <li>กด <kbd>Ctrl</kbd>+<kbd>C</kbd> ที่ Worker แล้วเปิดใหม่ด้วยคำสั่งเดิม ดู log ว่า Worker ได้ message เดิมกลับมา</li>
 <li>เมื่อ <code>importStatus</code> เป็น <code>Imported</code> แล้ว ตรวจว่าไม่มีแถวซ้ำ:
@@ -855,7 +855,7 @@
 
 <h2>7. อธิบายด้วยคำพูดตัวเอง</h2>
 <div class="callout ask">
-<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<p>พิมพ์ตอบ Claude ในแชท 2 ถึง 3 ประโยค:</p>
 <ol>
 <li>ทำไม mapping-demo ถึงเลือก at-least-once และใช้อะไรกันไม่ให้ข้อมูลซ้ำ?</li>
 <li>แถวที่ <code>Invalid</code> กับแถวที่ <code>Failed</code> ควรแก้ด้วยวิธีเดียวกันไหม เพราะอะไร?</li>

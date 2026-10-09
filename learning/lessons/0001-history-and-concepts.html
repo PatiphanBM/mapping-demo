@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>บทที่ 1 · ที่มาและ Concept ของ Queue</title>
+<title>บทที่ 1 · Queue แก้ปัญหาอะไร</title>
 <link rel="stylesheet" href="../assets/course.css">
 <script src="../assets/quiz.js" defer></script>
 <script src="../assets/step-diagram.js" defer></script>
@@ -14,68 +14,31 @@
 <nav class="crumbs">mapping-demo · <a href="../index.html">สารบัญ</a> · Queue & Worker · <a href="../reference/glossary.html">อภิธานศัพท์</a> · <a href="0002-queue-and-worker-in-mapping-demo.html">บทที่ 2 →</a></nav>
 
 <p class="kicker">บทที่ 1 · ที่มาและแนวคิด · ราว 15 นาที</p>
-<h1>คิวมาจากไหน และแก้ปัญหาอะไร</h1>
-<p class="subtitle">จากชุมสายโทรศัพท์ปี 1909 ถึง Kafka ปี 2011 แต่ละยุคแก้ปัญหาอะไร และเกิด concept อะไรที่เรายังใช้กันอยู่</p>
+<h1>คิวแก้ปัญหาอะไร</h1>
+<p class="subtitle">เริ่มจากปัญหาที่ระบบส่งงานกับระบบทำงานเจอ แล้วไล่ดูว่าแต่ละปัญหาพาไปสู่ concept ไหนของ queue</p>
 
 <div class="callout goal">
 <p><strong>สิ่งที่จะได้หลังจากจบบทนี้:</strong> แยกได้ว่าสถานการณ์จริงแต่ละแบบใช้ concept ไหนของ queue (decoupling, load leveling, competing consumers, publish-subscribe, at-least-once) และอธิบายได้ว่า Kafka ต่างจาก queue แบบดั้งเดิมอย่างไร ส่วนบทที่ 2 จะพาไปดูว่า mapping-demo ใช้ concept เหล่านี้อย่างไร</p>
 </div>
 
-<h2>1. ปัญหาตั้งต้น</h2>
+<h2>1. ปัญหาเกิดจากอะไร</h2>
 
-<p>ระบบที่มี “คนส่งงาน” กับ “คนทำงาน” มักเจอปัญหาเดียวกัน คืองานมาไม่สม่ำเสมอ แต่คนทำงานมีจำกัด เช่น ร้านกาแฟตอนแปดโมงเช้า ธนาคารวันเงินเดือนออก หรือระบบ import ที่มีคนโยนไฟล์ CSV เข้ามาพร้อมกันสิบไฟล์ ทางออกคือให้งานรอในคิว แล้วให้คนทำงานหยิบไปทำในจังหวะของตัวเอง</p>
+<p>ระบบที่มี “คนส่งงาน” กับ “คนทำงาน” มักเจอปัญหาเดียวกัน คืองานมาไม่สม่ำเสมอ แต่คนทำงานมีจำกัด เช่น ร้านกาแฟตอนแปดโมงเช้า ธนาคารวันเงินเดือนออก หรือระบบ import ที่มีคนโยนไฟล์ CSV เข้ามาพร้อมกันสิบไฟล์</p>
+<p>ถ้าให้ API รับไฟล์แล้ว import เองในคำขอเดียวกัน ผู้ใช้ต้องรอจน import เสร็จ ถ้า import ค้าง API ก็ค้างตาม และถ้าไฟล์เข้ามาพร้อมกันมาก ๆ เครื่องก็รับไม่ไหว</p>
 
-<h2>2. ไทม์ไลน์</h2>
+<h2>2. ที่มาของ concept</h2>
 
-<ol class="timeline">
+<p>ทางออกแรกคือให้งานรอในคิว แล้วให้ worker หยิบไปทำทีหลัง แต่พอทำแบบนี้ก็มีคำถามตามมาเป็นข้อ ๆ</p>
 
-<li>
-<span class="year">1909 · โคเปนเฮเกน</span>
-<h3>Erlang กับการรอสายโทรศัพท์</h3>
-<p>A. K. Erlang วิศวกรของบริษัทโทรศัพท์โคเปนเฮเกน ศึกษาว่าสายโทรศัพท์ที่โทรเข้ามาแบบสุ่มต้องรอนานแค่ไหน งานวิจัยปี 1909 ของเขาถือเป็นจุดเริ่มต้นของ <em>queueing theory</em> (ทฤษฎีการรอคิว) <a href="https://mathshistory.st-andrews.ac.uk/Biographies/Erlang/">[MacTutor]</a></p>
-<p class="gave">concept ที่ได้: <b>การรอคิวคำนวณได้ด้วยคณิตศาสตร์</b> ถ้างานเข้าเร็วกว่าที่ทำทันโดยเฉลี่ย คิวจะยาวขึ้นเรื่อย ๆ ไม่ว่าจะมีที่ให้รอมากแค่ไหน</p>
-</li>
-
-<li>
-<span class="year">ต้นทศวรรษ 1990 · IBM</span>
-<h3>IBM MQSeries ให้โปรแกรมคุยกันผ่านคิว</h3>
-<p>บริษัทใหญ่มีโปรแกรมที่รันบนเครื่องคนละชนิด คนละระบบปฏิบัติการ แต่ต้องส่งข้อมูลหากัน IBM เสนอวิธีเขียนโปรแกรมแบบ “Messaging and Queuing” คู่มือปี 1993 อธิบายชื่อนี้ไว้ว่า</p>
-<blockquote>“Messaging: because programs communicate by sending each other data in messages rather than by calling each other directly. Queuing: because the messages are placed on queues in storage, so that programs can run independently of each other, at different speeds and times…” — <a href="https://public.dhe.ibm.com/software/mqseries/pdf/horaa101.pdf">IBM, MQSeries: An Introduction to Messaging and Queuing</a></blockquote>
-<p class="gave">concept ที่ได้: <b>decoupling</b> คนส่งกับคนรับไม่ต้องเรียกหากันโดยตรง ไม่ต้องเร็วเท่ากัน และไม่ต้องออนไลน์พร้อมกัน</p>
-</li>
-
-<li>
-<span class="year">2003 · หนังสือและมาตรฐาน</span>
-<h3>ตั้งชื่อ pattern และเกิดโปรโตคอลกลาง</h3>
-<p>หนังสือ <em>Enterprise Integration Patterns</em> (Hohpe &amp; Woolf, 2003) ตั้งชื่อรูปแบบการใช้คิว เช่น Point-to-Point, Publish-Subscribe, Competing Consumers, Dead Letter Channel <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html">[EIP]</a> ปีเดียวกัน John O'Hara ที่ JPMorgan Chase เริ่มพัฒนาโปรโตคอล AMQP เพื่อลดการพึ่งระบบคิวเชิงพาณิชย์ที่แต่ละเจ้าใช้มาตรฐานของตัวเอง ต่อมาปี 2007 RabbitMQ ก็ออกมาโดยใช้โปรโตคอลนี้ <a href="https://en.wikipedia.org/wiki/Advanced_Message_Queuing_Protocol">[Wikipedia: AMQP]</a></p>
-<p class="gave">concept ที่ได้: <b>ศัพท์กลาง</b> เครื่องมือต่างยี่ห้อใช้ชื่อเดียวกันเรียก pattern เดียวกัน</p>
-</li>
-
-<li>
-<span class="year">2004–2006 · Amazon</span>
-<h3>Amazon SQS เปลี่ยนคิวให้เป็น cloud service</h3>
-<p>Amazon ประกาศ SQS รุ่นเบต้าปลายปี 2004 และเปิดใช้งานจริงปี 2006 <a href="https://aws.amazon.com/blogs/aws/amazon-sqs-15-years-and-still-queueing/">[AWS News Blog]</a> ทีมเล็ก ๆ ก็มีคิวใช้ได้ โดยไม่ต้องตั้งเซิร์ฟเวอร์คิวและดูแลเอง</p>
-<p class="gave">concept ที่ได้: <b>คิวเป็นโครงสร้างพื้นฐาน</b> เช่าใช้ได้เหมือนพื้นที่เก็บไฟล์หรือฐานข้อมูล</p>
-</li>
-
-<li>
-<span class="year">2009 · GitHub</span>
-<h3>GitHub ใช้ Resque ทำ background job</h3>
-<blockquote>“Resque is our Redis-backed library for creating background jobs, placing those jobs on multiple queues, and processing them later.” — <a href="https://github.blog/news-insights/the-library/introducing-resque/">GitHub Blog, 2009</a></blockquote>
-<p>เว็บตอบผู้ใช้ทันที แล้วโยนงานหนักลงคิวให้ worker ทำทีหลัง ณ วันที่เขียนโพสต์นั้น GitHub ใช้ Resque รัน background job ไปแล้วกว่า 10 ล้านงาน</p>
-<p class="gave">concept ที่ได้: <b>รูปแบบ queue + worker</b> สำหรับ background job ของเว็บแอป</p>
-</li>
-
-<li>
-<span class="year">2010–2012 · LinkedIn</span>
-<h3>LinkedIn สร้าง Kafka ซึ่งเป็นคิวที่ไม่ลบ message</h3>
-<p>LinkedIn ต้องเก็บ event (เช่น การเปิดดูหน้าเว็บ) เกือบพันล้าน message ต่อวัน Jay Kreps, Neha Narkhede และ Jun Rao พบว่าระบบคิวสำหรับองค์กรที่มีอยู่ตอนนั้นมี feature เกินจำเป็นและช้าเกินไปสำหรับงานนี้ จึงสร้าง Kafka ขึ้นมาเอง แล้วเปิดเป็น open source ในปี 2011 <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">[Kreps et al., NetDB 2011]</a> เปเปอร์อธิบายจุดที่ Kafka ต่างจากระบบอื่นไว้ว่า</p>
-<blockquote>“Unlike most other messaging systems, in Kafka, the information about how much each consumer has consumed is not maintained by the broker, but by the consumer itself.”</blockquote>
-<blockquote>“A message is automatically deleted if it has been retained in the broker longer than a certain period, typically 7 days.”</blockquote>
-<p class="gave">concept ที่ได้: <b>queue แบบ log</b> message ไม่ถูกลบเมื่อทำเสร็จ worker แต่ละกลุ่มจำเองว่าอ่านถึงไหน จึงย้อนอ่านได้ และหลายระบบอ่าน message ชุดเดียวกันได้</p>
-</li>
-
+<ol>
+<li>API ต้องรู้จัก worker หรือต้องรอให้ worker เปิดอยู่ไหม? API ฝากงานไว้ในคิวแล้วตอบผู้ใช้ได้เลย worker จะเปิดขึ้นมาทีหลังก็ได้ <a href="https://public.dhe.ibm.com/software/mqseries/pdf/horaa101.pdf">[IBM MQSeries]</a> → <strong>01 decoupling</strong></li>
+<li>ถ้างานเข้ามาพร้อมกันมาก ๆ worker ต้องเร่งตามไหม? งานรอในคิวได้ worker ทำไปตามจังหวะเดิม ขอแค่โดยเฉลี่ยทำทันงานที่เข้ามา ถ้าไม่ทัน คิวจะยาวขึ้นเรื่อย ๆ → <strong>02 load leveling</strong></li>
+<li>ถ้าทำไม่ทันจริง ๆ จะเร่งอย่างไรโดยที่งานชิ้นเดียวไม่โดนทำสองรอบ? เปิด worker เพิ่มให้หยิบจากคิวเดียวกัน คิวส่งงานแต่ละชิ้นให้ worker แค่ตัวเดียว → <strong>03 competing consumers</strong></li>
+<li>ถ้าหลายระบบอยากรู้เรื่องเดียวกัน เช่น มีสมาชิกใหม่ คนส่งต้องส่งให้ทีละระบบเองไหม? ส่งครั้งเดียวแล้วให้คิวกระจายสำเนาให้ทุกระบบได้ ก่อนอื่นต้องแยกว่าอะไรเป็น “งาน” ที่ควรทำครั้งเดียว และอะไรเป็น “ข่าว” ที่ทุกระบบต้องได้ → <strong>04 point-to-point กับ publish-subscribe</strong></li>
+<li>ถ้า worker ดับกลางงาน งานนั้นหายไหม? ถ้า worker แจ้งคิวหลังทำเสร็จ งานไม่หาย เพราะคิวจะส่งงานที่ยังไม่ได้รับแจ้งมาให้ใหม่ ข้อเสียคืองานเดิมอาจโดนทำสองรอบ → <strong>05 at-least-once</strong></li>
 </ol>
+
+<p>อีกคำถามหนึ่งแยก Kafka ออกจาก queue แบบดั้งเดิม: ถ้าอยากย้อนอ่าน message ที่ทำไปแล้ว หรือมีระบบใหม่อยากอ่านข้อมูลชุดเดิมตั้งแต่ต้น จะทำได้ไหม? queue แบบดั้งเดิมลบ message เมื่อทำเสร็จ จึงย้อนไม่ได้ ส่วน Kafka เก็บ message ไว้ตามระยะเวลาที่ตั้ง และให้ consumer แต่ละกลุ่มจำเองว่าอ่านถึงไหน <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">[Kreps et al.]</a></p>
 
 <h2>3. Concept หลัก 5 ข้อ</h2>
 
@@ -86,6 +49,8 @@
 <div class="concept">
 <span class="num">01</span>
 <h3>Decoupling: แยกคนสั่งออกจากคนทำ</h3>
+<p>producer ฝากงานไว้แล้วไปทำอย่างอื่นต่อได้ทันที ไม่ต้องรอผล และไม่ต้องสนใจว่า worker เปิดอยู่หรือเปล่า</p>
+<p class="src">ที่มา: IBM MQSeries</p>
 <div class="step-diagram" data-step-diagram>
 <script type="application/json">
 {
@@ -217,13 +182,13 @@
 }
 </script>
 </div>
-<p>producer ฝากงานไว้แล้วไปทำอย่างอื่นต่อได้ทันที ไม่ต้องรอผล และไม่ต้องสนใจว่า worker เปิดอยู่หรือเปล่า</p>
-<p class="src">ที่มา: IBM MQSeries</p>
 </div>
 
 <div class="concept">
 <span class="num">02</span>
 <h3>Load leveling: ใช้คิวพักงานช่วงพีค</h3>
+<p>งานเข้าเป็นระลอก แต่ worker ทำในจังหวะคงที่ของตัวเอง คิวเป็นกันชนระหว่างสองฝั่ง <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
+<p class="src">ข้อควรระวัง: ถ้า<em>โดยเฉลี่ย</em>งานเข้าเร็วกว่าที่ทำทัน คิวจะยาวขึ้นไม่สิ้นสุด (ข้อสรุปจาก queueing theory)</p>
 <div class="step-diagram" data-step-diagram>
 <script type="application/json">
 {
@@ -439,13 +404,13 @@
 }
 </script>
 </div>
-<p>งานเข้าเป็นระลอก แต่ worker ทำในจังหวะคงที่ของตัวเอง คิวเป็นกันชนระหว่างสองฝั่ง <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
-<p class="src">ข้อควรระวัง: ถ้า<em>โดยเฉลี่ย</em>งานเข้าเร็วกว่าที่ทำทัน คิวจะยาวขึ้นไม่สิ้นสุด (ข้อสรุปจาก queueing theory)</p>
 </div>
 
 <div class="concept">
 <span class="num">03</span>
 <h3>Competing consumers: เพิ่มจำนวน worker</h3>
+<p>ทำไม่ทันก็เพิ่ม worker ให้แย่งกันหยิบงานจากคิวเดียวกัน งานแต่ละชิ้นจะมี worker ทำแค่ตัวเดียว</p>
+<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html">EIP, Competing Consumers</a></p>
 <div class="step-diagram" data-step-diagram>
 <script type="application/json">
 {
@@ -611,7 +576,7 @@
    }
   },
   {
-   "caption": "งานแต่ละชิ้นมี worker ทำแค่ตัวเดียว ไม่มีชิ้นไหนที่สองตัวทำซ้ำกัน",
+   "caption": "งานแต่ละชิ้นมี worker ทำแค่ตัวเดียว",
    "tokens": [
     {
      "id": "c4",
@@ -652,13 +617,13 @@
 }
 </script>
 </div>
-<p>ทำไม่ทันก็เพิ่ม worker ให้แย่งกันหยิบงานจากคิวเดียวกัน งานแต่ละชิ้นจะมี worker ทำแค่ตัวเดียว</p>
-<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/CompetingConsumers.html">EIP, Competing Consumers</a></p>
 </div>
 
 <div class="concept">
 <span class="num">04</span>
 <h3>Point-to-point กับ Publish-subscribe</h3>
+<p>“งาน” ควรทำแค่ครั้งเดียว ส่วน “ข่าว” ควรถึงทุกฝ่ายที่สนใจ ฝ่ายละหนึ่งสำเนา</p>
+<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PointToPointChannel.html">EIP, Point-to-Point</a> · <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html">Publish-Subscribe</a></p>
 <div class="step-diagram" data-step-diagram>
 <script type="application/json">
 {
@@ -844,13 +809,13 @@
 }
 </script>
 </div>
-<p>“งาน” ควรทำแค่ครั้งเดียว ส่วน “ข่าว” ควรถึงทุกฝ่ายที่สนใจ ฝ่ายละหนึ่งสำเนา</p>
-<p class="src">ที่มา: <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PointToPointChannel.html">EIP, Point-to-Point</a> · <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/PublishSubscribeChannel.html">Publish-Subscribe</a></p>
 </div>
 
 <div class="concept">
 <span class="num">05</span>
 <h3>At-least-once: งานเดิมอาจทำซ้ำได้</h3>
+<p>worker ต้องแจ้งคิวเมื่อทำเสร็จ ถ้าดับไปก่อนแจ้ง คิวจะส่งงานชิ้นนั้นมาให้ทำอีกรอบ งานจึงไม่หาย แต่อาจทำซ้ำ worker จึงต้องออกแบบให้ทำงานเดิมซ้ำได้โดยไม่เกิดผลซ้ำ (<em>idempotent</em>) <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
+<p class="src">งานที่ลองกี่รอบก็พัง ระบบมักย้ายไปพักไว้ใน dead-letter queue จะได้ไม่ขวางงานอื่น <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/DeadLetterChannel.html">[EIP]</a></p>
 <div class="step-diagram" data-step-diagram>
 <script type="application/json">
 {
@@ -1004,14 +969,12 @@
 }
 </script>
 </div>
-<p>worker ต้องแจ้งคิวเมื่อทำเสร็จ ถ้าดับไปก่อนแจ้ง คิวจะส่งงานชิ้นนั้นมาให้ทำอีกรอบ งานจึงไม่หาย แต่อาจทำซ้ำ worker จึงต้องออกแบบให้ทำงานเดิมซ้ำได้โดยไม่เกิดผลซ้ำ (<em>idempotent</em>) <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">[Microsoft]</a></p>
-<p class="src">งานที่ลองกี่รอบก็พัง ระบบมักย้ายไปพักไว้ใน dead-letter queue จะได้ไม่ขวางงานอื่น <a href="https://www.enterpriseintegrationpatterns.com/patterns/messaging/DeadLetterChannel.html">[EIP]</a></p>
 </div>
 
 </div>
 
 <h2>4. ฝึกแยก concept จากสถานการณ์</h2>
-<p>อ่านสถานการณ์แล้วเลือก concept ที่ตรงที่สุด อย่าเลื่อนขึ้นไปดู การนึกเองช่วยให้จำได้นานกว่าการอ่านซ้ำ แม้จะตอบผิดก็ตาม</p>
+<p>อ่านสถานการณ์แล้วเลือก concept ที่ตรงที่สุด ลองตอบเองก่อนโดยไม่เลื่อนขึ้นไปดู</p>
 
 <div class="quiz">
 <p class="q">1. ร้านออนไลน์ช่วง 11.11 มีออเดอร์เข้ามามากกว่าปกติ 50 เท่าในชั่วโมงเดียว แต่ระบบตัดสต็อกยังทำงานด้วยความเร็วเท่าเดิม ออเดอร์จึงรออยู่ในคิว แล้วระบบก็ค่อย ๆ ทำจนหมดภายในคืนนั้น</p>
@@ -1065,7 +1028,7 @@
 <li>At-least-once: งานเดิมอาจทำซ้ำได้</li>
 <li>Load leveling: ใช้คิวพักงานช่วงพีค</li>
 </ol>
-<div class="why">ฝั่งรับไฟล์ไม่ต้องรอ และไม่ต้องสนใจว่าฝั่งย่อรูปเปิดอยู่หรือเปล่า ตรงกับที่คู่มือ MQSeries เขียนว่า “run independently of each other, at different speeds and times”</div>
+<div class="why">ฝั่งรับไฟล์ไม่ต้องรอ และไม่ต้องสนใจว่าฝั่งย่อรูปเปิดอยู่หรือเปล่า</div>
 </div>
 
 <div class="quiz">
@@ -1080,14 +1043,14 @@
 </div>
 
 <div class="quiz">
-<p class="q">7. ปัญหาตั้งต้นที่ Erlang ศึกษาในปี 1909 คืออะไร?</p>
+<p class="q">7. คิวของระบบหนึ่งยาวขึ้นทุกวัน ทีมเลยเพิ่มที่เก็บให้คิวรับงานได้มากขึ้น ปัญหาจะหายไหม?</p>
 <ol class="options">
-<li data-correct>สายโทรศัพท์ที่โทรเข้ามาแบบสุ่มต้องรอนานแค่ไหน</li>
-<li>ลูกค้าธนาคารที่มาแบบสุ่มต้องรอคิวนานแค่ไหน</li>
-<li>สินค้าบนสายพานในโรงงานต้องรอนานแค่ไหน</li>
-<li>จดหมายในที่ทำการไปรษณีย์ต้องรอนานแค่ไหน</li>
+<li data-correct>ไม่หาย ถ้าโดยเฉลี่ยงานเข้าเร็วกว่าที่ทำทัน งานจะค้างเพิ่มไปเรื่อย ๆ</li>
+<li>หาย เพราะคิวที่ใหญ่ขึ้นรับงานช่วงพีคได้หมด</li>
+<li>หาย เพราะคิวจะลบงานเก่าทิ้งเองเมื่อเต็ม</li>
+<li>ไม่หาย เพราะคิวที่ใหญ่ขึ้นทำให้ worker ทำงานซ้ำ</li>
 </ol>
-<div class="why">Erlang ทำงานที่บริษัทโทรศัพท์โคเปนเฮเกน และใช้ทฤษฎีความน่าจะเป็นศึกษาเวลาที่สายโทรศัพท์ต้องรอ งานนี้เป็นจุดเริ่มต้นของ queueing theory</div>
+<div class="why">load leveling ช่วยรับงานช่วงพีคสั้น ๆ แต่ถ้าอัตรางานเข้าเฉลี่ยสูงกว่าอัตราที่ทำได้ ที่รอใหญ่แค่ไหนก็เต็มสักวัน ต้องเพิ่ม worker (concept 03) หรือทำให้งานแต่ละชิ้นเร็วขึ้น</div>
 </div>
 
 <p class="quiz-score" data-quiz-score></p>
@@ -1108,13 +1071,13 @@
 
 <h2>6. อธิบายด้วยคำพูดตัวเอง</h2>
 <div class="callout ask">
-<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค เหมือนเล่าให้เพื่อนร่วมทีมฟังว่า <em>queue แก้ปัญหาอะไร และ Kafka ต่างจาก queue แบบเดิมตรงไหน</em></p>
+<p>พิมพ์ตอบ Claude ในแชท 2 ถึง 3 ประโยค เหมือนเล่าให้เพื่อนร่วมทีมฟังว่า <em>queue แก้ปัญหาอะไร และ Kafka ต่างจาก queue แบบเดิมตรงไหน</em></p>
 <p>Claude จะตรวจและบอกว่าตรงไหนยังคลาดเคลื่อน ถ้าตรงไหนในบทนี้ยังงง ถามในแชทได้เลย</p>
 </div>
 
 <h2>อ่านต่อ</h2>
 <p><strong>แหล่งอ่านหลัก:</strong> <a href="https://learn.microsoft.com/en-us/azure/architecture/patterns/queue-based-load-leveling">Microsoft, Queue-Based Load Leveling pattern</a> ครอบคลุม concept ข้อ 1, 2, 3 และ 5 ในหน้าเดียว พร้อมข้อควรระวังเวลาใช้จริง (ลำดับของ message, dead-letter, idempotent) อ่านราว 10 นาที</p>
-<p>อยากรู้ที่มาของ Kafka จากปากผู้สร้าง: <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">Kreps, Narkhede &amp; Rao, “Kafka: a Distributed Messaging System for Log Processing” (2011)</a> อ่านแค่หัวข้อ 1–2 ก็พอ</p>
+<p>อยากรู้ที่มาของ Kafka จากปากผู้สร้าง: <a href="https://people.csail.mit.edu/matei/courses/2015/6.S897/readings/kafka.pdf">Kreps, Narkhede &amp; Rao, “Kafka: a Distributed Messaging System for Log Processing” (2011)</a> อ่านแค่หัวข้อ 1 และ 2 ก็พอ</p>
 
 <footer class="next">
 <span>บทที่ 1 จาก ~6</span>

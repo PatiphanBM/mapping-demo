@@ -363,7 +363,7 @@
    "nodes": {"n": {"state": "active"}}
   },
   {
-   "caption": "ถ้า Worker ดับตอนนี้ แถว 1–4 commit แล้วพร้อม message ของตัวเอง ไม่มีแถวไหนที่มีข้อมูลแต่ไม่มีงาน normalize รออยู่",
+   "caption": "ถ้า Worker ดับตอนนี้ แถว 1 ถึง 4 commit แล้วพร้อม message ของตัวเอง ไม่มีแถวไหนที่มีข้อมูลแต่ไม่มีงาน normalize รออยู่",
    "tokens": [
     {"id": "r1", "label": "1", "at": "n", "kind": "ok"},
     {"id": "r2", "label": "2", "at": "k", "kind": "row"},
@@ -461,7 +461,7 @@ docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT id, topic,
 
 <h2>7. อธิบายด้วยคำพูดตัวเอง</h2>
 <div class="callout ask">
-<p>พิมพ์ตอบ Claude ในแชท 2–3 ประโยค:</p>
+<p>พิมพ์ตอบ Claude ในแชท 2 ถึง 3 ประโยค:</p>
 <ol>
 <li>ถ้าลบตาราง outbox ออก แล้วให้ทุกจุดส่ง Kafka ตรง ๆ จะเกิดปัญหาอะไรได้บ้าง?</li>
 <li>outbox ทำให้ message ไม่หาย แต่แลกมากับอะไร และ mapping-demo จ่ายราคานั้นอย่างไร?</li>
@@ -475,7 +475,7 @@ docker compose exec -T postgres psql -U mapping -d mapping -c "SELECT id, topic,
 
 <footer class="next">
 <span>บทที่ 6 จาก 6</span>
-<span>จบเนื้อหาตามแผน ถัดไป: ตอบคำถาม “อธิบายด้วยคำพูดตัวเอง” ของบทที่ 1–6 เพื่อตรวจว่าตรงไหนยังต้องเสริม</span>
+<span>จบเนื้อหาตามแผน ถัดไป: ตอบคำถาม “อธิบายด้วยคำพูดตัวเอง” ของบทที่ 1 ถึง 6 เพื่อตรวจว่าตรงไหนยังต้องเสริม</span>
 </footer>
 
 </main>

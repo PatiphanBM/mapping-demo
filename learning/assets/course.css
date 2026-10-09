@@ -233,20 +233,6 @@ footer.next {
 .sim-events .worker { color: var(--node-consumer); }
 .sim-events .warn { color: var(--bad); }
 
-/* ---------- Component: timeline (ol.timeline > li > .year + content) ---------- */
-ol.timeline { list-style: none; padding: 0; margin: 1.5rem 0; border-left: 2px solid var(--rule); }
-ol.timeline > li { position: relative; padding: 0 0 1.6rem 1.4rem; max-width: none; }
-ol.timeline > li::before {
-  content: ""; position: absolute; left: -7px; top: 0.55rem; width: 12px; height: 12px;
-  border-radius: 50%; background: var(--bg); border: 2px solid var(--accent);
-}
-ol.timeline .year { font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); font-weight: 500; }
-ol.timeline h3 { margin: 0.1rem 0 0.3rem; font-size: 1.05rem; }
-ol.timeline p { margin: 0.3rem 0; }
-ol.timeline .gave { font-size: 0.88rem; color: var(--muted); }
-ol.timeline .gave b { color: var(--text); }
-ol.timeline blockquote { margin: 0.5rem 0; padding-left: 0.8rem; border-left: 2px solid var(--rule); font-size: 0.9rem; color: var(--muted); }
-
 /* ---------- Component: concept cards (.concepts > .concept) ---------- */
 .concepts { display: grid; grid-template-columns: 1fr; gap: 0.8rem; margin: 1.5rem 0; }
 .concept { border: 1px solid var(--rule); border-radius: 6px; padding: 0.8rem 1rem; background: var(--bg); }
