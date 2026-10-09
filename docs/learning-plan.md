@@ -106,7 +106,8 @@
 - [x] Phase 16 — Retry
 - [x] Phase 17 — Reprocess
 - [ ] Phase 18 — Demo script และตรวจรับ
-- [ ] Phase 19 — Input Layout, Transformation Config และหน้าเว็บตั้งค่า → แยกไว้ที่ [web-config-plan.md](web-config-plan.md)
+- [ ] Phase 19 — Backend Input Layout และ Transformation Config → แยกไว้ที่ [web-config-plan.md](web-config-plan.md)
+- [ ] Phase 20 — หน้าเว็บตั้งค่า → แยกไว้ที่ [web-config-plan.md](web-config-plan.md)
 
 ---
 

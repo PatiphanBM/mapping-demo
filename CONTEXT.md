@@ -54,4 +54,4 @@ _Avoid_: Retry
 ไฟล์ที่มีเนื้อหาเหมือนกับไฟล์ที่รับไว้แล้วภายใต้ Mapping Config เดียวกัน แม้ใช้ชื่อไฟล์ต่างกัน โดยไม่สร้างข้อมูลนำเข้าซ้ำ
 
 **Current Normalized Result**:
-ผล normalization ที่สำเร็จล่าสุดของ Source แถวหนึ่งพร้อม config version ที่สร้างผลนั้น หาก reprocess ครั้งใหม่ไม่ผ่าน ผลนี้ยังคงอยู่โดยแยกจากสถานะการรันล่าสุด
+ชุดผล normalization ล่าสุดที่ประมวลผลสำเร็จของ Source แถวหนึ่งพร้อม Config Version จาก Row Normalization Job ที่สร้างผล ชุดนี้มีได้ `0..N` outputs ตาม `outputKey`; ผล `Filtered` คือ successful empty set และลบ outputs เดิมทั้งหมด ส่วน reprocess ที่เป็น `Invalid` หรือ `Failed` ไม่เปลี่ยนชุดผลสำเร็จเดิม โดยสถานะการรันล่าสุดยังแยกจาก Current Normalized Result
