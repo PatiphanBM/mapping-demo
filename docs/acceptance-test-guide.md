@@ -439,6 +439,8 @@ Invoke-WebRequest -Method Post `
     "$api/mapping-configs/1/versions/2/activate"
 ```
 
+สคริปต์สร้าง v2 ด้วย `dd/MM/yyyy` และ v3 ด้วย `yyyyMMdd`; ทั้งคู่เป็น format ที่ compiler รองรับ แต่เฉพาะ v2 ตรงกับข้อมูล fixture จึงทดสอบ runtime invalid ของ v3 ได้โดยไม่อาศัย config ที่ compiler ปฏิเสธ
+
 เปิด Worker:
 
 ```powershell

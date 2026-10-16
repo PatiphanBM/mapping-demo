@@ -5,5 +5,8 @@ public enum ColumnDataType
     Text,
     Date,
     Decimal,
-    Boolean
+    Boolean,
+    Integer,
+    DateTime,
+    Guid
 }

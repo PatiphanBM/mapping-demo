@@ -14,8 +14,10 @@ public static class IdentifierRules
         "id",
         "file_job_id",
         "row_number",
+        "physical_line_number",
         "imported_at",
         "source_row_id",
+        "output_key",
         "row_job_id",
         "config_version_id",
         "normalized_at"

@@ -11,6 +11,7 @@ public sealed class NormalizationStatusCalculatorTests
             ImportStatus.Importing,
             pendingRows: 0,
             doneRows: 10,
+            filteredRows: 0,
             invalidRows: 0,
             failedRows: 0);
 
@@ -24,6 +25,7 @@ public sealed class NormalizationStatusCalculatorTests
             ImportStatus.Imported,
             pendingRows: 0,
             doneRows: 100,
+            filteredRows: 0,
             invalidRows: 0,
             failedRows: 0);
 
@@ -37,6 +39,7 @@ public sealed class NormalizationStatusCalculatorTests
             ImportStatus.Imported,
             pendingRows: 1,
             doneRows: 99,
+            filteredRows: 1,
             invalidRows: 0,
             failedRows: 0);
 
@@ -54,9 +57,28 @@ public sealed class NormalizationStatusCalculatorTests
             ImportStatus.Imported,
             pendingRows: 0,
             doneRows: 99,
+            filteredRows: 1,
             invalidRows,
             failedRows);
 
         Assert.Equal(NormalizationStatus.CompletedWithErrors, result);
+    }
+
+    [Theory]
+    [InlineData(0, 100)]
+    [InlineData(50, 50)]
+    public void Calculate_WhenEveryRowIsDoneOrFiltered_ReturnsCompleted(
+        int doneRows,
+        int filteredRows)
+    {
+        var result = NormalizationStatusCalculator.Calculate(
+            ImportStatus.Imported,
+            pendingRows: 0,
+            doneRows,
+            filteredRows,
+            invalidRows: 0,
+            failedRows: 0);
+
+        Assert.Equal(NormalizationStatus.Completed, result);
     }
 }

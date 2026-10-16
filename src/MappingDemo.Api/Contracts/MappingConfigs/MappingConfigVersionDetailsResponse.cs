@@ -1,4 +1,5 @@
-using MappingDemo.Shared.MappingConfigs;
+using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Transformation;
 
 namespace MappingDemo.Api.Contracts.MappingConfigs;
 
@@ -6,5 +7,5 @@ public sealed record MappingConfigVersionDetailsResponse(
     long Id,
     int VersionNo,
     bool IsActive,
-    IReadOnlyList<FileToSourceRule> FileToSource,
-    IReadOnlyList<SourceToNormalizedRule> SourceToNormalized);
+    InputLayoutDefinition InputLayout,
+    TransformationProgram TransformationProgram);

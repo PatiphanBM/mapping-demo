@@ -12,29 +12,63 @@ function New-Version {
         [string] $DateFormat
     )
 
-    $fileToSource = @(
-        @{ csvHeader = "Order No"; sourceColumn = "order_no" }
-        @{ csvHeader = "Customer Name"; sourceColumn = "customer_name" }
-        @{ csvHeader = "Order Date"; sourceColumn = "order_date" }
-        @{ csvHeader = "Amount"; sourceColumn = "amount" }
-        @{ csvHeader = "Is Paid"; sourceColumn = "is_paid" }
-        @{ csvHeader = "Note"; sourceColumn = "note" }
-    )
-    $sourceToNormalized = @(
-        @{ sourceColumn = "order_no"; normalizedColumn = "order_no" }
-        @{ sourceColumn = "customer_name"; normalizedColumn = "customer_name" }
-        @{
-            sourceColumn = "order_date"
-            normalizedColumn = "order_date"
-            format = $DateFormat
-        }
-        @{ sourceColumn = "amount"; normalizedColumn = "amount" }
-        @{ sourceColumn = "is_paid"; normalizedColumn = "is_paid" }
-        @{ sourceColumn = "note"; normalizedColumn = "note" }
-    )
+    $inputLayout = [ordered]@{
+        kind = "delimited"
+        encoding = "utf-8"
+        delimiter = ","
+        preambleLines = 0
+        headerPolicy = "SingleRow"
+        fields = @(
+            @{ inputHeader = "Order No"; sourceColumn = "order_no" }
+            @{ inputHeader = "Customer Name"; sourceColumn = "customer_name" }
+            @{ inputHeader = "Order Date"; sourceColumn = "order_date" }
+            @{ inputHeader = "Amount"; sourceColumn = "amount" }
+            @{ inputHeader = "Is Paid"; sourceColumn = "is_paid" }
+            @{ inputHeader = "Note"; sourceColumn = "note" }
+        )
+    }
+    $transformationProgram = @{
+        languageVersion = 1
+        semanticsProfile = "sqlserver-legacy-v1"
+        outputs = @(
+            @{
+                outputKey = "default"
+                fields = @(
+                    @{
+                        normalizedColumn = "order_no"
+                        value = [ordered]@{ kind = "source"; field = "order_no" }
+                    }
+                    @{
+                        normalizedColumn = "customer_name"
+                        value = [ordered]@{
+                            kind = "source"
+                            field = "customer_name"
+                        }
+                    }
+                    @{
+                        normalizedColumn = "order_date"
+                        inputFormat = $DateFormat
+                        value = [ordered]@{ kind = "source"; field = "order_date" }
+                    }
+                    @{
+                        normalizedColumn = "amount"
+                        value = [ordered]@{ kind = "source"; field = "amount" }
+                    }
+                    @{
+                        normalizedColumn = "is_paid"
+                        value = [ordered]@{ kind = "source"; field = "is_paid" }
+                    }
+                    @{
+                        normalizedColumn = "note"
+                        value = [ordered]@{ kind = "source"; field = "note" }
+                    }
+                )
+            }
+        )
+    }
     $body = @{
-        fileToSource = $fileToSource
-        sourceToNormalized = $sourceToNormalized
+        inputLayout = $inputLayout
+        transformationProgram = $transformationProgram
     } | ConvertTo-Json -Depth 10 -Compress
 
     return Invoke-RestMethod `
@@ -57,7 +91,7 @@ if ($config.versions.Count -ne 1) {
 }
 
 $version2 = New-Version -DateFormat "dd/MM/yyyy"
-$version3 = New-Version -DateFormat "MM/dd/yyyy"
+$version3 = New-Version -DateFormat "yyyyMMdd"
 
 Write-Host "Created acceptance-test versions (neither was activated):"
 Write-Host (
@@ -66,7 +100,7 @@ Write-Host (
         $version2.id
 )
 Write-Host (
-    "  Version {0}: ID {1}, date format MM/dd/yyyy (expected invalid)" -f `
+    "  Version {0}: ID {1}, date format yyyyMMdd (expected invalid)" -f `
         $version3.versionNo,
         $version3.id
 )

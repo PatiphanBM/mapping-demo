@@ -11,6 +11,7 @@ public sealed record FileJobResponse(
     string NormalizationStatus,
     int PendingRows,
     int DoneRows,
+    int FilteredRows,
     int InvalidRows,
     int FailedRows,
     string? LastError,

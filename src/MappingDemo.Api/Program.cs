@@ -1,6 +1,10 @@
+using MappingDemo.Api;
 using MappingDemo.Api.Options;
 using MappingDemo.Api.Services;
 using MappingDemo.Shared.Database;
+using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.Transformation.Adapters;
 using Microsoft.Extensions.Options;
 using Npgsql;
 using Scalar.AspNetCore;
@@ -16,7 +20,7 @@ var mappingConnectionStringForLog = new NpgsqlConnectionStringBuilder(mappingCon
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(ApiJsonOptions.Configure);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services
@@ -37,6 +41,11 @@ builder.Services
         "Watcher:ScanIntervalSeconds must be greater than zero.")
     .ValidateOnStart();
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddSingleton<ITransformationLookupResolver,
+    PostgreSqlTransformationLookupResolver>();
+builder.Services.AddSingleton<TransformationModule>();
+builder.Services.AddSingleton<InputRecordModule>();
+builder.Services.AddSingleton<MappingDraftService>();
 builder.Services.AddSingleton<ActiveConfigProvider>();
 builder.Services.AddSingleton<WatcherRegistry>();
 builder.Services.AddSingleton<FileIntake>();

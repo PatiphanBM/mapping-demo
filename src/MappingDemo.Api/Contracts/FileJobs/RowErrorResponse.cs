@@ -2,5 +2,7 @@ namespace MappingDemo.Api.Contracts.FileJobs;
 
 public sealed record RowErrorResponse(
     int RowNumber,
-    string Field,
+    string? OutputKey,
+    string? Field,
+    string ExpressionPath,
     string Reason);

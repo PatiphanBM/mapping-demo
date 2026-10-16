@@ -1,0 +1,95 @@
+{
+  "layout": {
+    "encoding": "utf-8",
+    "positionUnit": "utf16CodeUnit",
+    "recordRules": [
+      { "key": "header", "discriminator": { "start": 1, "length": 1, "equals": "H" }, "action": "Ignore", "expectedLength": 12 },
+      {
+        "key": "detail",
+        "discriminator": { "start": 1, "length": 1, "equals": "D" },
+        "action": "Import",
+        "expectedLength": 32,
+        "fields": [
+          { "sourceColumn": "RecordType", "start": 1, "length": 1 },
+          { "sourceColumn": "PartnerCode", "start": 2, "length": 4 },
+          { "sourceColumn": "OwnerName", "start": 6, "length": 8 },
+          { "sourceColumn": "Padding", "start": 14, "length": 4 },
+          { "sourceColumn": "RawDate", "start": 18, "length": 8 },
+          { "sourceColumn": "Suffix", "start": 26, "length": 7 }
+        ]
+      },
+      { "key": "trailer", "discriminator": { "start": 1, "length": 1, "equals": "T" }, "action": "Ignore", "expectedLength": 12 }
+    ],
+    "recordSequence": [
+      { "recordRule": "header", "minOccurs": 1, "maxOccurs": 2 },
+      { "recordRule": "detail", "minOccurs": 1, "maxOccurs": null },
+      { "recordRule": "trailer", "minOccurs": 1, "maxOccurs": 2 }
+    ],
+    "unmatchedRecordPolicy": "Error"
+  },
+  "positiveCases": [
+    {
+      "id": "FW-P01",
+      "transport": { "lineEnding": "LF", "hasFinalLineTerminator": false, "utf8Bom": false },
+      "records": ["HHEADER-0001", "DMTI บริษัท      20261006TAIL-A ", "DPMIBASCII       20261007TAIL-B ", "TTRAILER-001"],
+      "expected": {
+        "importCount": 2,
+        "ignoreCount": 2,
+        "imports": [
+          {
+            "rowNumber": 1,
+            "physicalLineNumber": 2,
+            "utf16Length": 32,
+            "utf8ByteLength": 44,
+            "rawFields": { "RecordType": "D", "PartnerCode": "MTI ", "OwnerName": "บริษัท  ", "Padding": "    ", "RawDate": "20261006", "Suffix": "TAIL-A " },
+            "displayFields": { "PartnerCode": "MTI", "OwnerName": "บริษัท", "Padding": "", "RawDate": "20261006", "Suffix": "TAIL-A" },
+            "transformedDate": { "inputFormat": "yyyyMMdd", "value": "2026-10-06" }
+          },
+          {
+            "rowNumber": 2,
+            "physicalLineNumber": 3,
+            "utf16Length": 32,
+            "utf8ByteLength": 32,
+            "rawFields": { "RecordType": "D", "PartnerCode": "PMIB", "OwnerName": "ASCII   ", "Padding": "    ", "RawDate": "20261007", "Suffix": "TAIL-B " },
+            "displayFields": { "PartnerCode": "PMIB", "OwnerName": "ASCII", "Padding": "", "RawDate": "20261007", "Suffix": "TAIL-B" },
+            "transformedDate": { "inputFormat": "yyyyMMdd", "value": "2026-10-07" }
+          }
+        ]
+      }
+    },
+    {
+      "id": "FW-P02",
+      "sameRecordsAs": "FW-P01",
+      "transport": { "lineEnding": "CRLF", "hasFinalLineTerminator": true, "utf8Bom": false },
+      "expectedImportCount": 2,
+      "expectedIgnoreCount": 2
+    },
+    {
+      "id": "FW-P03",
+      "sameRecordsAs": "FW-P01",
+      "transport": { "lineEnding": "LF", "hasFinalLineTerminator": true, "utf8Bom": true },
+      "expectedImportCount": 2,
+      "expectedIgnoreCount": 2
+    },
+    {
+      "id": "FW-P04",
+      "transport": { "lineEnding": "LF", "hasFinalLineTerminator": false, "utf8Bom": false },
+      "records": ["HHEADER-0001", "HHEADER-0002", "DMTI บริษัท      20261006TAIL-A ", "DPMIBASCII       20261007TAIL-B ", "TTRAILER-001", "TTRAILER-002"],
+      "expectedImportCount": 2,
+      "expectedIgnoreCount": 4,
+      "expectedPhysicalLines": [3, 4]
+    }
+  ],
+  "negativeCases": [
+    { "id": "FW-E01", "contentHex": "48FF0A", "expectedError": { "code": "InvalidEncoding", "physicalLineNumber": 1, "byteOffset": 1 } },
+    { "id": "FW-E02", "records": ["HHEADER-0001", "DMTI 😀BCDEFG    20261006TAIL-A ", "TTRAILER-001"], "expectedError": { "code": "UnsupportedCharacterForPositionUnit", "physicalLineNumber": 2, "position": 6, "scalar": "U+1F600" } },
+    { "id": "FW-E03", "records": ["HHEADER-0001", "XPMIBASCII       20261007TAIL-B ", "TTRAILER-001"], "expectedError": { "code": "UnknownRecordType", "physicalLineNumber": 2, "discriminator": "X" } },
+    { "id": "FW-E04", "records": ["HHEADER-0001", "DPMIBASCII       20261007TAIL-B", "TTRAILER-001"], "expectedError": { "code": "UnexpectedRecordLength", "physicalLineNumber": 2, "recordRule": "detail", "expected": 32, "actual": 31 } },
+    { "id": "FW-E05", "records": ["HHEADER-0001", "DPMIBASCII       20261007TAIL-B  ", "TTRAILER-001"], "expectedError": { "code": "UnexpectedRecordLength", "physicalLineNumber": 2, "recordRule": "detail", "expected": 32, "actual": 33 } },
+    { "id": "FW-E06", "records": ["HHEADER-0001", "TTRAILER-001", "DPMIBASCII       20261007TAIL-B "], "expectedError": { "code": "UnexpectedRecordSequence", "physicalLineNumber": 2, "recordRule": "trailer", "expectedNext": "detail" } },
+    { "id": "FW-E07", "records": ["HHEADER-0001", "HHEADER-0002", "HHEADER-0003", "DPMIBASCII       20261007TAIL-B ", "TTRAILER-001"], "expectedError": { "code": "RecordCardinalityExceeded", "physicalLineNumber": 3, "recordRule": "header", "maxOccurs": 2 } },
+    { "id": "FW-E08", "records": ["HHEADER-0001", "DPMIBASCII       20261007TAIL-B "], "expectedError": { "code": "RecordCardinalityNotMet", "physicalLineNumber": 2, "recordRule": "trailer", "minOccurs": 1, "actual": 0 } },
+    { "id": "FW-E09", "records": ["HHEADER-0001", "", "DPMIBASCII       20261007TAIL-B ", "TTRAILER-001"], "expectedError": { "code": "UnknownRecordType", "physicalLineNumber": 2, "discriminator": "" } },
+    { "id": "FW-E10", "records": ["HHEADER-0001", "﻿DPMIBASCII       20261007TAIL-B ", "TTRAILER-001"], "expectedError": { "code": "UnexpectedByteOrderMark", "physicalLineNumber": 2, "position": 1 } }
+  ]
+}

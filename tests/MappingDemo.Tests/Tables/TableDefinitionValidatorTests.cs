@@ -27,9 +27,9 @@ public sealed class TableDefinitionValidatorTests
             TableKind.Source,
             new ColumnDefinition("order_no", ColumnDataType.Text, false, 1))
             with
-            {
-                Name = "Bad-Name"
-            };
+        {
+            Name = "Bad-Name"
+        };
 
         var errors = TableDefinitionValidator.Validate(definition);
 
@@ -132,6 +132,61 @@ public sealed class TableDefinitionValidatorTests
         var errors = TableDefinitionValidator.Validate(definition);
 
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Validate_accepts_type_specific_column_metadata()
+    {
+        var definition = CreateDefinition(
+            TableKind.Normalized,
+            new ColumnDefinition(
+                "name",
+                ColumnDataType.Text,
+                true,
+                1,
+                Length: 200),
+            new ColumnDefinition(
+                "amount",
+                ColumnDataType.Decimal,
+                true,
+                2,
+                Precision: 18,
+                Scale: 2));
+
+        var errors = TableDefinitionValidator.Validate(definition);
+
+        Assert.Empty(errors);
+    }
+
+    [Theory]
+    [InlineData(ColumnDataType.Text, 0, null, null, "length")]
+    [InlineData(ColumnDataType.Integer, 10, null, null, "length")]
+    [InlineData(ColumnDataType.Decimal, null, 0, null, "precision")]
+    [InlineData(ColumnDataType.Decimal, null, 10, 11, "scale")]
+    [InlineData(ColumnDataType.Text, null, 10, 2, "precision")]
+    public void Validate_rejects_invalid_or_inapplicable_metadata(
+        ColumnDataType dataType,
+        int? length,
+        int? precision,
+        int? scale,
+        string invalidField)
+    {
+        var definition = CreateDefinition(
+            TableKind.Normalized,
+            new ColumnDefinition(
+                "value",
+                dataType,
+                false,
+                1,
+                length,
+                precision,
+                scale));
+
+        var errors = TableDefinitionValidator.Validate(definition);
+
+        Assert.Contains(
+            errors,
+            error => error.Field == $"columns[0].{invalidField}");
     }
 
     private static TableDefinition CreateDefinition(

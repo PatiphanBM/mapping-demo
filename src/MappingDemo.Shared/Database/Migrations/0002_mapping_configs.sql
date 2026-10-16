@@ -12,8 +12,8 @@ CREATE TABLE mapping_config_versions (
     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     config_id bigint NOT NULL REFERENCES mapping_configs(id),
     version_no integer NOT NULL,
-    file_to_source jsonb NOT NULL,
-    source_to_normalized jsonb NOT NULL,
+    input_layout jsonb NOT NULL,
+    transformation_program jsonb NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     activated_at timestamptz,
     UNIQUE (config_id, version_no)

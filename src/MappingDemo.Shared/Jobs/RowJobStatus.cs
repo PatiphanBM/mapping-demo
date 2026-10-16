@@ -6,6 +6,8 @@ public static class RowJobStatus
 
     public const string Done = "Done";
 
+    public const string Filtered = "Filtered";
+
     public const string Invalid = "Invalid";
 
     public const string Failed = "Failed";

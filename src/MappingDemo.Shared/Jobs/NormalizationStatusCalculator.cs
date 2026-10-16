@@ -6,6 +6,7 @@ public static class NormalizationStatusCalculator
         string importStatus,
         int pendingRows,
         int doneRows,
+        int filteredRows,
         int invalidRows,
         int failedRows)
     {

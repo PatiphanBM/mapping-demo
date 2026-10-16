@@ -27,6 +27,7 @@ public sealed class DdlBuilderTests
                 id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                 file_job_id bigint NOT NULL,
                 row_number int NOT NULL,
+                physical_line_number int NOT NULL,
                 imported_at timestamptz NOT NULL DEFAULT now(),
                 "order_no" text,
                 "customer_name" text,
@@ -52,12 +53,13 @@ public sealed class DdlBuilderTests
                     "is_paid",
                     ColumnDataType.Boolean,
                     IsRequired: true,
-                    Ordinal: 4),
+                    Ordinal: 7),
                 new ColumnDefinition(
                     "order_no",
                     ColumnDataType.Text,
                     IsRequired: true,
-                    Ordinal: 1),
+                    Ordinal: 1,
+                    Length: 50),
                 new ColumnDefinition(
                     "order_date",
                     ColumnDataType.Date,
@@ -67,21 +69,43 @@ public sealed class DdlBuilderTests
                     "amount",
                     ColumnDataType.Decimal,
                     IsRequired: true,
-                    Ordinal: 3)
+                    Ordinal: 3,
+                    Precision: 18,
+                    Scale: 2),
+                new ColumnDefinition(
+                    "sequence_no",
+                    ColumnDataType.Integer,
+                    IsRequired: true,
+                    Ordinal: 4),
+                new ColumnDefinition(
+                    "processed_at",
+                    ColumnDataType.DateTime,
+                    IsRequired: true,
+                    Ordinal: 5),
+                new ColumnDefinition(
+                    "request_id",
+                    ColumnDataType.Guid,
+                    IsRequired: true,
+                    Ordinal: 6)
             ]);
         var expected = """
             CREATE TABLE "norm_orders" (
                 id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                source_row_id bigint NOT NULL UNIQUE,
+                source_row_id bigint NOT NULL,
+                output_key text NOT NULL,
                 file_job_id bigint NOT NULL,
                 row_number int NOT NULL,
                 row_job_id bigint NOT NULL,
                 config_version_id bigint NOT NULL,
                 normalized_at timestamptz NOT NULL DEFAULT now(),
-                "order_no" text,
+                "order_no" varchar(50),
                 "order_date" date,
-                "amount" numeric,
-                "is_paid" boolean
+                "amount" numeric(18, 2),
+                "sequence_no" integer,
+                "processed_at" timestamp without time zone,
+                "request_id" uuid,
+                "is_paid" boolean,
+                UNIQUE (source_row_id, output_key)
             );
             """;
 
@@ -99,12 +123,14 @@ public sealed class DdlBuilderTests
             "amount",
             ColumnDataType.Decimal,
             IsRequired: true,
-            Ordinal: 2);
+            Ordinal: 2,
+            Precision: 12,
+            Scale: 4);
 
         var sql = DdlBuilder.AddColumn("norm_orders", column);
 
         Assert.Equal(
-            "ALTER TABLE \"norm_orders\" ADD COLUMN \"amount\" numeric;",
+            "ALTER TABLE \"norm_orders\" ADD COLUMN \"amount\" numeric(12, 4);",
             sql);
     }
 }

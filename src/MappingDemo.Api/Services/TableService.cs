@@ -15,7 +15,10 @@ public sealed class TableService
             table_columns.name AS "ColumnName",
             table_columns.data_type AS "DataType",
             table_columns.is_required AS "IsRequired",
-            table_columns.ordinal AS "Ordinal"
+            table_columns.ordinal AS "Ordinal",
+            table_columns.length AS "Length",
+            table_columns.precision AS "Precision",
+            table_columns.scale AS "Scale"
         FROM table_definitions
         INNER JOIN table_columns
             ON table_columns.table_id = table_definitions.id
@@ -30,7 +33,10 @@ public sealed class TableService
             table_columns.name AS "ColumnName",
             table_columns.data_type AS "DataType",
             table_columns.is_required AS "IsRequired",
-            table_columns.ordinal AS "Ordinal"
+            table_columns.ordinal AS "Ordinal",
+            table_columns.length AS "Length",
+            table_columns.precision AS "Precision",
+            table_columns.scale AS "Scale"
         FROM table_definitions
         INNER JOIN table_columns
             ON table_columns.table_id = table_definitions.id
@@ -50,13 +56,19 @@ public sealed class TableService
             name,
             data_type,
             is_required,
-            ordinal)
+            ordinal,
+            length,
+            precision,
+            scale)
         VALUES (
             @TableId,
             @Name,
             @DataType,
             @IsRequired,
-            @Ordinal);
+            @Ordinal,
+            @Length,
+            @Precision,
+            @Scale);
         """;
 
     private const string SelectTableNameForUpdateSql = """
@@ -136,7 +148,10 @@ public sealed class TableService
             column.Name,
             DataType = column.DataType.ToString(),
             column.IsRequired,
-            column.Ordinal
+            column.Ordinal,
+            column.Length,
+            column.Precision,
+            column.Scale
         });
         var insertColumnsCommand = new CommandDefinition(
             InsertTableColumnSql,
@@ -201,7 +216,10 @@ public sealed class TableService
             request.Name,
             request.DataType,
             request.IsRequired,
-            ordinal);
+            ordinal,
+            request.Length,
+            request.Precision,
+            request.Scale);
 
         var insertColumnCommand = new CommandDefinition(
             InsertTableColumnSql,
@@ -211,7 +229,10 @@ public sealed class TableService
                 column.Name,
                 DataType = column.DataType.ToString(),
                 column.IsRequired,
-                column.Ordinal
+                column.Ordinal,
+                column.Length,
+                column.Precision,
+                column.Scale
             },
             transaction,
             cancellationToken: cancellationToken);
@@ -241,7 +262,10 @@ public sealed class TableService
                     .Select(row => new ColumnRequest(
                         row.ColumnName,
                         Enum.Parse<ColumnDataType>(row.DataType),
-                        row.IsRequired))
+                        row.IsRequired,
+                        row.Length,
+                        row.Precision,
+                        row.Scale))
                     .ToArray();
 
                 return new TableResponse(
@@ -268,5 +292,11 @@ public sealed class TableService
         public bool IsRequired { get; init; }
 
         public int Ordinal { get; init; }
+
+        public int? Length { get; init; }
+
+        public int? Precision { get; init; }
+
+        public int? Scale { get; init; }
     }
 }

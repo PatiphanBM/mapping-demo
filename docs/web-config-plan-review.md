@@ -131,11 +131,11 @@ Value kind ใน UI มีแค่ Direct field, Constant, Current date, CASE 
 
 **ข้อสรุป (ปิดแล้ว):** ใน demo ให้ PMIB Normalized table ที่สร้างผ่าน Tables API เป็น `MTI_ORIGINAL` ตามความหมายของ workbook และให้ `configure-demo.ps1` สร้าง composite index `(SYSTEM_ID, CPRODUCTNAME, CLOANNUMBER)` ด้วย trusted setup SQL; config เลือกเพียง `mtiOriginalPolicyExists@1` และส่ง logical arguments `systemId`, `productName`, `loanNumber` โดย runtime เติม `currentSourceRowId` จาก Row Job context ห้ามให้ผู้ใช้กำหนดเอง Adapter query live committed state แบบ parameterized/batched และคืน matching `source_row_id` เพื่อตัด current Source row ออก ดังนั้น retry/reprocess ไม่ block ตัวเอง, Source row อื่นที่มี product + loan เดียวกันยัง match และ loan เดียวกันคนละ product ไม่ match ทั้งนี้เป็น anti-lookup ไม่ใช่ concurrency uniqueness guarantee; ถ้าต้องห้ามสองงานใหม่ที่ชนกันพร้อมกันต้องเพิ่ม constraint/locking เป็น requirement แยก
 
-### B7. `formatRegNo@1` ยังไม่มี source of truth
+### B7. `formatRegNo@1` ยังไม่มี source of truth (ปิดแล้ว)
 
 ใน repo ยังไม่มีโค้ดหรือ behavior ของ `dbo.FormatRegNo` ทำให้ 19.0 และ 19.10 ทำ parity test ไม่ได้
 
-**ต้องตัดสินใจ:** ไปขอ source ของ function จริงมา หรือนิยาม behavior เองสำหรับ demo แล้วเขียนกำกับไว้ว่าเป็น stand-in
+**ข้อสรุป:** 19.0 นิยาม `formatRegNo@1` เป็น demo stand-in แบบ null-preserving ที่ trim เฉพาะหัวท้ายและรักษาข้อความภายใน พร้อมระบุ `parityClaim=false` ใน golden fixtures เพราะไม่มี source ของ legacy function หากได้ source จริงและ behavior ต่างต้องเพิ่ม capability version ใหม่ เช่น `formatRegNo@2` ห้ามเปลี่ยน `@1` เงียบ ๆ
 
 ### B8. `currentDate` ใช้ timezone ไหน
 
@@ -185,9 +185,9 @@ demo นี้ reset DB ได้อยู่แล้ว
 
 ## C. เรื่องเล็กที่ควรเขียนให้ชัด
 
-- **Line ending:** `isoMTI-N7780.txt` ใช้ CRLF และมี CRLF ปิดท้ายไฟล์ ควรเขียนใน 19.0 ว่ารับทั้ง LF และ CRLF, บรรทัดว่างสุดท้ายไม่นับเป็น record และถ้ามี BOM จะทำอย่างไร
-- **Row Number:** ควรเขียนคำนิยามใหม่ใน CONTEXT ว่าเป็นลำดับของ Import record ไม่นับ H/T เพราะคำนิยามเดิมพูดถึงแค่ header ของ CSV
-- **ขอบเขตของ `inputLayout`:** Reprocess ไม่อ่านไฟล์ใหม่ ดังนั้นการเปลี่ยน `inputLayout` ใน version ใหม่จะมีผลเฉพาะไฟล์ใหม่ ควรเขียนไว้ใน Invariants
+- **Line ending (แก้แล้ว):** 19.0 ตรึงให้รับ LF/CRLF, final terminator ไม่สร้าง record เพิ่ม และรับ UTF-8 BOM ได้หนึ่งตัวเฉพาะต้น stream
+- **Row Number (แก้แล้ว):** CONTEXT นิยามเป็นลำดับ Import record ไม่นับ Ignore record และแยก Physical Line Number แล้ว
+- **ขอบเขตของ `inputLayout` (แก้แล้ว):** Invariants ระบุว่า reprocess อ่าน Source เดิมและ layout ใหม่มีผลเฉพาะ File Import Job ใหม่
 - **Requirement ของ Node:** "เวอร์ชันที่ Next.js ล่าสุดรองรับ" ยังกว้างไป ควร pin major version เช่น Node 22 LTS
 
 ---
@@ -210,7 +210,7 @@ demo นี้ reset DB ได้อยู่แล้ว
 | B4 | trim / implicit conversion | ปิดแล้ว — Target Assignment Coercion |
 | B5 | Filtered ตอน reprocess | ปิดแล้ว — atomic reconcile empty set และลบผลเดิม |
 | B6 | anti-lookup กับ idempotency | ปิดแล้ว — PMIB Normalized table, composite key และ self-exclusion |
-| B7 | source ของ `FormatRegNo` | **ปิดก่อน 19.0** |
+| B7 | source ของ `FormatRegNo` | ปิดแล้ว — demo stand-in ชัดเจนและไม่อ้าง legacy parity |
 | B8 | timezone | ปิดแล้ว — `Asia/Bangkok` จาก persisted `evaluation_at` instant |
 | B9 | `semanticsProfile` | ปิดแล้ว — immutable `sqlserver-legacy-v1` preset |
 | B10 | ที่อยู่ของ module | ปิดแล้ว — สอง namespaces ใน `MappingDemo.Shared` |

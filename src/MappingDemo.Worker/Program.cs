@@ -1,10 +1,15 @@
 using Confluent.Kafka;
-using MappingDemo.Shared.Csv;
 using MappingDemo.Shared.Database;
+using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.Transformation.Adapters;
 using MappingDemo.Worker;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddSingleton<ITransformationLookupResolver,
+    PostgreSqlTransformationLookupResolver>();
+builder.Services.AddSingleton<TransformationModule>();
 
 var inputRoot = builder.Configuration["Paths:InputRoot"];
 if (string.IsNullOrWhiteSpace(inputRoot))
@@ -47,7 +52,7 @@ builder.Services.AddSingleton(new ConsumerConfig
     EnableAutoCommit = false,
     AutoOffsetReset = AutoOffsetReset.Earliest
 });
-builder.Services.AddSingleton<CsvRecordReader>();
+builder.Services.AddSingleton<InputRecordModule>();
 builder.Services.AddSingleton<FileImportHandler>();
 builder.Services.AddSingleton<RowNormalizeHandler>();
 builder.Services.AddHostedService<OutboxDispatcher>();

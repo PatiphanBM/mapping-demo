@@ -2,10 +2,11 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Dapper;
-using MappingDemo.Shared.Csv;
+using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Jobs;
-using MappingDemo.Shared.MappingConfigs;
 using MappingDemo.Shared.Messaging;
+using MappingDemo.Shared.Tables;
 using Npgsql;
 
 namespace MappingDemo.Worker;
@@ -35,8 +36,9 @@ public sealed class FileImportHandler
             file_jobs.archive_status AS ArchiveStatus,
             file_jobs.content_hash AS ContentHash,
             file_jobs.created_at AS CreatedAt,
-            mapping_config_versions.file_to_source::text
-                AS FileToSourceJson,
+            mapping_config_versions.input_layout::text
+                AS InputLayoutJson,
+            source_table.id AS SourceTableId,
             source_table.name AS SourceTableName
         FROM file_jobs
         INNER JOIN mapping_config_versions
@@ -163,8 +165,22 @@ public sealed class FileImportHandler
         RETURNING id;
         """;
 
+    private const string SelectSourceColumnsSql = """
+        SELECT
+            name AS "Name",
+            data_type AS "DataType",
+            is_required AS "IsRequired",
+            ordinal AS "Ordinal",
+            length AS "Length",
+            precision AS "Precision",
+            scale AS "Scale"
+        FROM table_columns
+        WHERE table_id = @SourceTableId
+        ORDER BY ordinal;
+        """;
+
     private readonly NpgsqlDataSource _dataSource;
-    private readonly CsvRecordReader _csvRecordReader;
+    private readonly InputRecordModule _inputRecordModule;
     private readonly TimeSpan _delay;
     private readonly TimeSpan _importRowDelay;
     private readonly int? _failImportAtRow;
@@ -174,13 +190,13 @@ public sealed class FileImportHandler
 
     public FileImportHandler(
         NpgsqlDataSource dataSource,
-        CsvRecordReader csvRecordReader,
+        InputRecordModule inputRecordModule,
         IConfiguration configuration,
         IHostEnvironment hostEnvironment,
         ILogger<FileImportHandler> logger)
     {
         _dataSource = dataSource;
-        _csvRecordReader = csvRecordReader;
+        _inputRecordModule = inputRecordModule;
         _delay = TimeSpan.FromSeconds(
             configuration.GetValue<int>("Import:DelaySeconds"));
         _importRowDelay = TimeSpan.FromMilliseconds(
@@ -265,21 +281,11 @@ public sealed class FileImportHandler
             return true;
         }
 
-        var fileToSourceRules =
-            JsonSerializer.Deserialize<FileToSourceRule[]>(
-                fileJob.FileToSourceJson,
-                JsonOptions) ?? [];
-        var rulesLog = string.Join(
-            ", ",
-            fileToSourceRules.Select(
-                rule => $"{rule.CsvHeader}->{rule.SourceColumn}"));
-
         _logger.LogInformation(
-            "File job {FileJobId} uses config version {ConfigVersionId}, source table {SourceTableName}, and file-to-source rules {FileToSourceRules}",
+            "File job {FileJobId} uses pinned config version {ConfigVersionId} and source table {SourceTableName}",
             fileJob.Id,
             fileJob.ConfigVersionId,
-            fileJob.SourceTableName,
-            rulesLog);
+            fileJob.SourceTableName);
 
         await SetDelayingAsync(fileJob.Id, cancellationToken);
 
@@ -376,30 +382,57 @@ public sealed class FileImportHandler
             contentHash,
             fileJob.Id);
 
-        IReadOnlyList<string> headers;
-        using (var snapshotReader = File.OpenText(snapshotPath))
+        InputLayoutDefinition inputLayout;
+        try
         {
-            headers = await _csvRecordReader.ReadHeaderAsync(
-                snapshotReader,
-                cancellationToken);
+            inputLayout =
+                PolymorphicJson.Deserialize<InputLayoutDefinition>(
+                    fileJob.InputLayoutJson,
+                    JsonOptions) ?? throw new JsonException(
+                    "Persisted input layout cannot be null.");
         }
-        var availableHeaders = headers.ToHashSet(StringComparer.Ordinal);
-        var missingHeaders = fileToSourceRules
-            .Select(rule => rule.CsvHeader)
-            .Where(header => !availableHeaders.Contains(header))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        if (missingHeaders.Length > 0)
+        catch (JsonException exception)
         {
-            var lastError =
-                $"Missing required CSV headers: {string.Join(", ", missingHeaders)}.";
+            var lastError = JsonSerializer.Serialize(
+                new
+                {
+                    Code = "InvalidInputLayout",
+                    Detail = exception.Message
+                },
+                JsonOptions);
             await SetImportFailedAsync(
                 fileJob.Id,
                 lastError,
                 cancellationToken);
-            _logger.LogInformation(
-                "File job {FileJobId} failed header validation: {LastError}",
+            _logger.LogError(
+                exception,
+                "File job {FileJobId} has an invalid persisted input layout",
+                fileJob.Id);
+            return true;
+        }
+
+        var sourceTable = await LoadSourceTableAsync(
+            fileJob.SourceTableId,
+            fileJob.SourceTableName,
+            cancellationToken);
+        var compilation = _inputRecordModule.Compile(
+            inputLayout,
+            sourceTable);
+        if (!compilation.IsSuccess)
+        {
+            var lastError = JsonSerializer.Serialize(
+                new
+                {
+                    Code = "InvalidInputLayout",
+                    compilation.Diagnostics
+                },
+                JsonOptions);
+            await SetImportFailedAsync(
+                fileJob.Id,
+                lastError,
+                cancellationToken);
+            _logger.LogError(
+                "File job {FileJobId} has an input layout that does not compile: {LastError}",
                 fileJob.Id,
                 lastError);
             return true;
@@ -407,11 +440,34 @@ public sealed class FileImportHandler
 
         try
         {
-            using var recordsReader = File.OpenText(snapshotPath);
+            InputRecordReadResult readResult;
+            await using (var snapshotStream = File.OpenRead(snapshotPath))
+            {
+                readResult = await _inputRecordModule.ReadAsync(
+                    snapshotStream,
+                    compilation.CompiledLayout!,
+                    cancellationToken);
+            }
+
+            if (!readResult.IsSuccess)
+            {
+                var lastError = JsonSerializer.Serialize(
+                    readResult.Error,
+                    JsonOptions);
+                await SetImportFailedAsync(
+                    fileJob.Id,
+                    lastError,
+                    cancellationToken);
+                _logger.LogInformation(
+                    "File job {FileJobId} failed input validation: {LastError}",
+                    fileJob.Id,
+                    lastError);
+                return true;
+            }
+
             var totalRows = 0;
-            await foreach (var record in _csvRecordReader.ReadAsync(
-                               recordsReader,
-                               cancellationToken))
+            foreach (var record in readResult.Records.Where(record =>
+                         record.Action == InputRecordAction.Import))
             {
                 if (_failImportAtRow == record.RowNumber)
                 {
@@ -421,7 +477,6 @@ public sealed class FileImportHandler
 
                 await ImportRecordAsync(
                     fileJob,
-                    fileToSourceRules,
                     record,
                     cancellationToken);
                 totalRows++;
@@ -604,8 +659,7 @@ public sealed class FileImportHandler
 
     private async Task ImportRecordAsync(
         FileJob fileJob,
-        IReadOnlyList<FileToSourceRule> rules,
-        CsvRecord record,
+        InputRecord record,
         CancellationToken cancellationToken)
     {
         await using var connection =
@@ -617,7 +671,6 @@ public sealed class FileImportHandler
             connection,
             transaction,
             fileJob.SourceTableName,
-            rules,
             fileJob.Id,
             record,
             cancellationToken);
@@ -630,7 +683,7 @@ public sealed class FileImportHandler
                 {
                     FileJobId = fileJob.Id,
                     SourceRowId = sourceRowId.Value,
-                    record.RowNumber,
+                    RowNumber = record.RowNumber!.Value,
                     ConfigVersionId = fileJob.ConfigVersionId,
                     Kind = "Initial",
                     Status = RowJobStatus.Pending
@@ -664,6 +717,34 @@ public sealed class FileImportHandler
             cancellationToken: cancellationToken);
 
         return await connection.QuerySingleOrDefaultAsync<FileJob>(command);
+    }
+
+    private async Task<TableDefinition> LoadSourceTableAsync(
+        long sourceTableId,
+        string sourceTableName,
+        CancellationToken cancellationToken)
+    {
+        await using var connection =
+            await _dataSource.OpenConnectionAsync(cancellationToken);
+        var command = new CommandDefinition(
+            SelectSourceColumnsSql,
+            new { SourceTableId = sourceTableId },
+            cancellationToken: cancellationToken);
+        var rows = (await connection.QueryAsync<SourceColumnRow>(command))
+            .ToArray();
+
+        return new TableDefinition(
+            sourceTableName,
+            TableKind.Source,
+            rows.Select(row => new ColumnDefinition(
+                    row.Name,
+                    Enum.Parse<ColumnDataType>(row.DataType),
+                    row.IsRequired,
+                    row.Ordinal,
+                    row.Length,
+                    row.Precision,
+                    row.Scale))
+                .ToArray());
     }
 
     private async Task SetDelayingAsync(
@@ -899,6 +980,16 @@ public sealed class FileImportHandler
         string ArchiveStatus,
         string? ContentHash,
         DateTime CreatedAt,
-        string FileToSourceJson,
+        string InputLayoutJson,
+        long SourceTableId,
         string SourceTableName);
+
+    private sealed record SourceColumnRow(
+        string Name,
+        string DataType,
+        bool IsRequired,
+        int Ordinal,
+        int? Length,
+        int? Precision,
+        int? Scale);
 }

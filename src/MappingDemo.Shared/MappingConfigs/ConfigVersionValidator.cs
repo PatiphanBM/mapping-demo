@@ -1,152 +1,67 @@
-using System.Globalization;
+using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Tables;
+using MappingDemo.Shared.Transformation;
 
 namespace MappingDemo.Shared.MappingConfigs;
 
 public static class ConfigVersionValidator
 {
     public static IReadOnlyList<ConfigVersionValidationError> Validate(
-        IReadOnlyList<FileToSourceRule> fileToSource,
-        IReadOnlyList<SourceToNormalizedRule> sourceToNormalized,
+        InputLayoutDefinition inputLayout,
+        TransformationProgram transformationProgram,
         TableDefinition sourceTable,
         TableDefinition normalizedTable)
     {
-        ArgumentNullException.ThrowIfNull(fileToSource);
-        ArgumentNullException.ThrowIfNull(sourceToNormalized);
+        ArgumentNullException.ThrowIfNull(inputLayout);
+        ArgumentNullException.ThrowIfNull(transformationProgram);
         ArgumentNullException.ThrowIfNull(sourceTable);
         ArgumentNullException.ThrowIfNull(normalizedTable);
 
         var errors = new List<ConfigVersionValidationError>();
-        var sourceColumns = sourceTable.Columns
-            .Select(column => column.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var normalizedColumns = normalizedTable.Columns
-            .ToDictionary(column => column.Name, StringComparer.Ordinal);
-
-        ValidateFileToSource(fileToSource, sourceColumns, errors);
-        ValidateSourceToNormalized(
-            sourceToNormalized,
-            sourceColumns,
-            normalizedColumns,
+        ValidateInputLayout(inputLayout, sourceTable, errors);
+        ValidateTransformationProgram(
+            transformationProgram,
+            sourceTable,
+            normalizedTable,
             errors);
 
         return errors;
     }
 
-    private static void ValidateFileToSource(
-        IReadOnlyList<FileToSourceRule> rules,
-        IReadOnlySet<string> sourceColumns,
+    private static void ValidateInputLayout(
+        InputLayoutDefinition inputLayout,
+        TableDefinition sourceTable,
         ICollection<ConfigVersionValidationError> errors)
     {
-        var csvHeaders = new HashSet<string>(StringComparer.Ordinal);
-
-        for (var index = 0; index < rules.Count; index++)
+        var result = new InputRecordModule().Compile(
+            inputLayout,
+            sourceTable);
+        foreach (var diagnostic in result.Diagnostics.Where(diagnostic =>
+                     diagnostic.Severity ==
+                     InputLayoutDiagnosticSeverity.Error))
         {
-            var rule = rules[index];
-            var fieldPrefix = $"fileToSource[{index}]";
-
-            if (!sourceColumns.Contains(rule.SourceColumn))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.sourceColumn",
-                    "Source column does not exist."));
-            }
-
-            if (!csvHeaders.Add(rule.CsvHeader))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.csvHeader",
-                    "CSV headers must be unique."));
-            }
-        }
-    }
-
-    private static void ValidateSourceToNormalized(
-        IReadOnlyList<SourceToNormalizedRule> rules,
-        IReadOnlySet<string> sourceColumns,
-        IReadOnlyDictionary<string, ColumnDefinition> normalizedColumns,
-        ICollection<ConfigVersionValidationError> errors)
-    {
-        var mappedNormalizedColumns =
-            new HashSet<string>(StringComparer.Ordinal);
-
-        for (var index = 0; index < rules.Count; index++)
-        {
-            var rule = rules[index];
-            var fieldPrefix = $"sourceToNormalized[{index}]";
-
-            if (!sourceColumns.Contains(rule.SourceColumn))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.sourceColumn",
-                    "Source column does not exist."));
-            }
-
-            if (!normalizedColumns.TryGetValue(
-                    rule.NormalizedColumn,
-                    out var normalizedColumn))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.normalizedColumn",
-                    "Normalized column does not exist."));
-                continue;
-            }
-
-            if (!mappedNormalizedColumns.Add(rule.NormalizedColumn))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.normalizedColumn",
-                    "Normalized columns can only be mapped once."));
-            }
-
-            if (normalizedColumn.DataType == ColumnDataType.Date &&
-                rule.Format is not null &&
-                !IsValidDateFormat(rule.Format))
-            {
-                errors.Add(new ConfigVersionValidationError(
-                    $"{fieldPrefix}.format",
-                    "Date format is invalid."));
-            }
-        }
-
-        foreach (var column in normalizedColumns.Values)
-        {
-            if (!column.IsRequired ||
-                mappedNormalizedColumns.Contains(column.Name))
-            {
-                continue;
-            }
-
             errors.Add(new ConfigVersionValidationError(
-                "sourceToNormalized",
-                $"Required normalized column '{column.Name}' must be mapped."));
+                $"inputLayout.{diagnostic.Path}",
+                diagnostic.Message));
         }
     }
 
-    private static bool IsValidDateFormat(string format)
+    private static void ValidateTransformationProgram(
+        TransformationProgram program,
+        TableDefinition sourceTable,
+        TableDefinition normalizedTable,
+        ICollection<ConfigVersionValidationError> errors)
     {
-        if (string.IsNullOrWhiteSpace(format))
+        var result = new TransformationModule().Compile(
+            program,
+            new TransformationSchema(sourceTable, normalizedTable));
+        foreach (var diagnostic in result.Diagnostics.Where(diagnostic =>
+                     diagnostic.Severity ==
+                     TransformationDiagnosticSeverity.Error))
         {
-            return false;
-        }
-
-        try
-        {
-            var example = new DateOnly(2000, 1, 2);
-            var formatted = example.ToString(
-                format,
-                CultureInfo.InvariantCulture);
-
-            return DateOnly.TryParseExact(
-                formatted,
-                format,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out _);
-        }
-        catch (FormatException)
-        {
-            return false;
+            errors.Add(new ConfigVersionValidationError(
+                $"transformationProgram.{diagnostic.Path}",
+                diagnostic.Message));
         }
     }
 }

@@ -2,7 +2,9 @@ using System.Text.Json;
 using Dapper;
 using MappingDemo.Api.Contracts.MappingConfigs;
 using MappingDemo.Api.Options;
-using MappingDemo.Shared.MappingConfigs;
+using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Serialization;
+using MappingDemo.Shared.Transformation;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -35,10 +37,10 @@ public sealed class MappingConfigService
             mapping_configs.active_version_id AS "ActiveVersionId",
             mapping_config_versions.id AS "VersionId",
             mapping_config_versions.version_no AS "VersionNo",
-            mapping_config_versions.file_to_source::text
-                AS "FileToSourceJson",
-            mapping_config_versions.source_to_normalized::text
-                AS "SourceToNormalizedJson"
+            mapping_config_versions.input_layout::text
+                AS "InputLayoutJson",
+            mapping_config_versions.transformation_program::text
+                AS "TransformationProgramJson"
         FROM mapping_configs
         LEFT JOIN mapping_config_versions
             ON mapping_config_versions.config_id = mapping_configs.id
@@ -55,10 +57,10 @@ public sealed class MappingConfigService
             mapping_configs.active_version_id AS "ActiveVersionId",
             mapping_config_versions.id AS "VersionId",
             mapping_config_versions.version_no AS "VersionNo",
-            mapping_config_versions.file_to_source::text
-                AS "FileToSourceJson",
-            mapping_config_versions.source_to_normalized::text
-                AS "SourceToNormalizedJson"
+            mapping_config_versions.input_layout::text
+                AS "InputLayoutJson",
+            mapping_config_versions.transformation_program::text
+                AS "TransformationProgramJson"
         FROM mapping_configs
         LEFT JOIN mapping_config_versions
             ON mapping_config_versions.config_id = mapping_configs.id
@@ -90,13 +92,13 @@ public sealed class MappingConfigService
         INSERT INTO mapping_config_versions (
             config_id,
             version_no,
-            file_to_source,
-            source_to_normalized)
+            input_layout,
+            transformation_program)
         VALUES (
             @ConfigId,
             @VersionNo,
-            CAST(@FileToSourceJson AS jsonb),
-            CAST(@SourceToNormalizedJson AS jsonb))
+            CAST(@InputLayoutJson AS jsonb),
+            CAST(@TransformationProgramJson AS jsonb))
         RETURNING id;
         """;
 
@@ -105,8 +107,8 @@ public sealed class MappingConfigService
             id AS "Id",
             config_id AS "ConfigId",
             version_no AS "VersionNo",
-            file_to_source::text AS "FileToSourceJson",
-            source_to_normalized::text AS "SourceToNormalizedJson"
+            input_layout::text AS "InputLayoutJson",
+            transformation_program::text AS "TransformationProgramJson"
         FROM mapping_config_versions
         WHERE config_id = @ConfigId
           AND version_no = @VersionNo;
@@ -235,11 +237,11 @@ public sealed class MappingConfigService
         {
             ConfigId = configId,
             VersionNo = versionNo,
-            FileToSourceJson = JsonSerializer.Serialize(
-                request.FileToSource,
+            InputLayoutJson = JsonSerializer.Serialize(
+                request.InputLayout,
                 JsonOptions),
-            SourceToNormalizedJson = JsonSerializer.Serialize(
-                request.SourceToNormalized,
+            TransformationProgramJson = JsonSerializer.Serialize(
+                request.TransformationProgram,
                 JsonOptions)
         };
         var insertCommand = new CommandDefinition(
@@ -256,8 +258,8 @@ public sealed class MappingConfigService
             versionId,
             configId,
             versionNo,
-            request.FileToSource,
-            request.SourceToNormalized);
+            request.InputLayout,
+            request.TransformationProgram);
     }
 
     public async Task<MappingConfigVersionResponse?> GetVersionAsync(
@@ -283,20 +285,22 @@ public sealed class MappingConfigService
             return null;
         }
 
-        var fileToSource = JsonSerializer.Deserialize<FileToSourceRule[]>(
-            row.FileToSourceJson,
-            JsonOptions) ?? [];
-        var sourceToNormalized =
-            JsonSerializer.Deserialize<SourceToNormalizedRule[]>(
-                row.SourceToNormalizedJson,
-                JsonOptions) ?? [];
+        var inputLayout = PolymorphicJson.Deserialize<InputLayoutDefinition>(
+            row.InputLayoutJson,
+            JsonOptions) ?? throw new JsonException(
+                "Persisted input layout cannot be null.");
+        var transformationProgram =
+            PolymorphicJson.Deserialize<TransformationProgram>(
+                row.TransformationProgramJson,
+                JsonOptions) ?? throw new JsonException(
+                "Persisted transformation program cannot be null.");
 
         return new MappingConfigVersionResponse(
             row.Id,
             row.ConfigId,
             row.VersionNo,
-            fileToSource,
-            sourceToNormalized);
+            inputLayout,
+            transformationProgram);
     }
 
     public async Task ActivateVersionAsync(
@@ -345,12 +349,14 @@ public sealed class MappingConfigService
                         row.VersionId!.Value,
                         row.VersionNo!.Value,
                         row.VersionId == config.ActiveVersionId,
-                        JsonSerializer.Deserialize<FileToSourceRule[]>(
-                            row.FileToSourceJson!,
-                            JsonOptions) ?? [],
-                        JsonSerializer.Deserialize<SourceToNormalizedRule[]>(
-                            row.SourceToNormalizedJson!,
-                            JsonOptions) ?? []))
+                        PolymorphicJson.Deserialize<InputLayoutDefinition>(
+                            row.InputLayoutJson!,
+                            JsonOptions) ?? throw new JsonException(
+                                "Persisted input layout cannot be null."),
+                        PolymorphicJson.Deserialize<TransformationProgram>(
+                            row.TransformationProgramJson!,
+                            JsonOptions) ?? throw new JsonException(
+                            "Persisted transformation program cannot be null.")))
                     .ToArray();
 
                 return new MappingConfigDetailsResponse(
@@ -383,9 +389,9 @@ public sealed class MappingConfigService
 
         public int? VersionNo { get; init; }
 
-        public string? FileToSourceJson { get; init; }
+        public string? InputLayoutJson { get; init; }
 
-        public string? SourceToNormalizedJson { get; init; }
+        public string? TransformationProgramJson { get; init; }
     }
 
     private sealed class MappingConfigVersionRow
@@ -396,8 +402,8 @@ public sealed class MappingConfigService
 
         public int VersionNo { get; init; }
 
-        public string FileToSourceJson { get; init; } = string.Empty;
+        public string InputLayoutJson { get; init; } = string.Empty;
 
-        public string SourceToNormalizedJson { get; init; } = string.Empty;
+        public string TransformationProgramJson { get; init; } = string.Empty;
     }
 }

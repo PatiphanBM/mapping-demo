@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\MappingDemo.Api\MappingDemo.Api.csproj" />
     <ProjectReference Include="..\..\src\MappingDemo.Shared\MappingDemo.Shared.csproj" />
     <ProjectReference Include="..\..\src\MappingDemo.Worker\MappingDemo.Worker.csproj" />
   </ItemGroup>

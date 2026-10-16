@@ -1,10 +1,12 @@
+using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using Dapper;
 using MappingDemo.Shared.Jobs;
-using MappingDemo.Shared.MappingConfigs;
 using MappingDemo.Shared.Messaging;
-using MappingDemo.Shared.Normalization;
+using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Tables;
+using MappingDemo.Shared.Transformation;
 using Npgsql;
 
 namespace MappingDemo.Worker;
@@ -29,12 +31,17 @@ public sealed class RowNormalizeHandler
             row_jobs.row_number AS RowNumber,
             row_jobs.config_version_id AS ConfigVersionId,
             row_jobs.status AS Status,
-            mapping_config_versions.source_to_normalized::text
-                AS SourceToNormalizedJson,
+            row_jobs.evaluation_at AS EvaluationAt,
+            mapping_config_versions.transformation_program::text
+                AS TransformationProgramJson,
+            mapping_configs.source_table_id AS SourceTableId,
             mapping_configs.normalized_table_id AS NormalizedTableId,
             source_table.name AS SourceTableName,
-            normalized_table.name AS NormalizedTableName
+            normalized_table.name AS NormalizedTableName,
+            file_jobs.file_name AS FileName
         FROM row_jobs
+        INNER JOIN file_jobs
+            ON file_jobs.id = row_jobs.file_job_id
         INNER JOIN mapping_config_versions
             ON mapping_config_versions.id = row_jobs.config_version_id
         INNER JOIN mapping_configs
@@ -47,14 +54,17 @@ public sealed class RowNormalizeHandler
         FOR UPDATE OF row_jobs;
         """;
 
-    private const string SelectNormalizedColumnsSql = """
+    private const string SelectTableColumnsSql = """
         SELECT
             name AS Name,
             data_type AS DataType,
             is_required AS IsRequired,
-            ordinal AS Ordinal
+            ordinal AS Ordinal,
+            length AS Length,
+            precision AS Precision,
+            scale AS Scale
         FROM table_columns
-        WHERE table_id = @NormalizedTableId
+        WHERE table_id = @TableId
         ORDER BY ordinal;
         """;
 
@@ -63,13 +73,17 @@ public sealed class RowNormalizeHandler
             row_job_id,
             file_job_id,
             row_number,
+            output_key,
             field,
+            expression_path,
             reason)
         VALUES (
             @RowJobId,
             @FileJobId,
             @RowNumber,
+            @OutputKey,
             @Field,
+            @ExpressionPath,
             @Reason);
         """;
 
@@ -94,16 +108,21 @@ public sealed class RowNormalizeHandler
         """;
 
     private readonly NpgsqlDataSource _dataSource;
+    private readonly TransformationModule _transformationModule;
     private readonly IReadOnlySet<int> _failNormalizeRowNumbers;
     private readonly TimeSpan _normalizeDelay;
     private readonly ILogger<RowNormalizeHandler> _logger;
+    private readonly ConcurrentDictionary<long, CompiledRowConfig>
+        _compiledConfigs = new();
 
     public RowNormalizeHandler(
         NpgsqlDataSource dataSource,
+        TransformationModule transformationModule,
         IConfiguration configuration,
         ILogger<RowNormalizeHandler> logger)
     {
         _dataSource = dataSource;
+        _transformationModule = transformationModule;
         var failNormalizeRowNumbers = configuration
             .GetSection("Demo:FailNormalizeRowNumbers")
             .Get<int[]>() ?? [];
@@ -187,21 +206,21 @@ public sealed class RowNormalizeHandler
         int attempt,
         CancellationToken cancellationToken)
     {
-
         await using var connection =
             await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction =
             await connection.BeginTransactionAsync(cancellationToken);
-        var command = new CommandDefinition(
-            SelectRowJobSql,
-            new { request.RowJobId },
-            transaction,
-            cancellationToken: cancellationToken);
-        var rowJob = await connection.QuerySingleOrDefaultAsync<RowJob>(command)
+        var rowJob = await connection.QuerySingleOrDefaultAsync<RowJob>(
+                new CommandDefinition(
+                    SelectRowJobSql,
+                    new { request.RowJobId },
+                    transaction,
+                    cancellationToken: cancellationToken))
             ?? throw new InvalidOperationException(
                 $"Row job {request.RowJobId} was not found.");
 
         if (rowJob.Status is RowJobStatus.Done
+            or RowJobStatus.Filtered
             or RowJobStatus.Invalid
             or RowJobStatus.Failed)
         {
@@ -224,142 +243,207 @@ public sealed class RowNormalizeHandler
             await Task.Delay(_normalizeDelay, cancellationToken);
         }
 
-        var rules = JsonSerializer.Deserialize<SourceToNormalizedRule[]>(
-                rowJob.SourceToNormalizedJson,
-                JsonOptions) ?? [];
-        var normalizedColumns = await LoadNormalizedColumnsAsync(
+        var compiledConfig = await GetCompiledConfigAsync(
             connection,
             transaction,
-            rowJob.NormalizedTableId,
+            rowJob,
             cancellationToken);
         var sourceRow = await LoadSourceRowAsync(
             connection,
             transaction,
             rowJob.SourceTableName,
             rowJob.SourceRowId,
-            rules,
+            compiledConfig.SourceDependencies,
             cancellationToken);
-
-        _logger.LogInformation(
-            "Loaded {RuleCount} normalization rules and source row {SourceRowId} from {SourceTableName} for row job {RowJobId} using config version {ConfigVersionId}",
-            rules.Length,
-            rowJob.SourceRowId,
-            rowJob.SourceTableName,
-            rowJob.Id,
-            rowJob.ConfigVersionId);
-
-        var result = RowNormalizer.Normalize(
-            sourceRow,
-            rules,
-            normalizedColumns);
+        var evaluationAt = ToDateTimeOffset(rowJob.EvaluationAt);
+        var transformationRow = new TransformationSourceRow(
+            rowJob.SourceRowId.ToString(CultureInfo.InvariantCulture),
+            sourceRow.Values,
+            new Dictionary<string, object?>
+            {
+                ["fileName"] = rowJob.FileName,
+                ["rowNumber"] = rowJob.RowNumber,
+                ["physicalLineNumber"] = sourceRow.PhysicalLineNumber,
+                ["evaluationTime"] = evaluationAt
+            },
+            evaluationAt,
+            rowJob.SourceRowId);
+        var batchResult = await _transformationModule.EvaluateAsync(
+            compiledConfig.Program,
+            new TransformationBatch([transformationRow]),
+            cancellationToken);
+        var result = batchResult.Rows.Single();
 
         string completedStatus;
-        switch (result)
+        switch (result.Status)
         {
-            case RowNormalizationResult.Success success:
-                var normalizedValues = normalizedColumns.ToDictionary(
-                    column => column.Name,
-                    column => success.Values.TryGetValue(
-                        column.Name,
-                        out var value)
-                            ? value
-                            : null,
-                    StringComparer.Ordinal);
-                await NormalizedRowWriter.UpsertAsync(
-                    connection,
-                    transaction,
-                    rowJob.NormalizedTableName,
-                    rowJob.SourceRowId,
-                    rowJob.FileJobId,
-                    rowJob.RowNumber,
-                    rowJob.Id,
-                    rowJob.ConfigVersionId,
-                    normalizedValues,
-                    cancellationToken);
-                completedStatus = RowJobStatus.Done;
+            case TransformationRowStatus.Done:
+            case TransformationRowStatus.Filtered:
+                completedStatus = await NormalizedRowWriter
+                    .ReconcileAndCompleteAsync(
+                        connection,
+                        transaction,
+                        rowJob.NormalizedTableName,
+                        rowJob.SourceRowId,
+                        rowJob.FileJobId,
+                        rowJob.RowNumber,
+                        rowJob.Id,
+                        rowJob.ConfigVersionId,
+                        compiledConfig.NormalizedColumnNames,
+                        result.Outputs,
+                        attempt,
+                        cancellationToken);
                 break;
 
-            case RowNormalizationResult.Failure failure:
+            case TransformationRowStatus.Invalid:
                 await InsertErrorsAsync(
                     connection,
                     transaction,
                     rowJob,
-                    failure.Errors,
+                    result.Errors,
                     cancellationToken);
                 completedStatus = RowJobStatus.Invalid;
+                await CompleteRowJobAsync(
+                    connection,
+                    transaction,
+                    rowJob.Id,
+                    completedStatus,
+                    attempt,
+                    cancellationToken);
                 break;
 
             default:
                 throw new InvalidOperationException(
-                    "Row normalizer returned an unsupported result.");
+                    $"Transformation returned unsupported status '{result.Status}'.");
         }
 
-        await CompleteRowJobAsync(
-            connection,
-            transaction,
-            rowJob.Id,
-            completedStatus,
-            attempt,
-            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Completed row job {RowJobId} with status {RowJobStatus}",
+            "Completed row job {RowJobId} with status {RowJobStatus} using config version {ConfigVersionId}",
             rowJob.Id,
-            completedStatus);
+            completedStatus,
+            rowJob.ConfigVersionId);
+    }
+
+    private async Task<CompiledRowConfig> GetCompiledConfigAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        RowJob rowJob,
+        CancellationToken cancellationToken)
+    {
+        if (_compiledConfigs.TryGetValue(
+                rowJob.ConfigVersionId,
+                out var cached))
+        {
+            return cached;
+        }
+
+        var sourceColumns = await LoadTableColumnsAsync(
+            connection,
+            transaction,
+            rowJob.SourceTableId,
+            cancellationToken);
+        var normalizedColumns = await LoadTableColumnsAsync(
+            connection,
+            transaction,
+            rowJob.NormalizedTableId,
+            cancellationToken);
+        var program = PolymorphicJson.Deserialize<TransformationProgram>(
+                rowJob.TransformationProgramJson,
+                JsonOptions)
+            ?? throw new JsonException(
+                "Persisted transformation program cannot be null.");
+        var compilation = _transformationModule.Compile(
+            program,
+            new TransformationSchema(
+                new TableDefinition(
+                    rowJob.SourceTableName,
+                    TableKind.Source,
+                    sourceColumns),
+                new TableDefinition(
+                    rowJob.NormalizedTableName,
+                    TableKind.Normalized,
+                    normalizedColumns)));
+        if (!compilation.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                "Persisted transformation program did not compile: " +
+                string.Join(
+                    "; ",
+                    compilation.Diagnostics.Select(diagnostic =>
+                        $"{diagnostic.Path}: {diagnostic.Code}")));
+        }
+
+        var compiled = compilation.CompiledProgram!;
+        var loaded = new CompiledRowConfig(
+            compiled,
+            _transformationModule.GetSourceDependencies(compiled),
+            normalizedColumns
+                .OrderBy(column => column.Ordinal)
+                .Select(column => column.Name)
+                .ToArray());
+        return _compiledConfigs.GetOrAdd(rowJob.ConfigVersionId, loaded);
     }
 
     private static async Task<IReadOnlyList<ColumnDefinition>>
-        LoadNormalizedColumnsAsync(
+        LoadTableColumnsAsync(
             NpgsqlConnection connection,
             NpgsqlTransaction transaction,
-            long normalizedTableId,
+            long tableId,
             CancellationToken cancellationToken)
     {
-        var command = new CommandDefinition(
-            SelectNormalizedColumnsSql,
-            new { NormalizedTableId = normalizedTableId },
-            transaction,
-            cancellationToken: cancellationToken);
-        var rows = await connection.QueryAsync<NormalizedColumnRow>(command);
+        var rows = await connection.QueryAsync<TableColumnRow>(
+            new CommandDefinition(
+                SelectTableColumnsSql,
+                new { TableId = tableId },
+                transaction,
+                cancellationToken: cancellationToken));
 
         return rows
             .Select(row => new ColumnDefinition(
                 row.Name,
                 Enum.Parse<ColumnDataType>(row.DataType),
                 row.IsRequired,
-                row.Ordinal))
+                row.Ordinal,
+                row.Length,
+                row.Precision,
+                row.Scale))
             .ToArray();
     }
 
-    private static async Task<IReadOnlyDictionary<string, string?>>
-        LoadSourceRowAsync(
-            NpgsqlConnection connection,
-            NpgsqlTransaction transaction,
-            string sourceTableName,
-            long sourceRowId,
-            IReadOnlyList<SourceToNormalizedRule> rules,
-            CancellationToken cancellationToken)
+    private static async Task<LoadedSourceRow> LoadSourceRowAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string sourceTableName,
+        long sourceRowId,
+        IReadOnlyList<string> sourceDependencies,
+        CancellationToken cancellationToken)
     {
+        var dependencyProjection = sourceDependencies.Count == 0
+            ? string.Empty
+            : ", " + string.Join(
+                ", ",
+                sourceDependencies.Select(SqlIdentifier.Quote));
         var sql = $"""
-            SELECT *
+            SELECT
+                physical_line_number AS "PhysicalLineNumber"{dependencyProjection}
             FROM {SqlIdentifier.Quote(sourceTableName)}
             WHERE id = @SourceRowId;
             """;
-        var command = new CommandDefinition(
-            sql,
-            new { SourceRowId = sourceRowId },
-            transaction,
-            cancellationToken: cancellationToken);
-        var row = await connection.QuerySingleOrDefaultAsync(command)
+        var row = await connection.QuerySingleOrDefaultAsync(
+                new CommandDefinition(
+                    sql,
+                    new { SourceRowId = sourceRowId },
+                    transaction,
+                    cancellationToken: cancellationToken))
             ?? throw new InvalidOperationException(
                 $"Source row {sourceRowId} was not found in table '{sourceTableName}'.");
         var rowValues = (IDictionary<string, object?>)row;
-        var sourceRow = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var sourceValues = new Dictionary<string, string?>(
+            StringComparer.OrdinalIgnoreCase);
 
-        foreach (var sourceColumn in rules
-                     .Select(rule => rule.SourceColumn)
-                     .Distinct(StringComparer.Ordinal))
+        foreach (var sourceColumn in sourceDependencies)
         {
             if (!rowValues.TryGetValue(sourceColumn, out var value))
             {
@@ -367,34 +451,39 @@ public sealed class RowNormalizeHandler
                     $"Source column '{sourceColumn}' was not found in table '{sourceTableName}'.");
             }
 
-            sourceRow.Add(sourceColumn, (string?)value);
+            sourceValues.Add(sourceColumn, (string?)value);
         }
 
-        return sourceRow;
+        return new LoadedSourceRow(
+            sourceValues,
+            Convert.ToInt32(
+                rowValues["PhysicalLineNumber"],
+                CultureInfo.InvariantCulture));
     }
 
     private static async Task InsertErrorsAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         RowJob rowJob,
-        IReadOnlyList<RowNormalizationError> errors,
+        IReadOnlyList<TransformationRowError> errors,
         CancellationToken cancellationToken)
     {
         foreach (var error in errors)
         {
-            var command = new CommandDefinition(
+            await connection.ExecuteAsync(new CommandDefinition(
                 InsertRowErrorSql,
                 new
                 {
                     RowJobId = rowJob.Id,
                     rowJob.FileJobId,
                     rowJob.RowNumber,
+                    error.OutputKey,
                     error.Field,
+                    error.ExpressionPath,
                     error.Reason
                 },
                 transaction,
-                cancellationToken: cancellationToken);
-            await connection.ExecuteAsync(command);
+                cancellationToken: cancellationToken));
         }
     }
 
@@ -406,7 +495,7 @@ public sealed class RowNormalizeHandler
         int attempts,
         CancellationToken cancellationToken)
     {
-        var command = new CommandDefinition(
+        var updatedRows = await connection.ExecuteAsync(new CommandDefinition(
             CompleteRowJobSql,
             new
             {
@@ -415,8 +504,12 @@ public sealed class RowNormalizeHandler
                 Attempts = attempts
             },
             transaction,
-            cancellationToken: cancellationToken);
-        await connection.ExecuteAsync(command);
+            cancellationToken: cancellationToken));
+        if (updatedRows != 1)
+        {
+            throw new InvalidOperationException(
+                $"Row job {rowJobId} was not found while recording completion.");
+        }
     }
 
     private async Task SetFailedAsync(
@@ -429,7 +522,7 @@ public sealed class RowNormalizeHandler
             await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction =
             await connection.BeginTransactionAsync(cancellationToken);
-        var command = new CommandDefinition(
+        var updatedRows = await connection.ExecuteAsync(new CommandDefinition(
             FailRowJobSql,
             new
             {
@@ -439,8 +532,7 @@ public sealed class RowNormalizeHandler
                 LastError = lastError
             },
             transaction,
-            cancellationToken: cancellationToken);
-        var updatedRows = await connection.ExecuteAsync(command);
+            cancellationToken: cancellationToken));
 
         if (updatedRows != 1)
         {
@@ -451,6 +543,16 @@ public sealed class RowNormalizeHandler
         await transaction.CommitAsync(cancellationToken);
     }
 
+    private static DateTimeOffset ToDateTimeOffset(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => new DateTimeOffset(value),
+            DateTimeKind.Local => new DateTimeOffset(value.ToUniversalTime()),
+            _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
+        };
+    }
+
     private sealed record RowJob(
         long Id,
         long FileJobId,
@@ -458,14 +560,29 @@ public sealed class RowNormalizeHandler
         int RowNumber,
         long ConfigVersionId,
         string Status,
-        string SourceToNormalizedJson,
+        DateTime EvaluationAt,
+        string TransformationProgramJson,
+        long SourceTableId,
         long NormalizedTableId,
         string SourceTableName,
-        string NormalizedTableName);
+        string NormalizedTableName,
+        string FileName);
 
-    private sealed record NormalizedColumnRow(
+    private sealed record TableColumnRow(
         string Name,
         string DataType,
         bool IsRequired,
-        int Ordinal);
+        int Ordinal,
+        int? Length,
+        int? Precision,
+        int? Scale);
+
+    private sealed record CompiledRowConfig(
+        CompiledTransformationProgram Program,
+        IReadOnlyList<string> SourceDependencies,
+        IReadOnlyList<string> NormalizedColumnNames);
+
+    private sealed record LoadedSourceRow(
+        IReadOnlyDictionary<string, string?> Values,
+        int PhysicalLineNumber);
 }

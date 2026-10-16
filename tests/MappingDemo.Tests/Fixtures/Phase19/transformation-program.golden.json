@@ -1,0 +1,98 @@
+{
+  "note": "Behavior fixtures only. They intentionally do not freeze the persisted AST shape before step 19.6.",
+  "assignmentCases": [
+    {
+      "id": "TR-A01",
+      "source": {
+        "Code": "  AbC  ",
+        "Empty": "",
+        "Blank": " \t ",
+        "Missing": null,
+        "Amount": " +1234.50 ",
+        "RawDate": "20261006",
+        "Enabled": "TRUE"
+      },
+      "expected": {
+        "directText": "AbC",
+        "emptyDefault": "DEFAULT",
+        "nullCoalesce": "MISSING",
+        "optionalBlank": null,
+        "amount": { "type": "decimal", "value": "1234.50" },
+        "date": { "type": "date", "value": "2026-10-06", "inputFormat": "yyyyMMdd" },
+        "enabled": { "type": "boolean", "value": true },
+        "explicitTrim": "AbC"
+      }
+    },
+    {
+      "id": "TR-A02",
+      "source": { "RequiredText": "   " },
+      "expectedStatus": "Invalid",
+      "expectedErrors": [
+        { "outputKey": "pmx", "field": "REQUIRED_TEXT", "reason": "Required" }
+      ]
+    },
+    {
+      "id": "TR-A03",
+      "source": { "Amount": "1,234.50", "Date": "31/02/2026" },
+      "expectedStatus": "Invalid",
+      "expectedErrors": [
+        { "outputKey": "pmx", "field": "AMOUNT", "reason": "InvalidDecimal" },
+        { "outputKey": "pmx", "field": "EFFECTIVE_DATE", "reason": "InvalidDate" }
+      ]
+    },
+    {
+      "id": "TR-A04",
+      "operation": "explicitTrim",
+      "inputs": [null, "", " \t ", "  value  "],
+      "expected": [null, "", "", "value"]
+    }
+  ],
+  "caseExpressionCases": [
+    { "id": "TR-C01", "GarageType": "อู่ในเครือ", "cTotalPremium": "645.21", "VehicleCode": "310", "expectedWorkshop": "ซ่อมอู่", "expectedVehicleCode": "110" },
+    { "id": "TR-C02", "GarageType": "อู่ห้าง", "cTotalPremium": "967.28", "VehicleCode": "310", "expectedWorkshop": "ซ่อมห้าง", "expectedVehicleCode": "1.40A" },
+    { "id": "TR-C03", "GarageType": "อื่น", "cTotalPremium": "1182.35", "VehicleCode": "310", "expectedWorkshop": "", "expectedVehicleCode": "1.20A" },
+    { "id": "TR-C04", "GarageType": "อู่ในเครือ", "cTotalPremium": "999.00", "VehicleCode": "310", "expectedWorkshop": "ซ่อมอู่", "expectedVehicleCode": "320" },
+    { "id": "TR-C05", "GarageType": "อื่น", "cTotalPremium": "999.00", "VehicleCode": "888", "expectedWorkshop": "", "expectedVehicleCode": "888" }
+  ],
+  "expressionCases": [
+    {
+      "id": "TR-E01",
+      "source": { "REMARK": "รายการโอนย้ายเดิม", "ApplicationID": "PMX123456" },
+      "expected": { "productName": "N" }
+    },
+    {
+      "id": "TR-E02",
+      "source": { "REMARK": "รายการใหม่", "ApplicationID": "PMX123456" },
+      "substring": { "start": 1, "length": 1 },
+      "expected": { "productName": "P" }
+    }
+  ],
+  "formatRegNoCases": [
+    { "id": "TR-F01", "capability": "formatRegNo@1", "input": "  1กก 1234  ", "expected": "1กก 1234", "parityClaim": false },
+    { "id": "TR-F02", "capability": "formatRegNo@1", "input": "กข-99  01", "expected": "กข-99  01", "parityClaim": false },
+    { "id": "TR-F03", "capability": "formatRegNo@1", "input": null, "expected": null, "parityClaim": false }
+  ],
+  "lookupCases": [
+    { "id": "TR-L01", "currentSourceRowId": "source-1", "key": ["PMIB", "PMX", "LN-001"], "matches": [], "expectedExists": false, "expectedEmit": true },
+    { "id": "TR-L02", "currentSourceRowId": "source-1", "key": ["PMIB", "PMX", "LN-001"], "matches": [{ "sourceRowId": "source-1", "key": ["PMIB", "PMX", "LN-001"] }], "expectedExists": false, "expectedEmit": true },
+    { "id": "TR-L03", "currentSourceRowId": "source-1", "key": ["PMIB", "PMX", "LN-001"], "matches": [{ "sourceRowId": "source-2", "key": ["PMIB", "PMX", "LN-001"] }], "expectedExists": true, "expectedEmit": false },
+    { "id": "TR-L04", "currentSourceRowId": "source-1", "key": ["PMIB", "PMX", "LN-001"], "matches": [{ "sourceRowId": "source-2", "key": ["PMIB", "CTP", "LN-001"] }], "expectedExists": false, "expectedEmit": true }
+  ],
+  "outputCases": [
+    { "id": "TR-O00", "sourceWhen": null, "pmxWhen": true, "ctpWhen": true, "expectedStatus": "Filtered", "expectedOutputKeys": [] },
+    { "id": "TR-O01", "sourceWhen": true, "pmxWhen": true, "ctpWhen": false, "expectedStatus": "Done", "expectedOutputKeys": ["pmx"] },
+    { "id": "TR-O02", "sourceWhen": true, "pmxWhen": true, "ctpWhen": true, "expectedStatus": "Done", "expectedOutputKeys": ["pmx", "ctp"] },
+    { "id": "TR-O03", "sourceWhen": true, "pmxWhen": false, "ctpWhen": null, "expectedStatus": "Filtered", "expectedOutputKeys": [] }
+  ],
+  "reprocessCases": [
+    {
+      "id": "TR-R01",
+      "sourceRowId": "source-1",
+      "runs": [
+        { "version": 1, "desiredOutputKeys": ["pmx", "ctp"], "expectedCurrentOutputKeys": ["pmx", "ctp"] },
+        { "version": 2, "desiredOutputKeys": ["pmx"], "expectedCurrentOutputKeys": ["pmx"] },
+        { "version": 3, "desiredOutputKeys": [], "expectedStatus": "Filtered", "expectedCurrentOutputKeys": [] }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "profile": "sqlserver-legacy-v1",
+  "nullAndBlankCases": [
+    { "id": "SP-N01", "operation": "coalesce", "input": null, "fallback": "fallback", "expected": "fallback" },
+    { "id": "SP-N02", "operation": "coalesce", "input": "", "fallback": "fallback", "expected": "" },
+    { "id": "SP-N03", "operation": "isBlank", "input": " \t ", "expected": true },
+    { "id": "SP-N04", "operation": "defaultIfBlank", "input": null, "fallback": "fallback", "expected": "fallback" }
+  ],
+  "booleanCases": [
+    { "id": "SP-B01", "operation": "eq", "left": null, "right": "x", "expected": null },
+    { "id": "SP-B02", "operation": "and", "left": false, "right": null, "expected": false },
+    { "id": "SP-B03", "operation": "and", "left": true, "right": null, "expected": null },
+    { "id": "SP-B04", "operation": "or", "left": true, "right": null, "expected": true },
+    { "id": "SP-B05", "operation": "or", "left": false, "right": null, "expected": null },
+    { "id": "SP-B06", "operation": "not", "value": null, "expected": null }
+  ],
+  "textComparisonCases": [
+    { "id": "SP-T01", "operation": "eq", "left": "PMX", "right": "pmx", "expected": true },
+    { "id": "SP-T02", "operation": "in", "value": "pMiB", "set": ["TIB", "PMIB"], "expected": true },
+    { "id": "SP-T03", "operation": "in", "value": null, "set": ["TIB", "PMIB"], "expected": null }
+  ],
+  "likeCases": [
+    { "id": "SP-L01", "value": "ย้ายโอนย้ายงาน", "pattern": "%โอนย้าย%", "expected": true },
+    { "id": "SP-L02", "value": "A1", "pattern": "a_", "expected": true },
+    { "id": "SP-L03", "value": "A12", "pattern": "A_", "expected": false },
+    { "id": "SP-L04", "value": "B", "pattern": "[abc]", "expected": true },
+    { "id": "SP-L05", "value": "C", "pattern": "[a-c]", "expected": true },
+    { "id": "SP-L06", "value": "D", "pattern": "[^a-c]", "expected": true },
+    { "id": "SP-L07", "value": null, "pattern": "%x%", "expected": null }
+  ],
+  "decimalCases": [
+    { "id": "SP-D01", "input": "1234.50", "expected": "1234.50" },
+    { "id": "SP-D02", "input": "+3", "expected": "3" },
+    { "id": "SP-D03", "input": "1,234.50", "error": "InvalidDecimal" },
+    { "id": "SP-D04", "input": "12a", "error": "InvalidDecimal" }
+  ],
+  "dateCases": [
+    { "id": "SP-DT01", "type": "date", "input": "2026-10-08", "expected": "2026-10-08" },
+    { "id": "SP-DT02", "type": "date", "input": "08/10/2026", "inputFormat": "dd/MM/yyyy", "expected": "2026-10-08" },
+    { "id": "SP-DT03", "type": "date", "input": "20261006", "inputFormat": "yyyyMMdd", "expected": "2026-10-06" },
+    { "id": "SP-DT04", "type": "dateTime", "input": "2026-10-08T23:59:01", "expected": "2026-10-08T23:59:01" },
+    { "id": "SP-DT05", "type": "date", "input": "2026-02-30", "error": "InvalidDate" }
+  ],
+  "currentDateCases": [
+    { "id": "SP-C01", "evaluationAt": "2026-10-08T16:59:59Z", "timezone": "Asia/Bangkok", "expected": "2026-10-08" },
+    { "id": "SP-C02", "evaluationAt": "2026-10-08T17:00:00Z", "timezone": "Asia/Bangkok", "expected": "2026-10-09" }
+  ]
+}

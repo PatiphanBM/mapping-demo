@@ -1,6 +1,5 @@
 using Dapper;
-using MappingDemo.Shared.Csv;
-using MappingDemo.Shared.MappingConfigs;
+using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Tables;
 using Npgsql;
 
@@ -10,26 +9,28 @@ public static class SourceRowWriter
 {
     public static string BuildInsertSql(
         string sourceTableName,
-        IReadOnlyList<FileToSourceRule> rules)
+        IReadOnlyList<string> sourceColumns)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceTableName);
-        ArgumentNullException.ThrowIfNull(rules);
+        ArgumentNullException.ThrowIfNull(sourceColumns);
 
         var columns = new List<string>
         {
             "file_job_id",
-            "row_number"
+            "row_number",
+            "physical_line_number"
         };
         columns.AddRange(
-            rules.Select(rule => SqlIdentifier.Quote(rule.SourceColumn)));
+            sourceColumns.Select(SqlIdentifier.Quote));
 
         var values = new List<string>
         {
             "@fileJobId",
-            "@rowNumber"
+            "@rowNumber",
+            "@physicalLineNumber"
         };
         values.AddRange(
-            rules.Select((_, index) => $"@p{index}"));
+            sourceColumns.Select((_, index) => $"@p{index}"));
         //Insert source_orders
         return $"""
             INSERT INTO {SqlIdentifier.Quote(sourceTableName)} ({string.Join(", ", columns)})
@@ -43,28 +44,36 @@ public static class SourceRowWriter
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         string sourceTableName,
-        IReadOnlyList<FileToSourceRule> rules,
         long fileJobId,
-        CsvRecord record,
+        InputRecord record,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
         ArgumentNullException.ThrowIfNull(transaction);
         ArgumentNullException.ThrowIfNull(record);
+        if (record.RowNumber is null)
+        {
+            throw new ArgumentException(
+                "Only imported input records can be written.",
+                nameof(record));
+        }
+
+        var sourceColumns = record.Values.Keys.ToArray();
 
         var parameters = new DynamicParameters();
         parameters.Add("fileJobId", fileJobId);
         parameters.Add("rowNumber", record.RowNumber);
+        parameters.Add("physicalLineNumber", record.PhysicalLineNumber);
 
-        for (var index = 0; index < rules.Count; index++)
+        for (var index = 0; index < sourceColumns.Length; index++)
         {
             parameters.Add(
                 $"p{index}",
-                record.Values[rules[index].CsvHeader]);
+                record.Values[sourceColumns[index]]);
         }
         //Insert source_orders
         var command = new CommandDefinition(
-            BuildInsertSql(sourceTableName, rules),
+            BuildInsertSql(sourceTableName, sourceColumns),
             parameters,
             transaction,
             cancellationToken: cancellationToken);

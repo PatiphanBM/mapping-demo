@@ -3,6 +3,7 @@ using MappingDemo.Api.Contracts.Tables;
 using MappingDemo.Api.Services;
 using MappingDemo.Shared.MappingConfigs;
 using MappingDemo.Shared.Tables;
+using MappingDemo.Shared.Transformation;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
@@ -14,13 +15,19 @@ public sealed class MappingConfigsController : ControllerBase
 {
     private readonly MappingConfigService _mappingConfigService;
     private readonly TableService _tableService;
+    private readonly TransformationModule _transformationModule;
+    private readonly MappingDraftService _mappingDraftService;
 
     public MappingConfigsController(
         MappingConfigService mappingConfigService,
-        TableService tableService)
+        TableService tableService,
+        TransformationModule transformationModule,
+        MappingDraftService mappingDraftService)
     {
         _mappingConfigService = mappingConfigService;
         _tableService = tableService;
+        _transformationModule = transformationModule;
+        _mappingDraftService = mappingDraftService;
     }
 
     [HttpGet]
@@ -161,8 +168,8 @@ public sealed class MappingConfigsController : ControllerBase
         }
 
         var errors = ConfigVersionValidator.Validate(
-            request.FileToSource,
-            request.SourceToNormalized,
+            request.InputLayout,
+            request.TransformationProgram,
             ToDefinition(sourceTable),
             ToDefinition(normalizedTable));
 
@@ -198,6 +205,72 @@ public sealed class MappingConfigsController : ControllerBase
                          "Retry the request."
             });
         }
+    }
+
+    [HttpPost("{id:long}/versions/validate")]
+    public async Task<IActionResult> ValidateVersion(
+        long id,
+        CreateMappingConfigVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schemaResult = await GetSchemaAsync(id, cancellationToken);
+        if (!schemaResult.ConfigFound)
+        {
+            return NotFound();
+        }
+
+        if (schemaResult.Schema is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "A table used by the mapping config was not found.");
+        }
+
+        var response = await _mappingDraftService.ValidateAsync(
+            request.InputLayout,
+            request.TransformationProgram,
+            schemaResult.Schema,
+            cancellationToken);
+        return Ok(response);
+    }
+
+    [HttpPost("{id:long}/versions/preview")]
+    [RequestSizeLimit(MappingDraftService.MaxRequestBodyBytes)]
+    public async Task<IActionResult> PreviewVersion(
+        long id,
+        PreviewMappingConfigVersionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var schemaResult = await GetSchemaAsync(id, cancellationToken);
+        if (!schemaResult.ConfigFound)
+        {
+            return NotFound();
+        }
+
+        if (schemaResult.Schema is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "A table used by the mapping config was not found.");
+        }
+
+        var result = await _mappingDraftService.PreviewAsync(
+            request,
+            schemaResult.Schema,
+            cancellationToken);
+        if (result.IsSuccess)
+        {
+            return Ok(result.Response);
+        }
+
+        foreach (var diagnostic in result.Diagnostics)
+        {
+            ModelState.AddModelError(
+                diagnostic.Path,
+                $"{diagnostic.Code}: {diagnostic.Message}");
+        }
+
+        return ValidationProblem(ModelState);
     }
 
     [HttpPost("{id:long}/versions/{version:int}/activate")]
@@ -240,14 +313,42 @@ public sealed class MappingConfigsController : ControllerBase
         }
 
         var errors = ConfigVersionValidator.Validate(
-            configVersion.FileToSource,
-            configVersion.SourceToNormalized,
+            configVersion.InputLayout,
+            configVersion.TransformationProgram,
             ToDefinition(sourceTable),
             ToDefinition(normalizedTable));
 
         foreach (var error in errors)
         {
             ModelState.AddModelError(error.Field, error.Message);
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        var compilation = _transformationModule.Compile(
+            configVersion.TransformationProgram,
+            new TransformationSchema(
+                ToDefinition(sourceTable),
+                ToDefinition(normalizedTable)));
+        if (compilation.CompiledProgram is null)
+        {
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "A validated transformation program could not be compiled.");
+        }
+
+        var dependencyDiagnostics =
+            await _transformationModule.ValidateDependenciesAsync(
+                compilation.CompiledProgram,
+                cancellationToken);
+        foreach (var diagnostic in dependencyDiagnostics)
+        {
+            ModelState.AddModelError(
+                $"transformationProgram.{diagnostic.Path}",
+                diagnostic.Message);
         }
 
         if (!ModelState.IsValid)
@@ -273,6 +374,32 @@ public sealed class MappingConfigsController : ControllerBase
                inputFolder.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
     }
 
+    private async Task<SchemaResult> GetSchemaAsync(
+        long configId,
+        CancellationToken cancellationToken)
+    {
+        var config = await _mappingConfigService.GetByIdAsync(
+            configId,
+            cancellationToken);
+        if (config is null)
+        {
+            return new SchemaResult(false, null);
+        }
+
+        var sourceTable = await _tableService.GetByIdAsync(
+            config.SourceTableId,
+            cancellationToken);
+        var normalizedTable = await _tableService.GetByIdAsync(
+            config.NormalizedTableId,
+            cancellationToken);
+        var schema = sourceTable is null || normalizedTable is null
+            ? null
+            : new TransformationSchema(
+                ToDefinition(sourceTable),
+                ToDefinition(normalizedTable));
+        return new SchemaResult(true, schema);
+    }
+
     private static TableDefinition ToDefinition(TableResponse table)
     {
         var columns = table.Columns
@@ -280,9 +407,16 @@ public sealed class MappingConfigsController : ControllerBase
                 column.Name,
                 column.DataType,
                 column.IsRequired,
-                index + 1))
+                index + 1,
+                column.Length,
+                column.Precision,
+                column.Scale))
             .ToArray();
 
         return new TableDefinition(table.Name, table.Kind, columns);
     }
+
+    private sealed record SchemaResult(
+        bool ConfigFound,
+        TransformationSchema? Schema);
 }

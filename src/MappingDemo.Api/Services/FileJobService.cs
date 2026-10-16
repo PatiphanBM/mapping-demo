@@ -3,9 +3,10 @@ using System.Text.Json;
 using Dapper;
 using MappingDemo.Api.Contracts.FileJobs;
 using MappingDemo.Shared.Jobs;
-using MappingDemo.Shared.MappingConfigs;
 using MappingDemo.Shared.Messaging;
+using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Tables;
+using MappingDemo.Shared.Transformation;
 using Npgsql;
 
 namespace MappingDemo.Api.Services;
@@ -21,7 +22,6 @@ public sealed class FileJobService
     private const string SelectReprocessFileJobSql = """
         SELECT
             file_jobs.config_id AS "ConfigId",
-            mapping_configs.source_table_id AS "SourceTableId",
             source_table.name AS "SourceTableName"
         FROM file_jobs
         INNER JOIN mapping_configs
@@ -34,15 +34,9 @@ public sealed class FileJobService
     private const string SelectReprocessVersionSql = """
         SELECT
             config_id AS "ConfigId",
-            source_to_normalized::text AS "SourceToNormalizedJson"
+            transformation_program::text AS "TransformationProgramJson"
         FROM mapping_config_versions
         WHERE id = @VersionId;
-        """;
-
-    private const string SelectSourceColumnsSql = """
-        SELECT name
-        FROM table_columns
-        WHERE table_id = @SourceTableId;
         """;
 
     private const string RetryFileJobSql = """
@@ -79,6 +73,8 @@ public sealed class FileJobService
                     AS "PendingRows",
                 COUNT(*) FILTER (WHERE status = 'Done')::integer
                     AS "DoneRows",
+                COUNT(*) FILTER (WHERE status = 'Filtered')::integer
+                    AS "FilteredRows",
                 COUNT(*) FILTER (WHERE status = 'Invalid')::integer
                     AS "InvalidRows",
                 COUNT(*) FILTER (WHERE status = 'Failed')::integer
@@ -96,6 +92,7 @@ public sealed class FileJobService
             file_jobs.total_rows AS "TotalRows",
             COALESCE(row_job_counts."PendingRows", 0) AS "PendingRows",
             COALESCE(row_job_counts."DoneRows", 0) AS "DoneRows",
+            COALESCE(row_job_counts."FilteredRows", 0) AS "FilteredRows",
             COALESCE(row_job_counts."InvalidRows", 0) AS "InvalidRows",
             COALESCE(row_job_counts."FailedRows", 0) AS "FailedRows",
             file_jobs.last_error AS "LastError",
@@ -119,7 +116,9 @@ public sealed class FileJobService
         )
         SELECT
             row_errors.row_number AS "RowNumber",
+            row_errors.output_key AS "OutputKey",
             row_errors.field AS "Field",
+            row_errors.expression_path AS "ExpressionPath",
             row_errors.reason AS "Reason"
         FROM latest_row_jobs
         INNER JOIN row_errors
@@ -143,7 +142,9 @@ public sealed class FileJobService
             row_jobs.finished_at AS "FinishedAt",
             row_errors.id AS "ErrorId",
             row_errors.row_number AS "ErrorRowNumber",
+            row_errors.output_key AS "ErrorOutputKey",
             row_errors.field AS "ErrorField",
+            row_errors.expression_path AS "ErrorExpressionPath",
             row_errors.reason AS "ErrorReason"
         FROM row_jobs
         INNER JOIN mapping_config_versions
@@ -219,7 +220,9 @@ public sealed class FileJobService
                     .Where(row => row.ErrorId.HasValue)
                     .Select(row => new RowErrorResponse(
                         row.ErrorRowNumber!.Value,
-                        row.ErrorField!,
+                        row.ErrorOutputKey,
+                        row.ErrorField,
+                        row.ErrorExpressionPath!,
                         row.ErrorReason!))
                     .ToArray();
 
@@ -327,31 +330,11 @@ public sealed class FileJobService
                 Error: "Version must belong to the file job's mapping config.");
         }
 
-        var rules = JsonSerializer.Deserialize<SourceToNormalizedRule[]>(
-                version.SourceToNormalizedJson,
-                JsonOptions) ?? [];
-        var columnsCommand = new CommandDefinition(
-            SelectSourceColumnsSql,
-            new { fileJob.SourceTableId },
-            transaction,
-            cancellationToken: cancellationToken);
-        var sourceColumns = (await connection.QueryAsync<string>(
-                columnsCommand))
-            .ToHashSet(StringComparer.Ordinal);
-        var missingSourceColumns = rules
-            .Select(rule => rule.SourceColumn)
-            .Where(column => !sourceColumns.Contains(column))
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        if (missingSourceColumns.Length > 0)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return new FileReprocessResult(
-                FileReprocessOutcome.InvalidVersion,
-                Error: $"Source columns do not exist: {string.Join(", ", missingSourceColumns)}.");
-        }
+        _ = PolymorphicJson.Deserialize<TransformationProgram>(
+                version.TransformationProgramJson,
+                JsonOptions)
+            ?? throw new JsonException(
+                "Persisted transformation program cannot be null.");
 
         var insertRowJobsSql = $"""
             INSERT INTO row_jobs (
@@ -440,6 +423,7 @@ public sealed class FileJobService
             row.ImportStatus,
             row.PendingRows,
             row.DoneRows,
+            row.FilteredRows,
             row.InvalidRows,
             row.FailedRows);
 
@@ -454,6 +438,7 @@ public sealed class FileJobService
             normalizationStatus,
             row.PendingRows,
             row.DoneRows,
+            row.FilteredRows,
             row.InvalidRows,
             row.FailedRows,
             row.LastError,
@@ -480,6 +465,8 @@ public sealed class FileJobService
         public int PendingRows { get; init; }
 
         public int DoneRows { get; init; }
+
+        public int FilteredRows { get; init; }
 
         public int InvalidRows { get; init; }
 
@@ -516,19 +503,22 @@ public sealed class FileJobService
 
         public int? ErrorRowNumber { get; init; }
 
+        public string? ErrorOutputKey { get; init; }
+
         public string? ErrorField { get; init; }
+
+        public string? ErrorExpressionPath { get; init; }
 
         public string? ErrorReason { get; init; }
     }
 
     private sealed record ReprocessFileJobRow(
         long ConfigId,
-        long SourceTableId,
         string SourceTableName);
 
     private sealed record ReprocessVersionRow(
         long ConfigId,
-        string SourceToNormalizedJson);
+        string TransformationProgramJson);
 
     private sealed record CreatedRowJob(
         long RowJobId,

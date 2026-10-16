@@ -52,7 +52,10 @@ public class TablesController : ControllerBase
             request.Name,
             request.DataType,
             request.IsRequired,
-            Ordinal: 1);
+            Ordinal: 1,
+            request.Length,
+            request.Precision,
+            request.Scale);
         var definition = new TableDefinition(
             table.Name,
             table.Kind,
@@ -111,7 +114,10 @@ public class TablesController : ControllerBase
                 column.Name,
                 column.DataType,
                 column.IsRequired,
-                index + 1))
+                index + 1,
+                column.Length,
+                column.Precision,
+                column.Scale))
             .ToArray();
         var definition = new TableDefinition(
             request.Name,
