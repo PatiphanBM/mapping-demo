@@ -2,6 +2,8 @@ using System.Text.Json;
 using Dapper;
 using MappingDemo.Api.Contracts.MappingConfigs;
 using MappingDemo.Api.Options;
+using MappingDemo.Shared.Destinations;
+using MappingDemo.Shared.Contracts;
 using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Transformation;
@@ -22,7 +24,11 @@ public sealed class MappingConfigService
             input_folder AS "InputFolder",
             source_table_id AS "SourceTableId",
             normalized_table_id AS "NormalizedTableId",
-            active_version_id AS "ActiveVersionId"
+            active_version_id AS "ActiveVersionId",
+            (SELECT destination_definition::text
+             FROM mapping_config_versions
+             WHERE id = mapping_configs.active_version_id)
+                AS "DestinationDefinitionJson"
         FROM mapping_configs
         WHERE id = @Id;
         """;
@@ -40,7 +46,19 @@ public sealed class MappingConfigService
             mapping_config_versions.input_layout::text
                 AS "InputLayoutJson",
             mapping_config_versions.transformation_program::text
-                AS "TransformationProgramJson"
+                AS "TransformationProgramJson",
+            mapping_config_versions.destination_definition::text
+                AS "DestinationDefinitionJson",
+            mapping_config_versions.accepted_extensions::text
+                AS "AcceptedExtensionsJson",
+            mapping_config_versions.contract_schema_snapshot::text
+                AS "ContractSchemaSnapshotJson",
+            mapping_config_versions.contract_schema_hash
+                AS "ContractSchemaHash",
+            mapping_config_versions.contract_schema_fetched_at
+                AS "ContractSchemaFetchedAt",
+            mapping_config_versions.payload_bindings_snapshot::text
+                AS "PayloadBindingsSnapshotJson"
         FROM mapping_configs
         LEFT JOIN mapping_config_versions
             ON mapping_config_versions.config_id = mapping_configs.id
@@ -60,7 +78,19 @@ public sealed class MappingConfigService
             mapping_config_versions.input_layout::text
                 AS "InputLayoutJson",
             mapping_config_versions.transformation_program::text
-                AS "TransformationProgramJson"
+                AS "TransformationProgramJson",
+            mapping_config_versions.destination_definition::text
+                AS "DestinationDefinitionJson",
+            mapping_config_versions.accepted_extensions::text
+                AS "AcceptedExtensionsJson",
+            mapping_config_versions.contract_schema_snapshot::text
+                AS "ContractSchemaSnapshotJson",
+            mapping_config_versions.contract_schema_hash
+                AS "ContractSchemaHash",
+            mapping_config_versions.contract_schema_fetched_at
+                AS "ContractSchemaFetchedAt",
+            mapping_config_versions.payload_bindings_snapshot::text
+                AS "PayloadBindingsSnapshotJson"
         FROM mapping_configs
         LEFT JOIN mapping_config_versions
             ON mapping_config_versions.config_id = mapping_configs.id
@@ -88,17 +118,41 @@ public sealed class MappingConfigService
         WHERE config_id = @ConfigId;
         """;
 
+    private const string SelectLegacyNormalizedTableIdSql = """
+        SELECT normalized_table_id
+        FROM mapping_configs
+        WHERE id = @ConfigId;
+        """;
+
     private const string InsertMappingConfigVersionSql = """
         INSERT INTO mapping_config_versions (
             config_id,
             version_no,
             input_layout,
-            transformation_program)
+            transformation_program,
+            destination_definition,
+            accepted_extensions,
+            api_destination_profile_id,
+            api_destination_profile_version_id,
+            contract_reference,
+            contract_schema_snapshot,
+            contract_schema_hash,
+            contract_schema_fetched_at,
+            payload_bindings_snapshot)
         VALUES (
             @ConfigId,
             @VersionNo,
             CAST(@InputLayoutJson AS jsonb),
-            CAST(@TransformationProgramJson AS jsonb))
+            CAST(@TransformationProgramJson AS jsonb),
+            CAST(@DestinationDefinitionJson AS jsonb),
+            CAST(@AcceptedExtensionsJson AS jsonb),
+            @ApiDestinationProfileId,
+            @ApiDestinationProfileVersionId,
+            @ContractReference,
+            CAST(@ContractSchemaSnapshotJson AS jsonb),
+            @ContractSchemaHash,
+            @ContractSchemaFetchedAt,
+            CAST(@PayloadBindingsSnapshotJson AS jsonb))
         RETURNING id;
         """;
 
@@ -108,7 +162,13 @@ public sealed class MappingConfigService
             config_id AS "ConfigId",
             version_no AS "VersionNo",
             input_layout::text AS "InputLayoutJson",
-            transformation_program::text AS "TransformationProgramJson"
+            transformation_program::text AS "TransformationProgramJson",
+            destination_definition::text AS "DestinationDefinitionJson",
+            accepted_extensions::text AS "AcceptedExtensionsJson",
+            contract_schema_snapshot::text AS "ContractSchemaSnapshotJson",
+            contract_schema_hash AS "ContractSchemaHash",
+            contract_schema_fetched_at AS "ContractSchemaFetchedAt",
+            payload_bindings_snapshot::text AS "PayloadBindingsSnapshotJson"
         FROM mapping_config_versions
         WHERE config_id = @ConfigId
           AND version_no = @VersionNo;
@@ -129,16 +189,19 @@ public sealed class MappingConfigService
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly string _inputRootPath;
+    private readonly ContractRegistryModule? _contractRegistry;
 
     public MappingConfigService(
         NpgsqlDataSource dataSource,
         IOptions<PathOptions> pathOptions,
-        IHostEnvironment environment)
+        IHostEnvironment environment,
+        ContractRegistryModule? contractRegistry = null)
     {
         _dataSource = dataSource;
         _inputRootPath = Path.GetFullPath(
             pathOptions.Value.InputRoot,
             environment.ContentRootPath);
+        _contractRegistry = contractRegistry;
     }
 
     public async Task<long> CreateAsync(
@@ -180,8 +243,20 @@ public sealed class MappingConfigService
             new { Id = id },
             cancellationToken: cancellationToken);
 
-        return await connection
-            .QuerySingleOrDefaultAsync<MappingConfigResponse>(command);
+        var row = await connection
+            .QuerySingleOrDefaultAsync<MappingConfigRow>(command);
+        return row is null
+            ? null
+            : new MappingConfigResponse(
+                row.Id,
+                row.Name,
+                row.InputFolder,
+                row.SourceTableId,
+                row.NormalizedTableId,
+                row.ActiveVersionId,
+                DeserializeDestination(
+                    row.DestinationDefinitionJson,
+                    row.NormalizedTableId));
     }
 
     public async Task<IReadOnlyList<MappingConfigDetailsResponse>> GetAllAsync(
@@ -221,6 +296,50 @@ public sealed class MappingConfigService
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        var destination = request.Destination;
+        if (destination is null)
+        {
+            await using var lookupConnection =
+                await _dataSource.OpenConnectionAsync(cancellationToken);
+            var legacyTableId = await lookupConnection.ExecuteScalarAsync<long?>(
+                new CommandDefinition(
+                    SelectLegacyNormalizedTableIdSql,
+                    new { ConfigId = configId },
+                    cancellationToken: cancellationToken));
+            destination = legacyTableId is > 0
+                ? new LegacyTableDestination(legacyTableId.Value)
+                : throw new InvalidOperationException(
+                    "Destination is required when normalizedTableId is absent.");
+        }
+
+        ContractSnapshotResult? contractSnapshot = null;
+        if (destination is ApiContractDestination or JsonFileDestination)
+        {
+            if (_contractRegistry is null)
+            {
+                throw new InvalidOperationException("Contract Registry Module is not configured.");
+            }
+            contractSnapshot = await _contractRegistry.ResolveAsync(
+                destination,
+                cancellationToken);
+            if (!contractSnapshot.IsSuccess)
+            {
+                throw new ContractResolutionException(contractSnapshot.Diagnostics);
+            }
+            destination = destination switch
+            {
+                ApiContractDestination api => api with
+                {
+                    Contract = contractSnapshot.Contract!
+                },
+                JsonFileDestination file => file with
+                {
+                    Contract = contractSnapshot.Contract!
+                },
+                _ => destination
+            };
+        }
+
         await using var connection =
             await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction =
@@ -233,6 +352,9 @@ public sealed class MappingConfigService
             cancellationToken: cancellationToken);
         var versionNo = await connection.ExecuteScalarAsync<int>(
             nextVersionCommand);
+        var acceptedExtensions = NormalizeExtensions(
+            request.AcceptedExtensions,
+            request.InputLayout);
         var parameters = new
         {
             ConfigId = configId,
@@ -242,7 +364,33 @@ public sealed class MappingConfigService
                 JsonOptions),
             TransformationProgramJson = JsonSerializer.Serialize(
                 request.TransformationProgram,
-                JsonOptions)
+                JsonOptions),
+            DestinationDefinitionJson = JsonSerializer.Serialize(
+                destination,
+                JsonOptions),
+            AcceptedExtensionsJson = JsonSerializer.Serialize(
+                acceptedExtensions,
+                JsonOptions),
+            ApiDestinationProfileId =
+                (destination as ApiContractDestination)?.ApiDestinationProfileId,
+            ApiDestinationProfileVersionId = contractSnapshot?.Profile
+                ?.ProfileVersionId is > 0
+                    ? (long?)contractSnapshot.Profile.ProfileVersionId
+                    : null,
+            ContractReference = destination switch
+            {
+                ApiContractDestination api => api.Contract.Reference,
+                JsonFileDestination file => file.Contract.Reference,
+                _ => null
+            },
+            ContractSchemaSnapshotJson = contractSnapshot?.CanonicalSchema,
+            ContractSchemaHash = contractSnapshot?.SchemaHash,
+            ContractSchemaFetchedAt = contractSnapshot?.FetchedAt,
+            PayloadBindingsSnapshotJson = contractSnapshot is null
+                ? null
+                : JsonSerializer.Serialize(
+                    contractSnapshot.PayloadBindings,
+                    JsonOptions)
         };
         var insertCommand = new CommandDefinition(
             InsertMappingConfigVersionSql,
@@ -259,7 +407,10 @@ public sealed class MappingConfigService
             configId,
             versionNo,
             request.InputLayout,
-            request.TransformationProgram);
+            request.TransformationProgram,
+            destination,
+            acceptedExtensions,
+            ToSnapshotResponse(contractSnapshot));
     }
 
     public async Task<MappingConfigVersionResponse?> GetVersionAsync(
@@ -294,13 +445,23 @@ public sealed class MappingConfigService
                 row.TransformationProgramJson,
                 JsonOptions) ?? throw new JsonException(
                 "Persisted transformation program cannot be null.");
+        var destination = DeserializeDestination(
+            row.DestinationDefinitionJson,
+            legacyNormalizedTableId: null) ?? throw new JsonException(
+                "Persisted destination definition cannot be null.");
+        var acceptedExtensions = JsonSerializer.Deserialize<string[]>(
+            row.AcceptedExtensionsJson,
+            JsonOptions) ?? [];
 
         return new MappingConfigVersionResponse(
             row.Id,
             row.ConfigId,
             row.VersionNo,
             inputLayout,
-            transformationProgram);
+            transformationProgram,
+            destination,
+            acceptedExtensions,
+            ToSnapshotResponse(row));
     }
 
     public async Task ActivateVersionAsync(
@@ -356,7 +517,15 @@ public sealed class MappingConfigService
                         PolymorphicJson.Deserialize<TransformationProgram>(
                             row.TransformationProgramJson!,
                             JsonOptions) ?? throw new JsonException(
-                            "Persisted transformation program cannot be null.")))
+                            "Persisted transformation program cannot be null."),
+                        DeserializeDestination(
+                            row.DestinationDefinitionJson,
+                            config.NormalizedTableId) ?? throw new JsonException(
+                            "Persisted destination definition cannot be null."),
+                        JsonSerializer.Deserialize<string[]>(
+                            row.AcceptedExtensionsJson!,
+                            JsonOptions) ?? [],
+                        ToSnapshotResponse(row)))
                     .ToArray();
 
                 return new MappingConfigDetailsResponse(
@@ -366,6 +535,12 @@ public sealed class MappingConfigService
                     config.SourceTableId,
                     config.NormalizedTableId,
                     config.ActiveVersionId,
+                    versions
+                        .SingleOrDefault(version => version.IsActive)
+                        ?.Destination
+                        ?? DeserializeDestination(
+                            json: null,
+                            config.NormalizedTableId),
                     versions);
             })
             .ToArray();
@@ -381,7 +556,7 @@ public sealed class MappingConfigService
 
         public long SourceTableId { get; init; }
 
-        public long NormalizedTableId { get; init; }
+        public long? NormalizedTableId { get; init; }
 
         public long? ActiveVersionId { get; init; }
 
@@ -392,6 +567,18 @@ public sealed class MappingConfigService
         public string? InputLayoutJson { get; init; }
 
         public string? TransformationProgramJson { get; init; }
+
+        public string? DestinationDefinitionJson { get; init; }
+
+        public string? AcceptedExtensionsJson { get; init; }
+
+        public string? ContractSchemaSnapshotJson { get; init; }
+
+        public string? ContractSchemaHash { get; init; }
+
+        public DateTimeOffset? ContractSchemaFetchedAt { get; init; }
+
+        public string? PayloadBindingsSnapshotJson { get; init; }
     }
 
     private sealed class MappingConfigVersionRow
@@ -405,5 +592,120 @@ public sealed class MappingConfigService
         public string InputLayoutJson { get; init; } = string.Empty;
 
         public string TransformationProgramJson { get; init; } = string.Empty;
+
+        public string DestinationDefinitionJson { get; init; } = string.Empty;
+
+        public string AcceptedExtensionsJson { get; init; } = string.Empty;
+
+        public string? ContractSchemaSnapshotJson { get; init; }
+
+        public string? ContractSchemaHash { get; init; }
+
+        public DateTimeOffset? ContractSchemaFetchedAt { get; init; }
+
+        public string? PayloadBindingsSnapshotJson { get; init; }
     }
+
+    private sealed class MappingConfigRow
+    {
+        public long Id { get; init; }
+
+        public string Name { get; init; } = string.Empty;
+
+        public string InputFolder { get; init; } = string.Empty;
+
+        public long SourceTableId { get; init; }
+
+        public long? NormalizedTableId { get; init; }
+
+        public long? ActiveVersionId { get; init; }
+
+        public string? DestinationDefinitionJson { get; init; }
+    }
+
+    private static DestinationDefinition? DeserializeDestination(
+        string? json,
+        long? legacyNormalizedTableId)
+    {
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            return PolymorphicJson.Deserialize<DestinationDefinition>(
+                json,
+                JsonOptions);
+        }
+
+        return legacyNormalizedTableId is > 0
+            ? new LegacyTableDestination(legacyNormalizedTableId.Value)
+            : null;
+    }
+
+    private static IReadOnlyList<string> NormalizeExtensions(
+        IReadOnlyList<string>? requested,
+        InputLayoutDefinition layout)
+    {
+        return (requested ?? InputFileExtensionPolicy.DefaultsFor(layout))
+            .Select(InputFileExtensionPolicy.Normalize)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static ContractSnapshotResponse? ToSnapshotResponse(
+        ContractSnapshotResult? snapshot) =>
+        snapshot is null
+            ? null
+            : new ContractSnapshotResponse(
+                snapshot.CanonicalSchema!,
+                snapshot.SchemaHash!,
+                snapshot.FetchedAt!.Value,
+                snapshot.PathCatalog,
+                snapshot.PayloadBindings);
+
+    private static ContractSnapshotResponse? ToSnapshotResponse(
+        MappingConfigVersionRow row) =>
+        ToSnapshotResponse(
+            row.ContractSchemaSnapshotJson,
+            row.ContractSchemaHash,
+            row.ContractSchemaFetchedAt,
+            row.PayloadBindingsSnapshotJson);
+
+    private static ContractSnapshotResponse? ToSnapshotResponse(
+        MappingConfigDetailsRow row) =>
+        ToSnapshotResponse(
+            row.ContractSchemaSnapshotJson,
+            row.ContractSchemaHash,
+            row.ContractSchemaFetchedAt,
+            row.PayloadBindingsSnapshotJson);
+
+    private static ContractSnapshotResponse? ToSnapshotResponse(
+        string? schema,
+        string? hash,
+        DateTimeOffset? fetchedAt,
+        string? bindingsJson)
+    {
+        if (schema is null || hash is null || fetchedAt is null)
+        {
+            return null;
+        }
+        var compilation = new ContractSchemaModule().Compile(schema);
+        if (!compilation.IsSuccess)
+        {
+            throw new JsonException("Persisted contract schema snapshot is invalid.");
+        }
+        var bindings = bindingsJson is null
+            ? []
+            : JsonSerializer.Deserialize<PayloadBinding[]>(bindingsJson, JsonOptions) ?? [];
+        return new ContractSnapshotResponse(
+            schema,
+            hash,
+            fetchedAt.Value,
+            compilation.PathCatalog,
+            bindings);
+    }
+}
+
+public sealed class ContractResolutionException(
+    IReadOnlyList<ContractDiagnostic> diagnostics)
+    : Exception("Contract resolution failed.")
+{
+    public IReadOnlyList<ContractDiagnostic> Diagnostics { get; } = diagnostics;
 }

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using MappingDemo.Shared.Tables;
 
 namespace MappingDemo.Shared.Transformation;
 
@@ -8,6 +7,7 @@ internal static class TransformationEvaluator
 {
     private const string DefaultDateFormat = "yyyy-MM-dd";
     private const string DefaultDateTimeFormat = "yyyy-MM-ddTHH:mm:ss";
+    private const string DefaultTimeFormat = "HH:mm:ss";
 
     private static readonly TimeZoneInfo AsiaBangkokTimeZone =
         TimeZoneInfo.FindSystemTimeZoneById(
@@ -103,8 +103,7 @@ internal static class TransformationEvaluator
                 }
             }
 
-            var values = new Dictionary<string, object?>(
-                StringComparer.OrdinalIgnoreCase);
+            var assembler = new DocumentAssembler();
             for (var fieldIndex = 0;
                  fieldIndex < output.Fields.Count;
                  fieldIndex++)
@@ -117,8 +116,8 @@ internal static class TransformationEvaluator
                         field.Definition.Value,
                         valuePath,
                         context);
-                    values.Add(
-                        field.TargetColumn.Name,
+                    assembler.Set(
+                        field.TargetPath.Tokens,
                         ApplyAssignmentCoercion(field, value, valuePath));
                 }
                 catch (EvaluationDataException exception)
@@ -126,13 +125,69 @@ internal static class TransformationEvaluator
                     errors.Add(ToRowError(
                         exception,
                         output.Definition.OutputKey,
-                        field.TargetColumn.Name));
+                        field.TargetNode.Name));
                 }
+            }
+
+            for (var groupIndex = 0;
+                 groupIndex < output.ArrayGroups.Count;
+                 groupIndex++)
+            {
+                var group = output.ArrayGroups[groupIndex];
+                var groupPath = $"{outputPath}.arrayGroups[{groupIndex}]";
+                var items = new List<object?>();
+                for (var slotIndex = 0;
+                     slotIndex < group.SourceSlots.Count;
+                     slotIndex++)
+                {
+                    var slot = group.SourceSlots[slotIndex];
+                    var itemAssembler = new DocumentAssembler();
+                    var businessValues = new List<object?>();
+                    var slotFailed = false;
+                    for (var fieldIndex = 0;
+                         fieldIndex < slot.Fields.Count;
+                         fieldIndex++)
+                    {
+                        var field = slot.Fields[fieldIndex];
+                        var valuePath = $"{groupPath}.sourceSlots[{slotIndex}].fields[{fieldIndex}].value";
+                        try
+                        {
+                            var value = EvaluateValue(field.Definition.Value, valuePath, context);
+                            var converted = ApplyAssignmentCoercion(
+                                field.TargetNode,
+                                field.Coercion,
+                                field.Definition.InputFormat,
+                                value,
+                                valuePath);
+                            businessValues.Add(converted);
+                            itemAssembler.Set(field.TargetPath.Tokens, converted);
+                        }
+                        catch (EvaluationDataException exception)
+                        {
+                            errors.Add(ToRowError(
+                                exception,
+                                output.Definition.OutputKey,
+                                $"{group.Definition.TargetPath}[{slot.Definition.SourceSlot}].{field.Definition.TargetPath}"));
+                            slotFailed = true;
+                        }
+                    }
+                    if (slotFailed) continue;
+                    if (group.Definition.EmptyItemPolicy == ArrayEmptyItemPolicy.SkipWhenAllBusinessFieldsEmpty &&
+                        businessValues.All(IsEmptyArrayBusinessValue))
+                    {
+                        continue;
+                    }
+                    itemAssembler.Set(
+                        group.SequencePath.Tokens,
+                        slot.Definition.SourceSlot);
+                    items.Add(itemAssembler.Build());
+                }
+                assembler.Set(group.TargetPath.Tokens, items);
             }
 
             outputs.Add(new TransformationOutputResult(
                 output.Definition.OutputKey,
-                values));
+                assembler.Build()));
         }
 
         if (errors.Count > 0)
@@ -228,9 +283,24 @@ internal static class TransformationEvaluator
         object? value,
         string path)
     {
-        if (field.Coercion == TargetAssignmentCoercion.None)
+        return ApplyAssignmentCoercion(
+            field.TargetNode,
+            field.Coercion,
+            field.Definition.InputFormat,
+            value,
+            path);
+    }
+
+    private static object? ApplyAssignmentCoercion(
+        TargetNode targetNode,
+        TargetAssignmentCoercion coercion,
+        string? inputFormat,
+        object? value,
+        string path)
+    {
+        if (coercion == TargetAssignmentCoercion.None)
         {
-            if (value is null && field.TargetColumn.IsRequired)
+            if (value is null && targetNode.IsRequired && !targetNode.IsNullable)
             {
                 throw new EvaluationDataException(path, "Required");
             }
@@ -242,7 +312,7 @@ internal static class TransformationEvaluator
         var trimmed = text?.Trim();
         if (string.IsNullOrEmpty(trimmed))
         {
-            if (field.TargetColumn.IsRequired)
+            if (targetNode.IsRequired && !targetNode.IsNullable)
             {
                 throw new EvaluationDataException(path, "Required");
             }
@@ -250,14 +320,21 @@ internal static class TransformationEvaluator
             return null;
         }
 
-        return field.Coercion == TargetAssignmentCoercion.TrimText
+        return coercion == TargetAssignmentCoercion.TrimText
             ? trimmed
             : ConvertText(
                 trimmed,
-                ToExpressionType(field.TargetColumn.DataType),
-                field.Definition.InputFormat,
+                ToExpressionType(
+                    targetNode.ScalarType
+                    ?? throw new InvalidOperationException(
+                        $"Target '{targetNode.Name}' must be scalar.")),
+                inputFormat,
                 path);
     }
+
+    private static bool IsEmptyArrayBusinessValue(object? value) =>
+        value is null || value is string text &&
+        (string.IsNullOrWhiteSpace(text) || text.Trim() == "-");
 
     private static object? EvaluateValue(
         ValueExpression expression,
@@ -273,6 +350,8 @@ internal static class TransformationEvaluator
                 coalesce,
                 path,
                 context),
+            AddExpression add => EvaluateAdd(add, path, context),
+            ConcatExpression concat => EvaluateConcat(concat, path, context),
             DefaultIfBlankExpression defaultIfBlank => EvaluateDefaultIfBlank(
                 defaultIfBlank,
                 path,
@@ -317,6 +396,9 @@ internal static class TransformationEvaluator
                 literal.Value.GetString()!,
                 DefaultDateFormat,
                 CultureInfo.InvariantCulture),
+            ExpressionValueType.Time => TimeOnly.Parse(
+                literal.Value.GetString()!,
+                CultureInfo.InvariantCulture),
             ExpressionValueType.DateTime => ParseDateTimeLiteral(
                 literal.Value.GetString()!),
             ExpressionValueType.Boolean => literal.Value.GetBoolean(),
@@ -344,6 +426,114 @@ internal static class TransformationEvaluator
         }
 
         return null;
+    }
+
+    private static object? EvaluateAdd(
+        AddExpression expression,
+        string path,
+        EvaluationContext context)
+    {
+        var values = new object[expression.Values.Count];
+        var decimalResult = false;
+        for (var index = 0; index < expression.Values.Count; index++)
+        {
+            var value = EvaluateValue(
+                expression.Values[index],
+                $"{path}.values[{index}]",
+                context);
+            if (value is null)
+            {
+                return null;
+            }
+
+            values[index] = value;
+            decimalResult |= value is decimal;
+        }
+
+        if (decimalResult)
+        {
+            return AddDecimals(values, path);
+        }
+
+        return AddIntegers(values, path);
+    }
+
+    private static decimal AddDecimals(IReadOnlyList<object> values, string path)
+    {
+        var result = 0m;
+        for (var index = 0; index < values.Count; index++)
+        {
+            var operand = values[index] switch
+            {
+                int integer => integer,
+                decimal decimalValue => decimalValue,
+                _ => throw new InvalidOperationException(
+                    "A compiled add operand is not numeric.")
+            };
+            try
+            {
+                result = checked(result + operand);
+            }
+            catch (OverflowException)
+            {
+                throw new EvaluationDataException(
+                    $"{path}.values[{index}]",
+                    "DecimalOverflow");
+            }
+        }
+
+        return result;
+    }
+
+    private static int AddIntegers(IReadOnlyList<object> values, string path)
+    {
+        var result = 0;
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index] is not int operand)
+            {
+                throw new InvalidOperationException(
+                    "A compiled add operand is not an Integer.");
+            }
+
+            try
+            {
+                result = checked(result + operand);
+            }
+            catch (OverflowException)
+            {
+                throw new EvaluationDataException(
+                    $"{path}.values[{index}]",
+                    "IntegerOverflow");
+            }
+        }
+
+        return result;
+    }
+
+    private static object? EvaluateConcat(
+        ConcatExpression expression,
+        string path,
+        EvaluationContext context)
+    {
+        var values = new string[expression.Values.Count];
+        for (var index = 0; index < expression.Values.Count; index++)
+        {
+            var value = EvaluateValue(
+                expression.Values[index],
+                $"{path}.values[{index}]",
+                context);
+            if (value is null)
+            {
+                return null;
+            }
+
+            values[index] = value as string
+                ?? throw new InvalidOperationException(
+                    "A compiled concat operand is not Text.");
+        }
+
+        return string.Join(expression.Separator, values);
     }
 
     private static object? EvaluateDefaultIfBlank(
@@ -564,10 +754,9 @@ internal static class TransformationEvaluator
         string path,
         EvaluationContext context)
     {
-        if (!string.Equals(
-            capability,
-            TransformationCapabilities.MtiOriginalPolicyExistsV1,
-            StringComparison.Ordinal))
+        if (capability is not
+            TransformationCapabilities.MtiOriginalPolicyExistsV1 and not
+            TransformationCapabilities.MtiOriginalLoanExistsV1)
         {
             throw new InvalidOperationException(
                 $"Unsupported compiled lookup '{capability}'.");
@@ -577,17 +766,26 @@ internal static class TransformationEvaluator
             arguments["systemId"],
             $"{path}.arguments.systemId",
             context);
-        var productName = (string?)EvaluateValue(
-            arguments["productName"],
-            $"{path}.arguments.productName",
-            context);
         var loanNumber = (string?)EvaluateValue(
             arguments["loanNumber"],
             $"{path}.arguments.loanNumber",
             context);
-        if (systemId is null || productName is null || loanNumber is null)
+        if (systemId is null || loanNumber is null)
         {
             return null;
+        }
+
+        string? productName = null;
+        if (capability == TransformationCapabilities.MtiOriginalPolicyExistsV1)
+        {
+            productName = (string?)EvaluateValue(
+                arguments["productName"],
+                $"{path}.arguments.productName",
+                context);
+            if (productName is null)
+            {
+                return null;
+            }
         }
 
         return new TransformationLookupRequest(
@@ -743,6 +941,10 @@ internal static class TransformationEvaluator
                 value,
                 inputFormat ?? DefaultDateFormat,
                 path),
+            ExpressionValueType.Time => ParseTime(
+                value,
+                inputFormat ?? DefaultTimeFormat,
+                path),
             ExpressionValueType.DateTime => ParseDateTime(
                 value,
                 inputFormat ?? DefaultDateTimeFormat,
@@ -818,6 +1020,24 @@ internal static class TransformationEvaluator
         }
 
         throw new EvaluationDataException(path, "InvalidDateTime");
+    }
+
+    private static TimeOnly ParseTime(
+        string value,
+        string format,
+        string path)
+    {
+        if (TimeOnly.TryParseExact(
+            value,
+            format,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var result))
+        {
+            return result;
+        }
+
+        throw new EvaluationDataException(path, "InvalidTime");
     }
 
     private static bool ParseBoolean(string value, string path)
@@ -907,18 +1127,19 @@ internal static class TransformationEvaluator
     }
 
     private static ExpressionValueType ToExpressionType(
-        ColumnDataType dataType)
+        TargetScalarType scalarType)
     {
-        return dataType switch
+        return scalarType switch
         {
-            ColumnDataType.Text => ExpressionValueType.Text,
-            ColumnDataType.Decimal => ExpressionValueType.Decimal,
-            ColumnDataType.Integer => ExpressionValueType.Integer,
-            ColumnDataType.Date => ExpressionValueType.Date,
-            ColumnDataType.DateTime => ExpressionValueType.DateTime,
-            ColumnDataType.Boolean => ExpressionValueType.Boolean,
-            ColumnDataType.Guid => ExpressionValueType.Guid,
-            _ => throw new ArgumentOutOfRangeException(nameof(dataType))
+            TargetScalarType.Text => ExpressionValueType.Text,
+            TargetScalarType.Decimal => ExpressionValueType.Decimal,
+            TargetScalarType.Integer => ExpressionValueType.Integer,
+            TargetScalarType.Date => ExpressionValueType.Date,
+            TargetScalarType.Time => ExpressionValueType.Time,
+            TargetScalarType.DateTime => ExpressionValueType.DateTime,
+            TargetScalarType.Boolean => ExpressionValueType.Boolean,
+            TargetScalarType.Guid => ExpressionValueType.Guid,
+            _ => throw new ArgumentOutOfRangeException(nameof(scalarType))
         };
     }
 

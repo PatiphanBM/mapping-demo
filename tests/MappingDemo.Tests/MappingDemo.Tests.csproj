@@ -12,12 +12,24 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="System.Net.Http" Version="4.3.4" />
+    <PackageReference Include="System.Text.RegularExpressions" Version="4.3.1" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\src\MappingDemo.Api\ContractFixtures\pa-inform-v1.json"
+          Link="ContractFixtures\pa-inform-v1.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Phase24\delivery-stub-scenarios.json"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Phase25\compatibility-baseline.golden.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

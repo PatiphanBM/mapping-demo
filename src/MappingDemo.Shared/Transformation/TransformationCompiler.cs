@@ -41,6 +41,9 @@ internal static class TransformationCompiler
         private static readonly string[] MtiLookupArguments =
             ["systemId", "productName", "loanNumber"];
 
+        private static readonly string[] MtiLoanLookupArguments =
+            ["systemId", "loanNumber"];
+
         private readonly TransformationProgram _program;
         private readonly TransformationSchema _schema;
         private readonly List<TransformationDiagnostic> _diagnostics = [];
@@ -48,7 +51,7 @@ internal static class TransformationCompiler
             new(StringComparer.OrdinalIgnoreCase);
         private readonly List<CompiledLookupDependency> _lookupDependencies = [];
         private readonly Dictionary<string, ColumnDefinition> _sourceColumns;
-        private readonly Dictionary<string, ColumnDefinition> _targetColumns;
+        private readonly Dictionary<string, TargetNode> _targetNodes;
         private int _expressionNodes;
         private bool _nodeLimitReported;
 
@@ -61,8 +64,8 @@ internal static class TransformationCompiler
             _sourceColumns = schema.SourceTable.Columns.ToDictionary(
                 column => column.Name,
                 StringComparer.OrdinalIgnoreCase);
-            _targetColumns = schema.NormalizedTable.Columns.ToDictionary(
-                column => column.Name,
+            _targetNodes = schema.TargetSchema.Root.Properties.ToDictionary(
+                node => node.Name,
                 StringComparer.OrdinalIgnoreCase);
         }
 
@@ -99,7 +102,7 @@ internal static class TransformationCompiler
 
         private void ValidateLanguageAndProfile(int languageVersion)
         {
-            if (languageVersion != DefaultLanguageVersion)
+            if (languageVersion is not 1 and not 2)
             {
                 AddError(
                     "languageVersion",
@@ -205,7 +208,7 @@ internal static class TransformationCompiler
                     $"{outputPath}.fields",
                     "FieldsRequired",
                     "The output fields collection is required.");
-                return new CompiledTransformationOutput(output, []);
+                return new CompiledTransformationOutput(output, [], []);
             }
 
             if (output.Fields.Count > MaxFieldsPerOutput)
@@ -216,8 +219,9 @@ internal static class TransformationCompiler
                     $"An output may contain at most {MaxFieldsPerOutput} fields.");
             }
 
-            var assignedTargets = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
+            var languageVersion = _program.LanguageVersion ?? DefaultLanguageVersion;
+            var assignedTargets = new HashSet<string>(StringComparer.Ordinal);
+            var assignedPaths = new List<ResolvedTargetPath>();
             var compiledFields = new List<CompiledFieldAssignment>(
                 output.Fields.Count);
 
@@ -236,40 +240,75 @@ internal static class TransformationCompiler
                     continue;
                 }
 
-                ColumnDefinition? targetColumn = null;
-                if (string.IsNullOrWhiteSpace(assignment.NormalizedColumn))
+                TargetNode? targetNode = null;
+                ResolvedTargetPath? resolvedPath = null;
+                var target = languageVersion == 1
+                    ? assignment.NormalizedColumn
+                    : assignment.TargetPath;
+                var targetProperty = languageVersion == 1
+                    ? "normalizedColumn"
+                    : "targetPath";
+                if (string.IsNullOrWhiteSpace(target))
                 {
                     AddError(
-                        $"{fieldPath}.normalizedColumn",
+                        $"{fieldPath}.{targetProperty}",
                         "TargetRequired",
-                        "A normalized target column is required.");
+                        languageVersion == 1
+                            ? "A normalized target column is required."
+                            : "A contract target path is required.");
                 }
-                else if (!assignedTargets.Add(assignment.NormalizedColumn))
+                else if (languageVersion == 1)
                 {
-                    AddError(
-                        $"{fieldPath}.normalizedColumn",
-                        "DuplicateTarget",
-                        $"Target column '{assignment.NormalizedColumn}' is assigned more than once.");
+                    if (!assignedTargets.Add(target!))
+                    {
+                        AddError($"{fieldPath}.normalizedColumn", "DuplicateTarget", $"Target column '{target}' is assigned more than once.");
+                    }
+                    else if (!_targetNodes.TryGetValue(target!, out targetNode))
+                    {
+                        AddError($"{fieldPath}.normalizedColumn", "UnknownTargetColumn", $"Target column '{target}' does not exist.");
+                    }
+                    else
+                    {
+                        resolvedPath = new ResolvedTargetPath(
+                            target!,
+                            targetNode,
+                            [new PropertyPathToken(targetNode.Name)]);
+                    }
                 }
-                else if (!_targetColumns.TryGetValue(
-                    assignment.NormalizedColumn,
-                    out targetColumn))
+                else
                 {
-                    AddError(
-                        $"{fieldPath}.normalizedColumn",
-                        "UnknownTargetColumn",
-                        $"Target column '{assignment.NormalizedColumn}' does not exist.");
+                    resolvedPath = TargetPath.Resolve(_schema.TargetSchema, target!);
+                    if (resolvedPath is null)
+                    {
+                        AddError($"{fieldPath}.targetPath", "UnknownTargetPath", $"Target path '{target}' does not exist.");
+                    }
+                    else if (resolvedPath.Node.Kind != TargetNodeKind.Scalar)
+                    {
+                        AddError($"{fieldPath}.targetPath", "TargetContainerNotAssignable", $"Target path '{target}' is a container and cannot be assigned.");
+                        resolvedPath = null;
+                    }
+                    else if (assignedPaths.Any(existing => TargetPath.Conflicts(existing.Tokens, resolvedPath.Tokens)))
+                    {
+                        AddError($"{fieldPath}.targetPath", "ConflictingTargetPath", $"Target path '{target}' duplicates or conflicts with another assignment.");
+                        resolvedPath = null;
+                    }
+                    else
+                    {
+                        targetNode = resolvedPath.Node;
+                        assignedPaths.Add(resolvedPath);
+                        assignedTargets.Add(target!);
+                    }
                 }
 
                 var valueType = assignment.Value is null
                     ? MissingValue($"{fieldPath}.value")
                     : CompileValue(assignment.Value, $"{fieldPath}.value", 0);
 
-                if (targetColumn is not null && valueType is not null)
+                if (targetNode is not null && resolvedPath is not null && valueType is not null)
                 {
                     var coercion = CompileAssignment(
                         assignment,
-                        targetColumn,
+                        targetNode,
                         valueType.Value,
                         fieldPath);
                     if (coercion is not null)
@@ -277,37 +316,264 @@ internal static class TransformationCompiler
                         compiledFields.Add(
                             new CompiledFieldAssignment(
                                 assignment,
-                                targetColumn,
+                                targetNode,
+                                resolvedPath,
                                 valueType.Value,
                                 coercion.Value));
                     }
                 }
             }
 
-            foreach (var requiredColumn in _targetColumns.Values
-                .Where(column => column.IsRequired))
+            if (languageVersion == 1)
             {
-                if (!assignedTargets.Contains(requiredColumn.Name))
+                foreach (var requiredTarget in _targetNodes.Values
+                    .Where(node => node.IsRequired))
+                {
+                    if (!assignedTargets.Contains(requiredTarget.Name))
+                    {
+                        AddError(
+                            $"{outputPath}.fields",
+                            "RequiredTargetMissing",
+                            $"Required target column '{requiredTarget.Name}' is not assigned.");
+                    }
+                }
+            }
+            else
+            {
+                ValidateContiguousFixedIndices(outputPath, assignedPaths);
+            }
+
+            var compiledGroups = languageVersion == 2
+                ? CompileArrayGroups(output, outputPath, assignedPaths)
+                : [];
+            if (languageVersion == 2)
+            {
+                ValidateRequiredContractTargets(
+                    outputPath,
+                    assignedTargets,
+                    compiledGroups);
+            }
+            if (languageVersion == 1 && (output.ArrayGroups?.Count ?? 0) > 0)
+            {
+                AddError($"{outputPath}.arrayGroups", "ArrayGroupsRequireV2", "Array groups require language version 2.");
+            }
+
+            return new CompiledTransformationOutput(output, compiledFields, compiledGroups);
+        }
+
+        private void ValidateContiguousFixedIndices(
+            string outputPath,
+            IReadOnlyList<ResolvedTargetPath> paths)
+        {
+            var arrays = new Dictionary<string, HashSet<int>>(StringComparer.Ordinal);
+            foreach (var path in paths)
+            {
+                var prefix = new List<string>();
+                foreach (var token in path.Tokens)
+                {
+                    if (token is PropertyPathToken property)
+                    {
+                        prefix.Add(property.Name);
+                    }
+                    else if (token is IndexPathToken index)
+                    {
+                        var key = string.Join('.', prefix);
+                        if (!arrays.TryGetValue(key, out var indices))
+                        {
+                            indices = [];
+                            arrays[key] = indices;
+                        }
+                        indices.Add(index.Index);
+                        prefix[^1] += $"[{index.Index}]";
+                    }
+                }
+            }
+
+            foreach (var (path, indices) in arrays)
+            {
+                var maximum = indices.Max();
+                if (Enumerable.Range(0, maximum + 1).Any(index => !indices.Contains(index)))
+                {
+                    AddError(
+                        $"{outputPath}.fields",
+                        "ArrayIndexGap",
+                        $"Fixed indices for array '{path}' must be contiguous from 0.");
+                }
+            }
+        }
+
+        private void ValidateRequiredContractTargets(
+            string outputPath,
+            IReadOnlySet<string> assignedTargets,
+            IReadOnlyList<CompiledArrayGroup> groups)
+        {
+            var systemPaths = _schema.SystemBoundPaths ??
+                new HashSet<string>(StringComparer.Ordinal);
+            Visit(_schema.TargetSchema.Root, parentRequired: true, underArray: false);
+
+            void Visit(TargetNode node, bool parentRequired, bool underArray)
+            {
+                var required = parentRequired && node.IsRequired;
+                var path = string.Join('.', node.PathTokens);
+                if (node.Kind == TargetNodeKind.Scalar && required && !underArray &&
+                    !assignedTargets.Contains(path) && !systemPaths.Contains(path))
                 {
                     AddError(
                         $"{outputPath}.fields",
                         "RequiredTargetMissing",
-                        $"Required target column '{requiredColumn.Name}' is not assigned.");
+                        $"Required target path '{path}' is not assigned.");
+                }
+                if (node.Kind == TargetNodeKind.Array && required &&
+                    !groups.Any(group => group.Definition.TargetPath == path) &&
+                    !assignedTargets.Any(target => target.StartsWith(path + "[", StringComparison.Ordinal)))
+                {
+                    AddError(
+                        $"{outputPath}.arrayGroups",
+                        "RequiredTargetMissing",
+                        $"Required array path '{path}' is not assigned.");
+                }
+                foreach (var child in node.Properties)
+                {
+                    Visit(child, required, underArray);
+                }
+                if (node.ItemSchema is not null)
+                {
+                    Visit(node.ItemSchema, required, underArray: true);
                 }
             }
+        }
 
-            return new CompiledTransformationOutput(output, compiledFields);
+        private IReadOnlyList<CompiledArrayGroup> CompileArrayGroups(
+            TransformationOutput output,
+            string outputPath,
+            IReadOnlyList<ResolvedTargetPath> directPaths)
+        {
+            var result = new List<CompiledArrayGroup>();
+            var groups = output.ArrayGroups ?? [];
+            var groupTargets = new HashSet<string>(StringComparer.Ordinal);
+            for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++)
+            {
+                var group = groups[groupIndex];
+                var groupPath = $"{outputPath}.arrayGroups[{groupIndex}]";
+                var arrayPath = TargetPath.Resolve(_schema.TargetSchema, group.TargetPath);
+                if (arrayPath is null)
+                {
+                    AddError($"{groupPath}.targetPath", "UnknownArrayTargetPath", $"Array target path '{group.TargetPath}' does not exist.");
+                    continue;
+                }
+                if (arrayPath.Node.Kind != TargetNodeKind.Array || arrayPath.Node.ItemSchema is null || arrayPath.Node.ItemSchema.Kind != TargetNodeKind.Object)
+                {
+                    AddError($"{groupPath}.targetPath", "ArrayObjectTargetRequired", "Array group target must be an array of objects.");
+                    continue;
+                }
+                if (!groupTargets.Add(group.TargetPath))
+                {
+                    AddError($"{groupPath}.targetPath", "DuplicateArrayGroup", $"Array group '{group.TargetPath}' is duplicated.");
+                }
+                if (directPaths.Any(path => TargetPath.Conflicts(path.Tokens, arrayPath.Tokens)))
+                {
+                    AddError($"{groupPath}.targetPath", "ArrayGroupDirectConflict", "An array cannot be written by both direct fields and an array group.");
+                }
+
+                var sequence = TargetPath.Resolve(
+                    _schema.TargetSchema,
+                    group.SequencePath,
+                    relativeToArrayItem: true,
+                    arrayItem: arrayPath.Node.ItemSchema);
+                if (sequence is null || sequence.Node.Kind != TargetNodeKind.Scalar || sequence.Node.ScalarType != TargetScalarType.Integer)
+                {
+                    AddError($"{groupPath}.sequencePath", "IntegerSequencePathRequired", "Sequence path must identify an integer item leaf.");
+                    continue;
+                }
+
+                var slots = new List<CompiledArraySourceSlot>();
+                var sourceSlots = new HashSet<int>();
+                for (var slotIndex = 0; slotIndex < group.SourceSlots.Count; slotIndex++)
+                {
+                    var slot = group.SourceSlots[slotIndex];
+                    var slotPath = $"{groupPath}.sourceSlots[{slotIndex}]";
+                    if (slot.SourceSlot <= 0 || !sourceSlots.Add(slot.SourceSlot))
+                    {
+                        AddError($"{slotPath}.sourceSlot", "InvalidSourceSlot", "Source slot must be a unique positive integer.");
+                    }
+                    var fields = new List<CompiledArrayItemField>();
+                    var itemPaths = new List<ResolvedTargetPath>();
+                    for (var itemIndex = 0; itemIndex < slot.Fields.Count; itemIndex++)
+                    {
+                        var item = slot.Fields[itemIndex];
+                        var itemPath = $"{slotPath}.fields[{itemIndex}]";
+                        var resolved = TargetPath.Resolve(
+                            _schema.TargetSchema,
+                            item.TargetPath,
+                            relativeToArrayItem: true,
+                            arrayItem: arrayPath.Node.ItemSchema);
+                        if (resolved is null)
+                        {
+                            AddError($"{itemPath}.targetPath", "UnknownArrayItemPath", $"Array item path '{item.TargetPath}' does not exist.");
+                            continue;
+                        }
+                        if (resolved.Node.Kind != TargetNodeKind.Scalar)
+                        {
+                            AddError($"{itemPath}.targetPath", "TargetContainerNotAssignable", "Array item path must identify a scalar leaf.");
+                            continue;
+                        }
+                        if (TargetPath.Conflicts(resolved.Tokens, sequence.Tokens) || itemPaths.Any(existing => TargetPath.Conflicts(existing.Tokens, resolved.Tokens)))
+                        {
+                            AddError($"{itemPath}.targetPath", "ConflictingTargetPath", "Array item path duplicates or conflicts with another item field or sequence path.");
+                            continue;
+                        }
+                        itemPaths.Add(resolved);
+                        var valueType = item.Value is null
+                            ? MissingValue($"{itemPath}.value")
+                            : CompileValue(item.Value, $"{itemPath}.value", 0);
+                        if (valueType is null) continue;
+                        var coercion = CompileAssignment(
+                            item.InputFormat,
+                            resolved.Node,
+                            valueType.Value,
+                            itemPath);
+                        if (coercion is not null)
+                        {
+                            fields.Add(new CompiledArrayItemField(
+                                item,
+                                resolved.Node,
+                                resolved,
+                                valueType.Value,
+                                coercion.Value));
+                        }
+                    }
+                    slots.Add(new CompiledArraySourceSlot(slot, fields));
+                }
+                result.Add(new CompiledArrayGroup(group, arrayPath, sequence, slots));
+            }
+            return result;
         }
 
         private TargetAssignmentCoercion? CompileAssignment(
             FieldAssignment assignment,
-            ColumnDefinition targetColumn,
+            TargetNode targetNode,
             InferredExpressionType valueType,
             string fieldPath)
         {
-            var targetType = ToExpressionType(targetColumn.DataType);
-            ValidateAssignmentInputFormat(
+            return CompileAssignment(
                 assignment.InputFormat,
+                targetNode,
+                valueType,
+                fieldPath);
+        }
+
+        private TargetAssignmentCoercion? CompileAssignment(
+            string? inputFormat,
+            TargetNode targetNode,
+            InferredExpressionType valueType,
+            string fieldPath)
+        {
+            var targetType = ToExpressionType(
+                targetNode.ScalarType
+                ?? throw new InvalidOperationException(
+                    $"Target '{targetNode.Name}' must be scalar."));
+            ValidateAssignmentInputFormat(
+                inputFormat,
                 valueType.Type,
                 targetType,
                 $"{fieldPath}.inputFormat");
@@ -343,12 +609,13 @@ internal static class TransformationCompiler
             }
 
             if (targetType is not ExpressionValueType.Date
+                and not ExpressionValueType.Time
                 and not ExpressionValueType.DateTime)
             {
                 AddError(
                     path,
                     "InputFormatNotSupported",
-                    "inputFormat is supported only for Date and DateTime targets.");
+                    "inputFormat is supported only for Date, Time and DateTime targets.");
                 return;
             }
 
@@ -383,6 +650,8 @@ internal static class TransformationCompiler
                     coalesce,
                     path,
                     depth),
+                AddExpression add => CompileAdd(add, path, depth),
+                ConcatExpression concat => CompileConcat(concat, path, depth),
                 DefaultIfBlankExpression defaultIfBlank =>
                     CompileDefaultIfBlank(defaultIfBlank, path, depth),
                 TrimExpression trim => CompileTrim(trim, path, depth),
@@ -484,6 +753,152 @@ internal static class TransformationCompiler
                         depth + 1))
                 .ToArray();
             return UnifyTypes(types, $"{path}.values", "ExpressionTypeMismatch");
+        }
+
+        private InferredExpressionType? CompileAdd(
+            AddExpression expression,
+            string path,
+            int depth)
+        {
+            if (!ValidateOperandCollection(
+                expression.Values,
+                $"{path}.values",
+                "AddOperandsRequired",
+                "add"))
+            {
+                return null;
+            }
+
+            var types = CompileValues(expression.Values, path, depth);
+            var validTypes = types.Where(type => type is not null)
+                .Select(type => type!.Value)
+                .ToArray();
+            var valid = validTypes.Length == expression.Values.Count;
+            for (var index = 0; index < types.Length; index++)
+            {
+                if (types[index] is not { } type)
+                {
+                    valid = false;
+                    continue;
+                }
+
+                if (type.Type is ExpressionValueType.Integer
+                    or ExpressionValueType.Decimal)
+                {
+                    continue;
+                }
+
+                AddError(
+                    $"{path}.values[{index}]",
+                    "NumericValueRequired",
+                    "add requires Integer or Decimal values.");
+                valid = false;
+            }
+
+            if (!valid)
+            {
+                return null;
+            }
+
+            return new InferredExpressionType(
+                validTypes.Any(type =>
+                    type.Type == ExpressionValueType.Decimal)
+                    ? ExpressionValueType.Decimal
+                    : ExpressionValueType.Integer,
+                validTypes.Any(type => type.IsNullable));
+        }
+
+        private InferredExpressionType? CompileConcat(
+            ConcatExpression expression,
+            string path,
+            int depth)
+        {
+            if (!ValidateOperandCollection(
+                expression.Values,
+                $"{path}.values",
+                "ConcatOperandsRequired",
+                "concat"))
+            {
+                return null;
+            }
+
+            var valid = true;
+            if (expression.Separator is null)
+            {
+                AddError(
+                    $"{path}.separator",
+                    "ConcatSeparatorRequired",
+                    "concat separator must be a string literal.");
+                valid = false;
+            }
+
+            var types = CompileValues(expression.Values, path, depth);
+            for (var index = 0; index < types.Length; index++)
+            {
+                if (types[index] is not { } type)
+                {
+                    valid = false;
+                    continue;
+                }
+
+                if (type.Type == ExpressionValueType.Text)
+                {
+                    continue;
+                }
+
+                AddError(
+                    $"{path}.values[{index}]",
+                    "TextValueRequired",
+                    "concat requires Text values.");
+                valid = false;
+            }
+
+            return valid
+                ? new InferredExpressionType(
+                    ExpressionValueType.Text,
+                    types.Any(type => type!.Value.IsNullable))
+                : null;
+        }
+
+        private InferredExpressionType?[] CompileValues(
+            IReadOnlyList<ValueExpression> values,
+            string path,
+            int depth)
+        {
+            return values.Select((value, index) => value is null
+                    ? MissingValue($"{path}.values[{index}]")
+                    : CompileValue(
+                        value,
+                        $"{path}.values[{index}]",
+                        depth + 1))
+                .ToArray();
+        }
+
+        private bool ValidateOperandCollection<T>(
+            IReadOnlyCollection<T>? values,
+            string path,
+            string minimumCode,
+            string expressionName)
+        {
+            if (values is null || values.Count < 2)
+            {
+                AddError(
+                    path,
+                    minimumCode,
+                    $"{expressionName} requires at least two values.");
+                return false;
+            }
+
+            if (values.Count > MaxCollectionItems)
+            {
+                AddError(
+                    path,
+                    "CollectionLimitExceeded",
+                    $"A collection may contain at most {MaxCollectionItems} items.");
+                return false;
+            }
+
+            return true;
         }
 
         private InferredExpressionType? CompileDefaultIfBlank(
@@ -1092,10 +1507,15 @@ internal static class TransformationCompiler
             string path,
             int depth)
         {
-            if (!string.Equals(
-                lookup,
-                TransformationCapabilities.MtiOriginalPolicyExistsV1,
-                StringComparison.Ordinal))
+            var expectedArguments = lookup switch
+            {
+                TransformationCapabilities.MtiOriginalPolicyExistsV1 =>
+                    MtiLookupArguments,
+                TransformationCapabilities.MtiOriginalLoanExistsV1 =>
+                    MtiLoanLookupArguments,
+                _ => null
+            };
+            if (expectedArguments is null)
             {
                 AddError(
                     $"{path}.lookup",
@@ -1115,7 +1535,7 @@ internal static class TransformationCompiler
             }
 
             var valid = true;
-            foreach (var argumentName in MtiLookupArguments)
+            foreach (var argumentName in expectedArguments)
             {
                 if (!arguments.TryGetValue(argumentName, out var argument))
                 {
@@ -1149,7 +1569,7 @@ internal static class TransformationCompiler
 
             foreach (var argumentName in arguments.Keys)
             {
-                if (!MtiLookupArguments.Contains(
+                if (!expectedArguments.Contains(
                     argumentName,
                     StringComparer.Ordinal))
                 {
@@ -1309,7 +1729,9 @@ internal static class TransformationCompiler
         {
             var supported = targetType == ExpressionValueType.Date
                 ? TransformationCapabilities.DateInputFormats
-                : TransformationCapabilities.DateTimeInputFormats;
+                : targetType == ExpressionValueType.Time
+                    ? TransformationCapabilities.TimeInputFormats
+                    : TransformationCapabilities.DateTimeInputFormats;
             if (!supported.Contains(inputFormat, StringComparer.Ordinal))
             {
                 AddError(
@@ -1342,6 +1764,8 @@ internal static class TransformationCompiler
                         CultureInfo.InvariantCulture,
                         DateTimeStyles.None,
                         out _),
+                ExpressionValueType.Time => value.ValueKind == JsonValueKind.String
+                    && TimeOnly.TryParse(value.GetString(), CultureInfo.InvariantCulture, out _),
                 ExpressionValueType.DateTime => value.ValueKind == JsonValueKind.String
                     && DateTimeOffset.TryParse(
                         value.GetString(),
@@ -1372,6 +1796,26 @@ internal static class TransformationCompiler
                     nameof(dataType),
                     dataType,
                     "Unsupported column type.")
+            };
+        }
+
+        private static ExpressionValueType ToExpressionType(
+            TargetScalarType scalarType)
+        {
+            return scalarType switch
+            {
+                TargetScalarType.Text => ExpressionValueType.Text,
+                TargetScalarType.Decimal => ExpressionValueType.Decimal,
+                TargetScalarType.Integer => ExpressionValueType.Integer,
+                TargetScalarType.Date => ExpressionValueType.Date,
+                TargetScalarType.Time => ExpressionValueType.Time,
+                TargetScalarType.DateTime => ExpressionValueType.DateTime,
+                TargetScalarType.Boolean => ExpressionValueType.Boolean,
+                TargetScalarType.Guid => ExpressionValueType.Guid,
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(scalarType),
+                    scalarType,
+                    "Unsupported target scalar type.")
             };
         }
 

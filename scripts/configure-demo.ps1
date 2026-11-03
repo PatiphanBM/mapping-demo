@@ -176,6 +176,10 @@ Invoke-TrustedDemoSql -Sql (
     'CREATE INDEX ix_mti_original_policy_lookup ON "mti_original" ' +
     '("system_id", "cproductname", "cloannumber");'
 )
+Invoke-TrustedDemoSql -Sql (
+    'CREATE INDEX ix_mti_original_loan_lookup ON "mti_original" ' +
+    '("system_id", "cloannumber");'
+)
 
 $pmibConfig = Invoke-DemoPost -Path "/mapping-configs" -Body @{
     name = "pmib-demo"

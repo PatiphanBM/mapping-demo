@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MappingDemo.Api.Contracts.MappingConfigs;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Transformation;
 
@@ -47,13 +48,15 @@ public sealed class MappingConfigVersionContractTests
             ConfigId: 7,
             VersionNo: 3,
             FixedWidthLayout(),
-            Program());
+            Program(),
+            new LegacyTableDestination(12));
         var details = new MappingConfigVersionDetailsResponse(
             Id: 41,
             VersionNo: 3,
             IsActive: true,
             FixedWidthLayout(),
-            Program());
+            Program(),
+            new LegacyTableDestination(12));
 
         var versionJson = JsonSerializer.Serialize(version, JsonOptions);
         var detailsJson = JsonSerializer.Serialize(details, JsonOptions);
@@ -80,6 +83,153 @@ public sealed class MappingConfigVersionContractTests
         Assert.Equal(
             "default",
             detailsCopy.TransformationProgram.Outputs.Single().OutputKey);
+        Assert.Equal(
+            12,
+            Assert.IsType<LegacyTableDestination>(
+                versionCopy.Destination).NormalizedTableId);
+        Assert.IsType<LegacyTableDestination>(detailsCopy.Destination);
+    }
+
+    [Fact]
+    public void Old_request_without_destination_normalizes_to_legacy_table()
+    {
+        const string json = """
+            {
+              "name": "orders",
+              "inputFolder": "orders-in",
+              "sourceTableId": 4,
+              "normalizedTableId": 9
+            }
+            """;
+
+        var request = JsonSerializer.Deserialize<CreateMappingConfigRequest>(
+            json,
+            JsonOptions)!;
+        var result = DestinationContractNormalizer.Normalize(
+            request.Destination,
+            request.NormalizedTableId);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            9,
+            Assert.IsType<LegacyTableDestination>(result.Destination)
+                .NormalizedTableId);
+    }
+
+    [Fact]
+    public void Api_contract_rejects_legacy_normalized_table_field()
+    {
+        var result = DestinationContractNormalizer.Normalize(
+            new ApiContractDestination(
+                "profile",
+                new ContractReference("contract", "1", "contract/1", "sha256:a")),
+            legacyNormalizedTableId: 9);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("destination", result.ErrorPath);
+    }
+
+    [Fact]
+    public void Json_file_rejects_legacy_normalized_table_field()
+    {
+        var result = DestinationContractNormalizer.Normalize(
+            new JsonFileDestination(
+                "local-json-export",
+                new ContractReference(
+                    "contract",
+                    "1",
+                    "contract/1",
+                    "sha256:a"),
+                "customers",
+                "{sourceBaseName}.{fileJobId}.json",
+                "compact"),
+            legacyNormalizedTableId: 9);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("destination", result.ErrorPath);
+    }
+
+    [Fact]
+    public void Json_file_normalization_rejects_unsafe_path_before_use()
+    {
+        var result = DestinationContractNormalizer.Normalize(
+            new JsonFileDestination(
+                "local-json-export",
+                new ContractReference(
+                    "contract",
+                    "1",
+                    "contract/1",
+                    "sha256:a"),
+                "../customers",
+                "{sourceBaseName}.{fileJobId}.json",
+                "compact"),
+            legacyNormalizedTableId: null);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("destination.relativeFolder", result.ErrorPath);
+    }
+
+    [Fact]
+    public void Json_file_destination_round_trips_through_request_and_response()
+    {
+        var destination = new JsonFileDestination(
+            "local-json-export",
+            new ContractReference(
+                "contract",
+                "1",
+                "contract/1",
+                "sha256:a"),
+            "customers",
+            "{sourceBaseName}.{fileJobId}.json",
+            "indented");
+        var request = new CreateMappingConfigVersionRequest(
+            DelimitedLayout(),
+            Program(),
+            destination);
+
+        var requestCopy =
+            JsonSerializer.Deserialize<CreateMappingConfigVersionRequest>(
+                JsonSerializer.Serialize(request, JsonOptions),
+                JsonOptions);
+        var response = new MappingConfigVersionResponse(
+            41,
+            7,
+            3,
+            request.InputLayout,
+            request.TransformationProgram,
+            destination);
+        var responseCopy =
+            JsonSerializer.Deserialize<MappingConfigVersionResponse>(
+                JsonSerializer.Serialize(response, JsonOptions),
+                JsonOptions);
+
+        Assert.IsType<JsonFileDestination>(requestCopy!.Destination);
+        Assert.Equal(
+            "indented",
+            Assert.IsType<JsonFileDestination>(responseCopy!.Destination)
+                .Formatting);
+    }
+
+    [Fact]
+    public void Api_contract_json_rejects_normalized_table_field_inside_destination()
+    {
+        const string json = """
+            {
+              "inputLayout": { "kind": "delimited", "encoding": "utf-8", "delimiter": ",", "preambleLines": 0, "headerPolicy": "None", "fields": [] },
+              "transformationProgram": { "languageVersion": 1, "semanticsProfile": "sqlserver-legacy-v1", "outputs": [] },
+              "destination": {
+                "kind": "apiContract",
+                "apiDestinationProfileId": "profile",
+                "normalizedTableId": 9,
+                "contract": { "id": "c", "version": "1", "reference": "c/1", "schemaHash": "sha256:a" }
+              }
+            }
+            """;
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize<CreateMappingConfigVersionRequest>(
+                json,
+                JsonOptions));
     }
 
     [Fact]

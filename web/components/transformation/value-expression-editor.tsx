@@ -67,6 +67,7 @@ const expressionTypes: ExpressionValueType[] = [
   "decimal",
   "integer",
   "date",
+  "time",
   "dateTime",
   "boolean",
   "guid",
@@ -77,6 +78,7 @@ const typeToColumn: Record<ExpressionValueType, ColumnDataType> = {
   decimal: "Decimal",
   integer: "Integer",
   date: "Date",
+  time: "Text",
   dateTime: "DateTime",
   boolean: "Boolean",
   guid: "Guid",
@@ -90,6 +92,8 @@ const valueLabels: Record<ValueExpression["kind"], string> = {
   substring: "Substring",
   convert: "Convert",
   coalesce: "Coalesce",
+  add: "Add numbers",
+  concat: "Join text",
   defaultIfBlank: "Default if blank",
   case: "CASE",
   currentDate: "Current date",
@@ -114,6 +118,13 @@ const booleanLabels: Record<BooleanExpression["kind"], string> = {
   not: "NOT",
   exists: "Named lookup exists",
   notExists: "Named lookup does not exist",
+};
+
+const lookupLabels: Record<string, string> = {
+  "mtiOriginalPolicyExists@1":
+    "MTI Original: same system, product and loan number",
+  "mtiOriginalLoanExists@1":
+    "MTI Original: same system and loan number",
 };
 
 function Messages({ messages }: { messages: MappingDraftDiagnostic[] }) {
@@ -182,6 +193,12 @@ function lookupArguments(
       loanNumber: defaultNamedArgument("loanNumber", sourceTable),
     };
   }
+  if (lookup === "mtiOriginalLoanExists@1") {
+    return {
+      systemId: defaultNamedArgument("systemId", sourceTable),
+      loanNumber: defaultNamedArgument("loanNumber", sourceTable),
+    };
+  }
   return {};
 }
 
@@ -234,6 +251,8 @@ const valueKindShape: Record<
   substring: { nodes: 2, maxRelativeDepth: 1 },
   convert: { nodes: 2, maxRelativeDepth: 1 },
   coalesce: { nodes: 3, maxRelativeDepth: 1 },
+  add: { nodes: 3, maxRelativeDepth: 1 },
+  concat: { nodes: 3, maxRelativeDepth: 1 },
   defaultIfBlank: { nodes: 3, maxRelativeDepth: 1 },
   case: { nodes: 6, maxRelativeDepth: 2 },
   currentDate: { nodes: 1, maxRelativeDepth: 0 },
@@ -335,6 +354,27 @@ export function ValueExpressionEditor({
             defaultValue(type, sourceTable),
             defaultValue(type, sourceTable),
           ],
+        });
+        break;
+      case "add": {
+        const numericType = type === "decimal" ? "decimal" : "integer";
+        onChange({
+          kind,
+          values: [
+            defaultValue(numericType, sourceTable),
+            defaultValue(numericType, sourceTable),
+          ],
+        });
+        break;
+      }
+      case "concat":
+        onChange({
+          kind,
+          values: [
+            defaultValue("text", sourceTable),
+            defaultValue("text", sourceTable),
+          ],
+          separator: "",
         });
         break;
       case "defaultIfBlank":
@@ -613,6 +653,62 @@ export function ValueExpressionEditor({
           suffix=".values"
           values={value.values}
         />
+      ) : null}
+
+      {value?.kind === "add" ? (
+        <CollectionValues
+          capabilities={capabilities}
+          depth={depth}
+          diagnostics={diagnostics}
+          expectedType={type === "decimal" ? "decimal" : "integer"}
+          label="Operand"
+          minimumCount={2}
+          onChange={(values) => onChange({ ...value, values })}
+          path={path}
+          programNodeCount={programNodeCount}
+          readOnly={readOnly}
+          sourceTable={sourceTable}
+          suffix=".values"
+          values={value.values}
+        />
+      ) : null}
+
+      {value?.kind === "concat" ? (
+        <div className="mt-2 space-y-2">
+          <CollectionValues
+            capabilities={capabilities}
+            depth={depth}
+            diagnostics={diagnostics}
+            expectedType="text"
+            label="Text operand"
+            minimumCount={2}
+            onChange={(values) => onChange({ ...value, values })}
+            path={path}
+            programNodeCount={programNodeCount}
+            readOnly={readOnly}
+            sourceTable={sourceTable}
+            suffix=".values"
+            values={value.values}
+          />
+          <label className="block text-xs font-semibold text-slate-600">
+            Separator
+            <input
+              aria-label="Concat separator"
+              className={`${inputClassName} mt-1`}
+              disabled={readOnly}
+              onChange={(event) =>
+                onChange({ ...value, separator: event.target.value })
+              }
+              type="text"
+              value={value.separator}
+            />
+          </label>
+          <Messages
+            messages={
+              path ? diagnosticsAtPath(diagnostics, `${path}.separator`) : []
+            }
+          />
+        </div>
       ) : null}
 
       {value?.kind === "defaultIfBlank" ? (
@@ -927,6 +1023,7 @@ interface CollectionValuesProps extends EditorContextProps {
   label: string;
   suffix: string;
   path: string | null;
+  minimumCount?: number;
   onChange: (values: ValueExpression[]) => void;
 }
 
@@ -936,6 +1033,7 @@ function CollectionValues({
   label,
   suffix,
   path,
+  minimumCount = 1,
   onChange,
   sourceTable,
   capabilities,
@@ -954,7 +1052,7 @@ function CollectionValues({
             </span>
             <button
               className="text-xs font-semibold text-rose-700 disabled:opacity-40"
-              disabled={readOnly || values.length === 1}
+              disabled={readOnly || values.length <= minimumCount}
               onClick={() =>
                 onChange(values.filter((_, itemIndex) => itemIndex !== index))
               }
@@ -1383,7 +1481,7 @@ export function BooleanExpressionEditor({
               ) : null}
               {capabilities.transformation.lookups.map((lookup) => (
                 <option key={lookup} value={lookup}>
-                  {lookup}
+                  {lookupLabels[lookup] ?? lookup}
                 </option>
               ))}
             </select>

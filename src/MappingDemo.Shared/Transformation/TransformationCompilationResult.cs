@@ -71,11 +71,30 @@ internal sealed record CompiledLookupDependency(
 
 internal sealed record CompiledTransformationOutput(
     TransformationOutput Definition,
-    IReadOnlyList<CompiledFieldAssignment> Fields);
+    IReadOnlyList<CompiledFieldAssignment> Fields,
+    IReadOnlyList<CompiledArrayGroup> ArrayGroups);
 
 internal sealed record CompiledFieldAssignment(
     FieldAssignment Definition,
-    MappingDemo.Shared.Tables.ColumnDefinition TargetColumn,
+    TargetNode TargetNode,
+    ResolvedTargetPath TargetPath,
+    InferredExpressionType ValueType,
+    TargetAssignmentCoercion Coercion);
+
+internal sealed record CompiledArrayGroup(
+    ArrayGroup Definition,
+    ResolvedTargetPath TargetPath,
+    ResolvedTargetPath SequencePath,
+    IReadOnlyList<CompiledArraySourceSlot> SourceSlots);
+
+internal sealed record CompiledArraySourceSlot(
+    ArraySourceSlot Definition,
+    IReadOnlyList<CompiledArrayItemField> Fields);
+
+internal sealed record CompiledArrayItemField(
+    ArrayItemFieldAssignment Definition,
+    TargetNode TargetNode,
+    ResolvedTargetPath TargetPath,
     InferredExpressionType ValueType,
     TargetAssignmentCoercion Coercion);
 

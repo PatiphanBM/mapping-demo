@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "case"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractKey", "batch", "record", "line", "revision", "branch"],
+      "properties": {
+        "contractKey": { "type": "string" },
+        "batch": { "type": "integer" },
+        "record": { "type": "integer" },
+        "line": { "type": "integer" },
+        "revision": { "type": "string" },
+        "branch": { "type": "string" }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimNo", "parties"],
+      "properties": {
+        "claimNo": { "type": "string", "pattern": "^[A-Z0-9-]+$" },
+        "receivedAt": { "type": ["string", "null"], "format": "date-time" },
+        "parties": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["position", "display"],
+            "properties": {
+              "position": { "type": "integer" },
+              "display": { "type": "string" },
+              "primary": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

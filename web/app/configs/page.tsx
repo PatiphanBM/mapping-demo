@@ -207,8 +207,14 @@ export default function ConfigsPage() {
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
                               →{" "}
-                              {tableNames.get(config.normalizedTableId) ??
-                                `#${config.normalizedTableId}`}
+                              {config.destination?.kind === "apiContract"
+                                ? `API · ${config.destination.contract.reference}`
+                                : config.destination?.kind === "jsonFile"
+                                  ? `JSON File · ${config.destination.contract.reference}`
+                                : config.normalizedTableId === null
+                                  ? "Legacy destination not selected"
+                                  : (tableNames.get(config.normalizedTableId) ??
+                                    `#${config.normalizedTableId}`)}
                             </p>
                           </td>
                           <td className="px-6 py-4 font-medium text-slate-700">

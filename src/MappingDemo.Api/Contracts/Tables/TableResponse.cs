@@ -6,4 +6,8 @@ public sealed record TableResponse(
     long Id,
     string Name,
     TableKind Kind,
-    IReadOnlyList<ColumnRequest> Columns);
+    IReadOnlyList<ColumnRequest> Columns,
+    DateTimeOffset? CreatedAt = null,
+    TableVerificationStatus VerificationStatus =
+        TableVerificationStatus.Unknown,
+    DateTimeOffset? VerificationCheckedAt = null);

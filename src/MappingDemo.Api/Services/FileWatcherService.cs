@@ -84,7 +84,8 @@ public class FileWatcherService : BackgroundService
     private async Task<IReadOnlyList<WatcherConfig>> ReloadWatchersAsync(
         CancellationToken cancellationToken)
     {
-        var configs = await _activeConfigProvider.GetAllAsync(cancellationToken);
+        var configs = ResolveOwnership(
+            await _activeConfigProvider.GetAllAsync(cancellationToken));
         foreach (var config in configs)
         {
             _logger.LogInformation(
@@ -125,10 +126,13 @@ public class FileWatcherService : BackgroundService
 
         foreach (var path in Directory.EnumerateFiles(
                      config.InputPath,
-                     "*.csv",
-                     SearchOption.TopDirectoryOnly))
+                     "*.*",
+                     SearchOption.TopDirectoryOnly)
+                     .Where(path => config.AcceptedExtensions.Contains(
+                         Path.GetExtension(path),
+                         StringComparer.OrdinalIgnoreCase)))
         {
-            OnFileDetected(config.ConfigId, path);
+            OnFileDetected(config, path);
         }
     }
 
@@ -139,8 +143,8 @@ public class FileWatcherService : BackgroundService
             TimeSpan.FromSeconds(_watcherOptions.ScanIntervalSeconds));
         while (await timer.WaitForNextTickAsync(cancellationToken))
         {
-            var configs = await _activeConfigProvider.GetAllAsync(
-                cancellationToken);
+            var configs = ResolveOwnership(
+                await _activeConfigProvider.GetAllAsync(cancellationToken));
             ScanWatchDirectories(configs);
         }
     }
@@ -168,6 +172,7 @@ public class FileWatcherService : BackgroundService
             var intake = _fileIntake.Inspect(detectedFile.Path);
             var fileJobId = await _fileIntake.CreateJobAsync(
                 detectedFile.ConfigId,
+                detectedFile.ConfigVersionId,
                 intake,
                 cancellationToken);
 
@@ -194,9 +199,15 @@ public class FileWatcherService : BackgroundService
         }
     }
 
-    private void OnFileDetected(long configId, string path)
+    private void OnFileDetected(WatcherConfig config, string path)
     {
-        _detectedFiles.Writer.TryWrite(new FileDetected(configId, path));
+        if (config.ActiveVersionId is { } versionId)
+        {
+            _detectedFiles.Writer.TryWrite(new FileDetected(
+                config.ConfigId,
+                versionId,
+                path));
+        }
     }
 
     private void OnScanRequested(WatcherConfig config)
@@ -204,5 +215,42 @@ public class FileWatcherService : BackgroundService
         _scanRequests.Writer.TryWrite(config);
     }
 
-    private sealed record FileDetected(long ConfigId, string Path);
+    private IReadOnlyList<WatcherConfig> ResolveOwnership(
+        IReadOnlyList<WatcherConfig> configs)
+    {
+        var owners = configs
+            .Where(config => config.ActiveVersionId.HasValue)
+            .SelectMany(config => config.AcceptedExtensions.Select(extension => new
+            {
+                Config = config,
+                Extension = extension.ToLowerInvariant(),
+                Key = $"{Path.GetFullPath(config.InputPath)}|{extension.ToLowerInvariant()}"
+            }))
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        return configs.Select(config => config with
+        {
+            AcceptedExtensions = config.AcceptedExtensions
+                .Where(extension =>
+                {
+                    var key = $"{Path.GetFullPath(config.InputPath)}|{extension.ToLowerInvariant()}";
+                    var unambiguous = owners.GetValueOrDefault(key) == 1;
+                    if (!unambiguous)
+                    {
+                        _logger.LogError(
+                            "Ambiguous file ownership for path {InputPath} and extension {Extension}; intake is disabled for this pair",
+                            config.InputPath,
+                            extension);
+                    }
+                    return unambiguous;
+                })
+                .ToArray()
+        }).ToArray();
+    }
+
+    private sealed record FileDetected(
+        long ConfigId,
+        long ConfigVersionId,
+        string Path);
 }

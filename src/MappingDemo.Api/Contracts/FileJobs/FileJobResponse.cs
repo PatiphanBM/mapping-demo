@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MappingDemo.Api.Contracts.FileJobs;
 
 public sealed record FileJobResponse(
@@ -16,4 +18,23 @@ public sealed record FileJobResponse(
     int FailedRows,
     string? LastError,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? DeliveryStatus = null,
+    int PendingDeliveries = 0,
+    int DeliveringDeliveries = 0,
+    int DeliveredDeliveries = 0,
+    int RetryableFailedDeliveries = 0,
+    int PermanentFailedDeliveries = 0,
+    string? EndToEndStatus = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    FileExportStatusResponse? Export = null);
+
+public sealed record FileExportStatusResponse(
+    string Status,
+    int ArtifactRevision,
+    string RelativeDisplayPath,
+    int? ObjectCount,
+    long? ByteCount,
+    string? Sha256,
+    DateTime? PublishedAt,
+    string? BlockReason);

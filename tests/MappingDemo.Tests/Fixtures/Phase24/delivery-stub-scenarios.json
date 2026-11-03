@@ -1,0 +1,12 @@
+{
+  "scenarios": [
+    { "name": "success", "status": 202 },
+    { "name": "bad-request", "status": 400 },
+    { "name": "request-timeout", "status": 408 },
+    { "name": "rate-limited", "status": 429, "retryAfterSeconds": 5 },
+    { "name": "server-error", "status": 503 },
+    { "name": "timeout", "delayBeyondClientTimeout": true },
+    { "name": "commit-before-timeout", "commitIdempotencyKeyBeforeDelay": true, "delayBeyondClientTimeout": true },
+    { "name": "idempotency-conflict", "status": 409, "sameKeyDifferentPayload": true }
+  ]
+}

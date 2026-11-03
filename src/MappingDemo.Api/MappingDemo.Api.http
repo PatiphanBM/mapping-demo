@@ -1,6 +1,96 @@
 @MappingDemo.Api_HostAddress = http://localhost:5181
+@FileJobId = 1
+@JsonExportJobId = 1
+@TableId = 1
 
 GET {{MappingDemo.Api_HostAddress}}/health
 Accept: application/json
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/tables?limit=100&offset=0
+Accept: application/json
+X-Operator-Id: local-table-admin
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/tables/{{TableId}}/references
+Accept: application/json
+X-Operator-Id: local-table-admin
+
+###
+
+POST {{MappingDemo.Api_HostAddress}}/tables/{{TableId}}/verify
+Accept: application/json
+X-Operator-Id: local-table-admin
+X-Request-Id: verify-table
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/delivery-operations
+Accept: application/json
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/delivery-jobs?fileJobId=1
+Accept: application/json
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/file-destination-profiles
+Accept: application/json
+
+###
+
+POST {{MappingDemo.Api_HostAddress}}/file-destination-profiles/local-json-export/resolve
+Content-Type: application/json
+
+{
+  "id": "proposal",
+  "version": "1",
+  "reference": "proposal/1",
+  "schemaHash": ""
+}
+
+###
+
+GET {{MappingDemo.Api_HostAddress}}/json-exports?fileJobId={{FileJobId}}
+Accept: application/json
+
+###
+
+POST {{MappingDemo.Api_HostAddress}}/json-exports/{{JsonExportJobId}}/retry
+Content-Type: application/json
+X-Operator-Id: local-operator
+
+{
+  "reason": "Retry after the approved local storage remediation"
+}
+
+###
+
+PUT {{MappingDemo.Api_HostAddress}}/delivery-operations/rollouts/1
+Content-Type: application/json
+X-Operator-Id: local-operator
+
+{
+  "stage": "Shadow",
+  "enabled": true,
+  "reason": "Approved non-mutating sandbox validation"
+}
+
+###
+
+PUT {{MappingDemo.Api_HostAddress}}/delivery-operations/control
+Content-Type: application/json
+X-Operator-Id: local-operator
+
+{
+  "deliveryPaused": true,
+  "apiContractActivationEnabled": false,
+  "jsonFileActivationEnabled": false,
+  "jsonFileFinalizerPaused": true,
+  "reason": "Rollback rehearsal"
+}
 
 ###

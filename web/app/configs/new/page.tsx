@@ -9,13 +9,31 @@ import {
   LoadingPanel,
 } from "@/components/page-state";
 import { ApiError } from "@/lib/api/client";
-import type { TableDefinition } from "@/lib/api/contracts";
+import type {
+  ApiDestinationProfile,
+  MappingCapabilities,
+  TableDefinition,
+} from "@/lib/api/contracts";
 import {
   createMappingConfig,
+  getMappingCapabilities,
+  listApiDestinationProfiles,
   listTables,
+  resolveApiContract,
+  resolveFileContract,
 } from "@/lib/api/mapping-configs";
 
-type FormField = "name" | "inputFolder" | "sourceTableId" | "normalizedTableId";
+type FormField =
+  | "name"
+  | "inputFolder"
+  | "sourceTableId"
+  | "normalizedTableId"
+  | "apiDestinationProfileId"
+  | "fileDestinationProfileId"
+  | "contractReference"
+  | "relativeFolder"
+  | "fileNameTemplate"
+  | "destination";
 type FormErrors = Partial<Record<FormField, string[]>>;
 
 const fieldClassName =
@@ -24,6 +42,9 @@ const fieldClassName =
 export default function NewConfigPage() {
   const router = useRouter();
   const [tables, setTables] = useState<TableDefinition[]>([]);
+  const [profiles, setProfiles] = useState<ApiDestinationProfile[]>([]);
+  const [capabilities, setCapabilities] =
+    useState<MappingCapabilities | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [submitError, setSubmitError] = useState<unknown>(null);
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({});
@@ -34,14 +55,35 @@ export default function NewConfigPage() {
   const [inputFolder, setInputFolder] = useState("");
   const [sourceTableId, setSourceTableId] = useState("");
   const [normalizedTableId, setNormalizedTableId] = useState("");
+  const [destinationKind, setDestinationKind] = useState<
+    "legacyTable" | "apiContract" | "jsonFile"
+  >("legacyTable");
+  const [profileId, setProfileId] = useState("");
+  const [fileProfileId, setFileProfileId] = useState("");
+  const [contractReference, setContractReference] = useState("");
+  const [relativeFolder, setRelativeFolder] = useState("exports");
+  const [fileNameTemplate, setFileNameTemplate] = useState(
+    "{sourceBaseName}.{artifactRevision}.json",
+  );
+  const [formatting, setFormatting] = useState<"compact" | "indented">(
+    "compact",
+  );
+  const showApiContractDestination =
+    process.env.NEXT_PUBLIC_API_CONTRACT_DESTINATION_VISIBLE !== "false";
 
   useEffect(() => {
     let cancelled = false;
 
-    listTables()
-      .then((rows) => {
+    Promise.all([
+      listTables(),
+      listApiDestinationProfiles(),
+      getMappingCapabilities(),
+    ])
+      .then(([rows, profileRows, capabilityRows]) => {
         if (!cancelled) {
           setTables(rows);
+          setProfiles(profileRows);
+          setCapabilities(capabilityRows);
           setLoadError(null);
         }
       })
@@ -69,6 +111,31 @@ export default function NewConfigPage() {
     () => tables.filter((table) => table.kind === "Normalized"),
     [tables],
   );
+  const selectedProfile = profiles.find((profile) => profile.id === profileId);
+  const selectedContract = selectedProfile?.supportedContracts.find(
+    (contract) => contract.reference === contractReference,
+  );
+  const fileProfiles = capabilities?.destinations.jsonFile.profiles ?? [];
+  const selectedFileProfile = fileProfiles.find(
+    (profile) => profile.id === fileProfileId,
+  );
+  const selectedFileContract = selectedFileProfile?.supportedContracts.find(
+    (contract) => contract.reference === contractReference,
+  );
+
+  function selectDestination(
+    kind: "legacyTable" | "apiContract" | "jsonFile",
+  ) {
+    setDestinationKind(kind);
+    setFieldErrors({});
+    setNormalizedTableId("");
+    setProfileId("");
+    setFileProfileId("");
+    setContractReference("");
+    setRelativeFolder("exports");
+    setFileNameTemplate("{sourceBaseName}.{artifactRevision}.json");
+    setFormatting("compact");
+  }
 
   function retry() {
     setLoading(true);
@@ -86,8 +153,31 @@ export default function NewConfigPage() {
     if (sourceTableId.length === 0) {
       clientErrors.sourceTableId = ["Choose a Source table."];
     }
-    if (normalizedTableId.length === 0) {
+    if (destinationKind === "legacyTable" && normalizedTableId.length === 0) {
       clientErrors.normalizedTableId = ["Choose a Normalized table."];
+    }
+    if (destinationKind === "apiContract" && profileId.length === 0) {
+      clientErrors.apiDestinationProfileId = ["Choose an API destination profile."];
+    }
+    if (destinationKind === "apiContract" && !selectedContract) {
+      clientErrors.contractReference = ["Choose a supported contract."];
+    }
+    if (destinationKind === "jsonFile" && fileProfileId.length === 0) {
+      clientErrors.fileDestinationProfileId = [
+        "Choose a File destination profile.",
+      ];
+    }
+    if (destinationKind === "jsonFile" && !selectedFileContract) {
+      clientErrors.contractReference = ["Choose a supported contract."];
+    }
+    if (destinationKind === "jsonFile" && relativeFolder.trim().length === 0) {
+      clientErrors.relativeFolder = ["Relative folder is required."];
+    }
+    if (
+      destinationKind === "jsonFile" &&
+      fileNameTemplate.trim().length === 0
+    ) {
+      clientErrors.fileNameTemplate = ["File name template is required."];
     }
 
     if (Object.keys(clientErrors).length > 0) {
@@ -101,11 +191,43 @@ export default function NewConfigPage() {
     setFieldErrors({});
 
     try {
+      const resolvedContract = destinationKind === "apiContract"
+        ? (await resolveApiContract(profileId, {
+            ...selectedContract!,
+            schemaHash: "",
+          })).contract
+        : destinationKind === "jsonFile"
+          ? (await resolveFileContract(fileProfileId, {
+              ...selectedFileContract!,
+              schemaHash: "",
+            })).contract
+          : null;
+      const destination = destinationKind === "legacyTable"
+        ? {
+            kind: "legacyTable" as const,
+            normalizedTableId: Number(normalizedTableId),
+          }
+        : destinationKind === "apiContract"
+          ? {
+            kind: "apiContract" as const,
+            apiDestinationProfileId: profileId,
+            contract: resolvedContract!,
+          }
+          : {
+              kind: "jsonFile" as const,
+              fileDestinationProfileId: fileProfileId,
+              contract: resolvedContract!,
+              relativeFolder: relativeFolder.trim(),
+              fileNameTemplate: fileNameTemplate.trim(),
+              formatting,
+            };
       const config = await createMappingConfig({
         name: name.trim(),
         inputFolder: inputFolder.trim(),
         sourceTableId: Number(sourceTableId),
-        normalizedTableId: Number(normalizedTableId),
+        normalizedTableId:
+          destinationKind === "legacyTable" ? Number(normalizedTableId) : null,
+        destination,
       });
       router.push(`/configs/${config.id}`);
     } catch (error) {
@@ -130,8 +252,8 @@ export default function NewConfigPage() {
           Create a mapping config
         </h1>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Connect an input folder to one Source table and one Normalized table.
-          Versions are created separately after this identity is saved.
+          Connect an input folder and Source table to a versioned destination.
+          Choose one immutable delivery destination for the first version.
         </p>
       </div>
 
@@ -170,6 +292,39 @@ export default function NewConfigPage() {
               />
               <FieldMessages messages={fieldErrors.name ?? []} />
             </label>
+            <fieldset className="sm:col-span-2">
+              <legend className="text-sm font-semibold text-slate-800">
+                Destination
+              </legend>
+              <div className="mt-2 grid gap-3 lg:grid-cols-3">
+                <label className={`rounded-xl border p-4 text-sm ${destinationKind === "legacyTable" ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                  <input checked={destinationKind === "legacyTable"} name="destination-kind" onChange={() => selectDestination("legacyTable")} type="radio" />
+                  <span className="ml-2 font-semibold text-indigo-950">
+                    Legacy Table
+                  </span>
+                  <span className="mt-1 block text-xs text-indigo-700">
+                    Existing normalized-table upsert and reconciliation.
+                  </span>
+                </label>
+                {showApiContractDestination ? (
+                  <label className={`rounded-xl border p-4 text-sm ${destinationKind === "apiContract" ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                    <input checked={destinationKind === "apiContract"} name="destination-kind" onChange={() => selectDestination("apiContract")} type="radio" />
+                    <span className="ml-2 font-semibold">One record at a time · API Contract</span>
+                    <span className="mt-1 block text-xs">
+                      Nested contract mapping with server-owned delivery policy.
+                    </span>
+                  </label>
+                ) : null}
+                <label className={`rounded-xl border p-4 text-sm ${destinationKind === "jsonFile" ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                  <input checked={destinationKind === "jsonFile"} name="destination-kind" onChange={() => selectDestination("jsonFile")} type="radio" />
+                  <span className="ml-2 font-semibold">Whole file · JSON file</span>
+                  <span className="mt-1 block text-xs">
+                    Assemble all valid mapped objects into one JSON array.
+                  </span>
+                </label>
+              </div>
+              <FieldMessages messages={fieldErrors.destination ?? []} />
+            </fieldset>
             <label className="block text-sm font-semibold text-slate-800">
               Input folder
               <input
@@ -181,6 +336,103 @@ export default function NewConfigPage() {
               />
               <FieldMessages messages={fieldErrors.inputFolder ?? []} />
             </label>
+            {destinationKind === "apiContract" ? (
+              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-800">
+                  API destination profile
+                  <select className={fieldClassName} onChange={(event) => {
+                    setProfileId(event.target.value);
+                    setContractReference("");
+                  }} value={profileId}>
+                    <option value="">Choose a profile</option>
+                    {profiles.map((profile) => (
+                      <option disabled={!profile.enabled} key={profile.id} value={profile.id}>
+                        {profile.displayName}{profile.enabled ? "" : " (disabled)"}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldMessages messages={fieldErrors.apiDestinationProfileId ?? []} />
+                </label>
+                <label className="block text-sm font-semibold text-slate-800">
+                  Contract version
+                  <select className={fieldClassName} disabled={!selectedProfile} onChange={(event) => setContractReference(event.target.value)} value={contractReference}>
+                    <option value="">Choose a contract</option>
+                    {(selectedProfile?.supportedContracts ?? []).map((contract) => (
+                      <option key={contract.reference} value={contract.reference}>
+                        {contract.id} · v{contract.version}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldMessages messages={fieldErrors.contractReference ?? []} />
+                  <p className="mt-2 text-xs font-normal text-slate-500">Logical IDs only. URLs, credentials and secret references stay on the server.</p>
+                </label>
+              </div>
+            ) : null}
+            {destinationKind === "jsonFile" ? (
+              <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-slate-800">
+                  File destination profile
+                  <select
+                    aria-invalid={(fieldErrors.fileDestinationProfileId?.length ?? 0) > 0}
+                    className={fieldClassName}
+                    onChange={(event) => {
+                      setFileProfileId(event.target.value);
+                      setContractReference("");
+                    }}
+                    value={fileProfileId}
+                  >
+                    <option value="">Choose a profile</option>
+                    {fileProfiles.map((profile) => (
+                      <option disabled={!profile.enabled} key={profile.id} value={profile.id}>
+                        {profile.id}{profile.enabled ? "" : " (disabled)"}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldMessages messages={fieldErrors.fileDestinationProfileId ?? []} />
+                </label>
+                <label className="block text-sm font-semibold text-slate-800">
+                  Contract version
+                  <select
+                    className={fieldClassName}
+                    disabled={!selectedFileProfile}
+                    onChange={(event) => setContractReference(event.target.value)}
+                    value={contractReference}
+                  >
+                    <option value="">Choose a contract</option>
+                    {(selectedFileProfile?.supportedContracts ?? []).map((contract) => (
+                      <option key={contract.reference} value={contract.reference}>
+                        {contract.id} · v{contract.version}
+                      </option>
+                    ))}
+                  </select>
+                  <FieldMessages messages={fieldErrors.contractReference ?? []} />
+                </label>
+                <label className="block text-sm font-semibold text-slate-800">
+                  Relative folder
+                  <input className={fieldClassName} onChange={(event) => setRelativeFolder(event.target.value)} value={relativeFolder} />
+                  <FieldMessages messages={fieldErrors.relativeFolder ?? []} />
+                </label>
+                <label className="block text-sm font-semibold text-slate-800">
+                  File name template
+                  <input className={fieldClassName} onChange={(event) => setFileNameTemplate(event.target.value)} value={fileNameTemplate} />
+                  <FieldMessages messages={fieldErrors.fileNameTemplate ?? []} />
+                </label>
+                <label className="block text-sm font-semibold text-slate-800">
+                  JSON formatting
+                  <select className={fieldClassName} onChange={(event) => setFormatting(event.target.value as "compact" | "indented")} value={formatting}>
+                    {(capabilities?.destinations.jsonFile.formatting ?? []).map((value) => (
+                      <option key={value} value={value}>{value}</option>
+                    ))}
+                  </select>
+                </label>
+                <dl className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs">
+                  <div><dt className="text-slate-500">Payload root</dt><dd className="mt-1 font-semibold text-slate-900">array</dd></div>
+                  <div><dt className="text-slate-500">Encoding</dt><dd className="mt-1 font-semibold text-slate-900">UTF-8 · no BOM</dd></div>
+                  <div><dt className="text-slate-500">Failure scope</dt><dd className="mt-1 font-semibold text-slate-900">Whole file</dd></div>
+                  <div><dt className="text-slate-500">Visible root</dt><dd className="mt-1 break-all font-mono text-slate-900">{relativeFolder || "—"}</dd></div>
+                </dl>
+              </div>
+            ) : null}
             <label className="block text-sm font-semibold text-slate-800">
               Source table
               <select
@@ -198,7 +450,8 @@ export default function NewConfigPage() {
               </select>
               <FieldMessages messages={fieldErrors.sourceTableId ?? []} />
             </label>
-            <label className="block text-sm font-semibold text-slate-800">
+            {destinationKind === "legacyTable" ? (
+              <label className="block text-sm font-semibold text-slate-800">
               Normalized table
               <select
                 aria-invalid={
@@ -216,7 +469,8 @@ export default function NewConfigPage() {
                 ))}
               </select>
               <FieldMessages messages={fieldErrors.normalizedTableId ?? []} />
-            </label>
+              </label>
+            ) : null}
           </div>
 
           <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-200 pt-6">
@@ -272,6 +526,13 @@ function toFormField(path: string): FormField | null {
     inputfolder: "inputFolder",
     sourcetableid: "sourceTableId",
     normalizedtableid: "normalizedTableId",
+    apidestinationprofileid: "apiDestinationProfileId",
+    filedestinationprofileid: "fileDestinationProfileId",
+    contractreference: "contractReference",
+    relativefolder: "relativeFolder",
+    filenametemplate: "fileNameTemplate",
   };
-  return fields[normalized] ?? null;
+  return normalized.startsWith("destination")
+    ? "destination"
+    : (fields[normalized] ?? null);
 }

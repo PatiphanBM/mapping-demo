@@ -37,7 +37,7 @@ _Avoid_: custom function, raw code
 _Avoid_: raw SQL, lookup query
 
 **Mapping Config**:
-ชุดข้อกำหนดที่ผูก folder รับไฟล์กับ Source Table และ Normalized Table อย่างละหนึ่งตาราง โดย Config Version แต่ละรุ่นเป็นเจ้าของ Input Layout และ Transformation Program ที่ immutable
+ชุดข้อกำหนดที่ผูก folder รับไฟล์กับ Source Table โดย Config Version แต่ละรุ่นเป็นเจ้าของ Input Layout, Transformation Program และ Destination Definition ที่ immutable; Normalized Table จำเป็นเฉพาะ `LegacyTable`
 
 **Row Error**:
 รายละเอียดข้อผิดพลาดของแถวที่ไม่ผ่านการแปลงหรือตรวจสอบข้อมูล ประกอบด้วยเลขแถว field และสาเหตุ โดยแถวที่ผ่านยังบันทึกลงตารางปลายทางได้
@@ -71,6 +71,45 @@ _Avoid_: Reprocess
 **Reprocess**:
 การประมวลผล Source ใหม่โดยเลือก config version ได้ เพื่อให้ข้อมูลผ่านกฎ normalization ของรุ่นที่เลือก
 _Avoid_: Retry
+
+**Destination Definition**:
+ส่วน immutable ของ Config Version ที่เลือกอย่างใดอย่างหนึ่งระหว่าง `LegacyTable`, `ApiContract` และ `JsonFile`; งานที่ pin แล้วห้ามเปลี่ยน destination กลางทางและห้ามส่ง output เดียวไปหลาย destination
+
+**JsonFile Destination**:
+ปลายทางระดับ File Job ที่รวม Mapped Documents ตามลำดับ `rowNumber/outputOrdinal` เป็น JSON array หนึ่ง artifact ผ่าน server-owned File Destination Profile; ไม่เขียน Normalized Table และไม่สร้าง API Delivery Job
+
+**File Destination Profile**:
+profile ที่ server เป็นเจ้าของสำหรับ Output Root, quota, minimum free space, encryption policy, contract catalog และ payload bindings; browser เห็นเฉพาะ logical ID กับ safe summary ไม่เห็น absolute root
+
+**JSON Export Job**:
+งานระดับ File Job ที่ตรึง Config Version, profile, artifact revision, relative path, formatting และ staged payload identity ก่อน finalizer publish; retry ใช้ identity เดิม ส่วน reprocess สร้าง revision ใหม่ที่เชื่อม audit กับ revision ก่อนหน้า
+
+**JSON Artifact**:
+ไฟล์ UTF-8 no BOM ที่เป็น JSON array แบบ deterministic และ publish ด้วย create-no-overwrite atomic move; metadata ที่เปิดเผยได้มี relative path, object/byte count, SHA-256 และ timestamps แต่ไม่มี payload body หรือ absolute Output Root
+
+**JSON Finalizer**:
+worker ที่ claim JSON Export Job ด้วย lease, ตรวจ latest Row Jobs, stream staged objects ตามลำดับ, คำนวณ hash ระหว่างเขียน และทำให้ final path มองเห็นได้ต่อเมื่อ artifact ครบเท่านั้น
+
+**Contract Snapshot**:
+canonical JSON Schema, hash, path catalog และ system payload bindings ที่ตรึงตอนสร้าง `ApiContract` หรือ `JsonFile` Config Version; runtime ห้าม fetch schema ล่าสุดแทน snapshot
+
+**Mapped Document**:
+nested typed business document จาก Transformation Program ก่อนเติม System-bound Paths
+
+**Delivery Payload**:
+Mapped Document หลังเติม System-bound Paths และผ่าน final contract validation แล้ว; bytes/hash ถูก persist แบบเข้ารหัสเพื่อ retry โดยไม่ rebuild
+
+**Delivery Job**:
+งานส่ง mapped output หนึ่งรายการไป ApiContract destination พร้อม immutable payload hash, idempotency key, contract/config/output identity และ lifecycle แยกจาก Row Transformation Job
+
+**Delivery Attempt**:
+การเรียก partner endpoint หนึ่งครั้งของ Delivery Job เดิม; เก็บเฉพาะ status, duration, HTTP/correlation metadata และ redacted error ไม่เก็บ response body โดย default
+
+**Business Resend**:
+การส่งเอกสารที่ Delivered แล้วซ้ำโดยผู้มีสิทธิ์พร้อมเหตุผล/audit และ idempotency suffix ใหม่; ไม่ใช่ Retry หรือ Reprocess
+
+**Delivery Rollout**:
+allowlist ราย Mapping Config ที่มี stage `Shadow`, `Canary` หรือ `Expanded`; ห้าม percentage-route destination ภายใน config เดียว
 
 **Duplicate File**:
 ไฟล์ที่มีเนื้อหาเหมือนกับไฟล์ที่รับไว้แล้วภายใต้ Mapping Config เดียวกัน แม้ใช้ชื่อไฟล์ต่างกัน โดยไม่สร้างข้อมูลนำเข้าซ้ำ

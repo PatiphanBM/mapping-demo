@@ -939,7 +939,7 @@ public sealed class TransformationEvaluatorTests
         var module = new TransformationModule();
         var compilation = module.Compile(
             program,
-            new TransformationSchema(source, target));
+            TransformationSchema.FromLegacyTable(source, target));
         Assert.True(
             compilation.IsSuccess,
             string.Join(

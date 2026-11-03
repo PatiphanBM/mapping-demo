@@ -1,0 +1,228 @@
+{
+  "legacyMissingDestination": {
+    "createConfigRequest": {
+      "name": "Orders compatibility",
+      "inputFolder": "phase25/orders",
+      "sourceTableId": 1,
+      "normalizedTableId": 2
+    },
+    "expectedDestination": {
+      "kind": "legacyTable",
+      "normalizedTableId": 2
+    }
+  },
+  "explicitLegacyDestination": {
+    "kind": "legacyTable",
+    "normalizedTableId": 2
+  },
+  "apiContractDestination": {
+    "kind": "apiContract",
+    "apiDestinationProfileId": "pa-mtls",
+    "contract": {
+      "id": "proposal",
+      "version": "1",
+      "reference": "proposal/1",
+      "schemaHash": "sha256:phase25-baseline"
+    }
+  },
+  "legacyVersionRequest": {
+    "inputLayout": {
+      "kind": "delimited",
+      "encoding": "utf-8",
+      "delimiter": ",",
+      "preambleLines": 0,
+      "headerPolicy": "SingleRow",
+      "fields": [
+        {
+          "inputHeader": "Order No",
+          "sourceColumn": "order_no"
+        }
+      ]
+    },
+    "transformationProgram": {
+      "languageVersion": 1,
+      "semanticsProfile": "sqlserver-legacy-v1",
+      "outputs": [
+        {
+          "outputKey": "default",
+          "fields": [
+            {
+              "normalizedColumn": "order_no",
+              "value": {
+                "kind": "source",
+                "field": "order_no"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "acceptedExtensions": [
+      ".csv"
+    ]
+  },
+  "goldenVersionResponse": {
+    "id": 41,
+    "configId": 7,
+    "versionNo": 1,
+    "inputLayout": {
+      "kind": "delimited",
+      "encoding": "utf-8",
+      "delimiter": ",",
+      "preambleLines": 0,
+      "headerPolicy": "SingleRow",
+      "fields": [
+        {
+          "inputHeader": "Order No",
+          "sourceColumn": "order_no"
+        }
+      ]
+    },
+    "transformationProgram": {
+      "languageVersion": 1,
+      "semanticsProfile": "sqlserver-legacy-v1",
+      "outputs": [
+        {
+          "outputKey": "default",
+          "fields": [
+            {
+              "normalizedColumn": "order_no",
+              "value": {
+                "kind": "source",
+                "field": "order_no"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "destination": {
+      "kind": "legacyTable",
+      "normalizedTableId": 2
+    },
+    "acceptedExtensions": [
+      ".csv"
+    ],
+    "contractSnapshot": null
+  },
+  "apiVersionRequest": {
+    "inputLayout": {
+      "kind": "delimited",
+      "encoding": "utf-8",
+      "delimiter": ",",
+      "preambleLines": 0,
+      "headerPolicy": "SingleRow",
+      "fields": [
+        {
+          "inputHeader": "Name",
+          "sourceColumn": "name"
+        }
+      ]
+    },
+    "transformationProgram": {
+      "languageVersion": 2,
+      "semanticsProfile": "sqlserver-legacy-v1",
+      "outputs": [
+        {
+          "outputKey": "proposal",
+          "fields": [
+            {
+              "targetPath": "name",
+              "value": {
+                "kind": "source",
+                "field": "name"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "destination": {
+      "kind": "apiContract",
+      "apiDestinationProfileId": "pa-mtls",
+      "contract": {
+        "id": "proposal",
+        "version": "1",
+        "reference": "proposal/1",
+        "schemaHash": "sha256:phase25-baseline"
+      }
+    },
+    "acceptedExtensions": [
+      ".csv"
+    ]
+  },
+  "goldenApiVersionResponse": {
+    "id": 51,
+    "configId": 8,
+    "versionNo": 3,
+    "inputLayout": {
+      "kind": "delimited",
+      "encoding": "utf-8",
+      "delimiter": ",",
+      "preambleLines": 0,
+      "headerPolicy": "SingleRow",
+      "fields": [
+        {
+          "inputHeader": "Name",
+          "sourceColumn": "name"
+        }
+      ]
+    },
+    "transformationProgram": {
+      "languageVersion": 2,
+      "semanticsProfile": "sqlserver-legacy-v1",
+      "outputs": [
+        {
+          "outputKey": "proposal",
+          "fields": [
+            {
+              "targetPath": "name",
+              "value": {
+                "kind": "source",
+                "field": "name"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "destination": {
+      "kind": "apiContract",
+      "apiDestinationProfileId": "pa-mtls",
+      "contract": {
+        "id": "proposal",
+        "version": "1",
+        "reference": "proposal/1",
+        "schemaHash": "sha256:phase25-baseline"
+      }
+    },
+    "acceptedExtensions": [
+      ".csv"
+    ],
+    "contractSnapshot": {
+      "canonicalSchema": "{\"type\":\"object\"}",
+      "schemaHash": "sha256:phase25-baseline",
+      "fetchedAt": "2026-10-20T00:00:00+00:00",
+      "paths": [],
+      "payloadBindings": []
+    }
+  },
+  "databaseEffects": {
+    "legacyTable": {
+      "currentNormalizedRows": 3,
+      "deliveryJobs": 0,
+      "apiDeliveryOutbox": 0
+    },
+    "apiContractTwoOutputs": {
+      "normalizedWrites": 0,
+      "jobsPerOutput": 1,
+      "outboxPerOutput": 1,
+      "deliveryJobs": 2,
+      "apiDeliveryOutbox": 2
+    }
+  },
+  "apiRetry": {
+    "requestsPerAttempt": 1,
+    "payloadUtf8": "{\"name\":\"B\"}"
+  }
+}

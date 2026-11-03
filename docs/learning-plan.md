@@ -1172,3 +1172,11 @@ phase นี้ไม่แตะ DB และ Kafka เลย เขียน t
 | - [x] | Reprocess ไม่ผ่าน ผลเดิมและ version เดิมยังอยู่ | 17.5 |
 | - [x] | แก้ไฟล์หลัง snapshot ได้ `ChangedAfterRead` และไม่ย้าย | 12.5 |
 | - [x] | แถว `Failed` ทำให้ไฟล์เป็น `CompletedWithErrors`; retry แล้วคำนวณใหม่ | 14.8, 16.3 |
+# Phase 24 delivery extension
+
+- [x] ApiContract durable scheduling, encrypted payload, attempts, retry/lease/idempotency and resend audit
+- [x] Delivery status UI, SQL metrics/alerts and audited kill switches
+- [x] Stub/sandbox Shadow gate and config-by-config Canary/rollback rehearsal
+- [x] Four-input/two-destination acceptance traceability, retention and operator handoff
+
+Evidence: [operations runbook](phase-24-operations-runbook.md), [acceptance matrix](phase-24-acceptance-matrix.md), [Gate D handoff](phase-24-gate-d-handoff.md).

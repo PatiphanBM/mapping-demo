@@ -10,7 +10,7 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
 {
     [Fact]
     [Trait("Category", "PostgreSqlIntegration")]
-    public async Task Batch_lookup_is_parameterized_and_uses_the_composite_index()
+    public async Task Batch_lookups_are_parameterized_and_use_their_composite_indexes()
     {
         var connectionString = Environment.GetEnvironmentVariable(
             "MAPPING_POSTGRES_INTEGRATION");
@@ -54,6 +54,8 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
                 );
                 CREATE INDEX ix_mti_original_policy_lookup
                     ON mti_original (system_id, cproductname, cloannumber);
+                CREATE INDEX ix_mti_original_loan_lookup
+                    ON mti_original (system_id, cloannumber);
                 INSERT INTO table_definitions (id, name, kind)
                     VALUES (1, 'mti_original', 'Normalized');
                 INSERT INTO table_columns (table_id, name, ordinal) VALUES
@@ -72,6 +74,9 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
             var validation = await resolver.ValidateAsync(
                 TransformationCapabilities.MtiOriginalPolicyExistsV1);
             Assert.True(validation.IsValid, validation.Error);
+            var loanValidation = await resolver.ValidateAsync(
+                TransformationCapabilities.MtiOriginalLoanExistsV1);
+            Assert.True(loanValidation.IsValid, loanValidation.Error);
 
             var validRequest = new TransformationLookupRequest(
                 TransformationCapabilities.MtiOriginalPolicyExistsV1,
@@ -82,8 +87,22 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
             {
                 LoanNumber = "LN-404' OR TRUE --"
             };
+            var loanRequest = new TransformationLookupRequest(
+                TransformationCapabilities.MtiOriginalLoanExistsV1,
+                "SYS",
+                ProductName: null,
+                "LN-001");
+            var loanInjectionRequest = loanRequest with
+            {
+                LoanNumber = "LN-404' OR TRUE --"
+            };
             var matches = await resolver.ResolveAsync(
-                [validRequest, injectionRequest]);
+                [
+                    validRequest,
+                    injectionRequest,
+                    loanRequest,
+                    loanInjectionRequest
+                ]);
 
             Assert.Equal(new long[] { 1, 2 }, matches
                 .Where(match => match.Request == validRequest)
@@ -92,8 +111,17 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
             Assert.DoesNotContain(
                 matches,
                 match => match.Request == injectionRequest);
+            Assert.Equal(new long[] { 1, 2, 3 }, matches
+                .Where(match => match.Request == loanRequest)
+                .Select(match => match.SourceRowId)
+                .OrderBy(sourceRowId => sourceRowId));
+            Assert.DoesNotContain(
+                matches,
+                match => match.Request == loanInjectionRequest);
 
             await setup.ExecuteAsync("SET enable_seqscan = off;");
+            await setup.ExecuteAsync(
+                "DROP INDEX ix_mti_original_loan_lookup;");
             var plan = await setup.QueryAsync<string>("""
                 EXPLAIN (FORMAT TEXT)
                 WITH lookup_keys AS (
@@ -113,7 +141,7 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
                 """, new
             {
                 SystemIds = new[] { validRequest.SystemId },
-                ProductNames = new[] { validRequest.ProductName },
+                ProductNames = new[] { validRequest.ProductName! },
                 LoanNumbers = new[] { validRequest.LoanNumber }
             });
             Assert.Contains(
@@ -122,12 +150,49 @@ public sealed class PostgreSqlTransformationLookupResolverIntegrationTests
                     "ix_mti_original_policy_lookup",
                     StringComparison.Ordinal));
 
+            await setup.ExecuteAsync("""
+                CREATE INDEX ix_mti_original_loan_lookup
+                ON mti_original (system_id, cloannumber);
+                """);
+
+            var loanPlan = await setup.QueryAsync<string>("""
+                EXPLAIN (FORMAT TEXT)
+                WITH lookup_keys AS (
+                    SELECT *
+                    FROM unnest(
+                        @SystemIds::text[],
+                        @LoanNumbers::text[])
+                        AS keys(system_id, loan_number)
+                )
+                SELECT target.source_row_id
+                FROM lookup_keys
+                INNER JOIN mti_original AS target
+                    ON target.system_id = lookup_keys.system_id
+                    AND target.cloannumber = lookup_keys.loan_number;
+                """, new
+            {
+                SystemIds = new[] { loanRequest.SystemId },
+                LoanNumbers = new[] { loanRequest.LoanNumber }
+            });
+            Assert.Contains(
+                loanPlan,
+                line => line.Contains(
+                    "ix_mti_original_loan_lookup",
+                    StringComparison.Ordinal));
+
             await setup.ExecuteAsync(
                 "DROP INDEX ix_mti_original_policy_lookup;");
             var missingIndex = await resolver.ValidateAsync(
                 TransformationCapabilities.MtiOriginalPolicyExistsV1);
             Assert.False(missingIndex.IsValid);
             Assert.Contains("composite index", missingIndex.Error);
+
+            await setup.ExecuteAsync(
+                "DROP INDEX ix_mti_original_loan_lookup;");
+            var missingLoanIndex = await resolver.ValidateAsync(
+                TransformationCapabilities.MtiOriginalLoanExistsV1);
+            Assert.False(missingLoanIndex.IsValid);
+            Assert.Contains("composite index", missingLoanIndex.Error);
         }
         finally
         {

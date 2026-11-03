@@ -7,6 +7,7 @@ using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Jobs;
 using MappingDemo.Shared.Messaging;
 using MappingDemo.Shared.Tables;
+using MappingDemo.Worker.Destinations;
 using Npgsql;
 
 namespace MappingDemo.Worker;
@@ -38,6 +39,8 @@ public sealed class FileImportHandler
             file_jobs.created_at AS CreatedAt,
             mapping_config_versions.input_layout::text
                 AS InputLayoutJson,
+            mapping_config_versions.accepted_extensions::text
+                AS AcceptedExtensionsJson,
             source_table.id AS SourceTableId,
             source_table.name AS SourceTableName
         FROM file_jobs
@@ -181,6 +184,7 @@ public sealed class FileImportHandler
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly InputRecordModule _inputRecordModule;
+    private readonly JsonExportReadiness _jsonExportReadiness;
     private readonly TimeSpan _delay;
     private readonly TimeSpan _importRowDelay;
     private readonly int? _failImportAtRow;
@@ -191,12 +195,14 @@ public sealed class FileImportHandler
     public FileImportHandler(
         NpgsqlDataSource dataSource,
         InputRecordModule inputRecordModule,
+        JsonExportReadiness jsonExportReadiness,
         IConfiguration configuration,
         IHostEnvironment hostEnvironment,
         ILogger<FileImportHandler> logger)
     {
         _dataSource = dataSource;
         _inputRecordModule = inputRecordModule;
+        _jsonExportReadiness = jsonExportReadiness;
         _delay = TimeSpan.FromSeconds(
             configuration.GetValue<int>("Import:DelaySeconds"));
         _importRowDelay = TimeSpan.FromMilliseconds(
@@ -411,6 +417,22 @@ public sealed class FileImportHandler
             return true;
         }
 
+        var acceptedExtensions = JsonSerializer.Deserialize<string[]>(
+            fileJob.AcceptedExtensionsJson,
+            JsonOptions) ?? [];
+        var fileExtension = InputFileExtensionPolicy.Normalize(
+            Path.GetExtension(fileJob.FileName));
+        if (!acceptedExtensions.Contains(
+                fileExtension,
+                StringComparer.OrdinalIgnoreCase))
+        {
+            var lastError = JsonSerializer.Serialize(
+                new { Code = "FileExtensionNotAccepted", Extension = fileExtension },
+                JsonOptions);
+            await SetImportFailedAsync(fileJob.Id, lastError, cancellationToken);
+            return true;
+        }
+
         var sourceTable = await LoadSourceTableAsync(
             fileJob.SourceTableId,
             fileJob.SourceTableName,
@@ -446,6 +468,8 @@ public sealed class FileImportHandler
                 readResult = await _inputRecordModule.ReadAsync(
                     snapshotStream,
                     compilation.CompiledLayout!,
+                    Path.GetExtension(fileJob.FileName),
+                    InputReadLimits.Default,
                     cancellationToken);
             }
 
@@ -890,6 +914,8 @@ public sealed class FileImportHandler
     {
         await using var connection =
             await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction =
+            await connection.BeginTransactionAsync(cancellationToken);
         var command = new CommandDefinition(
             SetImportedSql,
             new
@@ -898,9 +924,18 @@ public sealed class FileImportHandler
                 ImportStatus = ImportStatus.Imported,
                 TotalRows = totalRows
             },
+            transaction,
             cancellationToken: cancellationToken);
 
         await connection.ExecuteAsync(command);
+        await _jsonExportReadiness.TryScheduleAsync(
+            fileJobId,
+            currentRowJobId: null,
+            currentCompletionStatus: null,
+            connection,
+            transaction,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private async Task SetArchivedAsync(
@@ -981,6 +1016,7 @@ public sealed class FileImportHandler
         string? ContentHash,
         DateTime CreatedAt,
         string InputLayoutJson,
+        string AcceptedExtensionsJson,
         long SourceTableId,
         string SourceTableName);
 

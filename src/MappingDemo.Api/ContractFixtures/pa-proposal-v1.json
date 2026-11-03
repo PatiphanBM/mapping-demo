@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "beneficiary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "name"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "name": { "type": "string", "maxLength": 120 },
+        "relationship": { "type": ["string", "null"], "maxLength": 40 },
+        "active": { "type": "boolean" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["envelope", "proposal"],
+  "properties": {
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractReference", "fileJobId", "sourceRowId", "sourceRowNumber", "configVersionReference", "outputKey"],
+      "properties": {
+        "contractReference": { "type": "string" },
+        "fileJobId": { "type": "integer" },
+        "sourceRowId": { "type": "integer" },
+        "sourceRowNumber": { "type": "integer" },
+        "configVersionReference": { "type": "string" },
+        "outputKey": { "type": "string" }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["insured", "beneficiaries"],
+      "properties": {
+        "insured": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fullName", "birthDate"],
+          "properties": {
+            "fullName": { "type": "string", "maxLength": 120, "description": "Insured full name" },
+            "birthDate": { "type": "string", "format": "date" },
+            "preferredTime": { "type": ["string", "null"], "format": "time" },
+            "score": { "type": "number", "minimum": 0, "maximum": 100 }
+          }
+        },
+        "beneficiaries": { "type": "array", "items": { "$ref": "#/$defs/beneficiary" } },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

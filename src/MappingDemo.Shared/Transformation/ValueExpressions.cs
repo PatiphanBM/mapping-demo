@@ -8,6 +8,8 @@ namespace MappingDemo.Shared.Transformation;
 [JsonDerivedType(typeof(MetadataExpression), "metadata")]
 [JsonDerivedType(typeof(LiteralExpression), "literal")]
 [JsonDerivedType(typeof(CoalesceExpression), "coalesce")]
+[JsonDerivedType(typeof(AddExpression), "add")]
+[JsonDerivedType(typeof(ConcatExpression), "concat")]
 [JsonDerivedType(typeof(DefaultIfBlankExpression), "defaultIfBlank")]
 [JsonDerivedType(typeof(TrimExpression), "trim")]
 [JsonDerivedType(typeof(CaseExpression), "case")]
@@ -46,6 +48,23 @@ public sealed record CoalesceExpression : ValueExpression
 {
     [JsonRequired]
     public required IReadOnlyList<ValueExpression> Values { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record AddExpression : ValueExpression
+{
+    [JsonRequired]
+    public required IReadOnlyList<ValueExpression> Values { get; init; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ConcatExpression : ValueExpression
+{
+    [JsonRequired]
+    public required IReadOnlyList<ValueExpression> Values { get; init; }
+
+    [JsonRequired]
+    public required string Separator { get; init; }
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -131,6 +150,7 @@ public enum ExpressionValueType
     Decimal,
     Integer,
     Date,
+    Time,
     DateTime,
     Boolean,
     Guid
@@ -155,6 +175,7 @@ internal sealed class ExpressionValueTypeJsonConverter
             "decimal" => ExpressionValueType.Decimal,
             "integer" => ExpressionValueType.Integer,
             "date" => ExpressionValueType.Date,
+            "time" => ExpressionValueType.Time,
             "dateTime" => ExpressionValueType.DateTime,
             "boolean" => ExpressionValueType.Boolean,
             "guid" => ExpressionValueType.Guid,
@@ -173,6 +194,7 @@ internal sealed class ExpressionValueTypeJsonConverter
             ExpressionValueType.Decimal => "decimal",
             ExpressionValueType.Integer => "integer",
             ExpressionValueType.Date => "date",
+            ExpressionValueType.Time => "time",
             ExpressionValueType.DateTime => "dateTime",
             ExpressionValueType.Boolean => "boolean",
             ExpressionValueType.Guid => "guid",

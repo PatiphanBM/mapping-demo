@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "fileJobId",
+    "fileName",
+    "sourceRowId",
+    "outputKey",
+    "sourceRowNo",
+    "mappingConfigVersionId",
+    "inform"
+  ],
+  "properties": {
+    "contractVersion": { "type": "string", "pattern": "^pa-inform/1$" },
+    "fileJobId": { "type": "string" },
+    "fileName": { "type": "string" },
+    "sourceRowId": { "type": "string" },
+    "outputKey": { "type": "string", "pattern": "^default$" },
+    "sourceRowNo": { "type": "integer", "minimum": 1 },
+    "mappingConfigVersionId": { "type": "string" },
+    "inform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "partnerCode",
+        "saleChannel",
+        "sourceReference",
+        "transactionType",
+        "sourceTransactionType",
+        "effectiveDate",
+        "expiryDate",
+        "coverStartTime",
+        "campaignCode",
+        "packageCode",
+        "agentCode",
+        "saleId",
+        "totalPremium",
+        "salesBranchCode",
+        "salesBranchName",
+        "insured",
+        "beneficiaries",
+        "extras"
+      ],
+      "properties": {
+        "partnerCode": { "type": "string" },
+        "saleChannel": { "type": "string" },
+        "sourceReference": { "type": "string" },
+        "transactionType": { "type": "string" },
+        "sourceTransactionType": { "type": "string" },
+        "effectiveDate": { "type": "string", "format": "date" },
+        "expiryDate": { "type": "string", "format": "date" },
+        "coverStartTime": { "type": "string", "format": "time" },
+        "campaignCode": { "type": "string" },
+        "packageCode": { "type": "string" },
+        "agentCode": { "type": "string" },
+        "saleId": { "type": ["string", "null"] },
+        "totalPremium": { "type": "number", "minimum": 0 },
+        "salesBranchCode": { "type": "string" },
+        "salesBranchName": { "type": "string" },
+        "insured": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "isPolicyholder",
+            "relation",
+            "fullName",
+            "idNo",
+            "birthDate",
+            "declaredAge",
+            "occupation",
+            "address"
+          ],
+          "properties": {
+            "isPolicyholder": { "type": "boolean" },
+            "relation": { "type": "string" },
+            "fullName": { "type": "string" },
+            "idNo": { "type": "string" },
+            "birthDate": { "type": "string", "format": "date" },
+            "declaredAge": { "type": "integer", "minimum": 0 },
+            "occupation": { "type": "string" },
+            "address": { "type": "string" }
+          }
+        },
+        "beneficiaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["seq", "fullName", "relationship"],
+            "properties": {
+              "seq": { "type": "integer", "minimum": 1 },
+              "fullName": { "type": "string" },
+              "relationship": { "type": "string" }
+            }
+          }
+        },
+        "extras": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        }
+      }
+    }
+  }
+}

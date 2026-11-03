@@ -20,6 +20,18 @@ public static class OutboxWriter
             CAST(@PayloadJson AS jsonb));
         """;
 
+    private const string InsertOutboxOnceSql = """
+        INSERT INTO outbox (
+            topic,
+            message_key,
+            payload)
+        VALUES (
+            @Topic,
+            @MessageKey,
+            CAST(@PayloadJson AS jsonb))
+        ON CONFLICT DO NOTHING;
+        """;
+
     public static async Task AddAsync<TMessage>(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -48,6 +60,34 @@ public static class OutboxWriter
             transaction,
             cancellationToken: cancellationToken);
 
+        await connection.ExecuteAsync(command);
+    }
+
+    public static async Task AddOnceAsync<TMessage>(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string topic,
+        string key,
+        TMessage message,
+        CancellationToken cancellationToken = default)
+        where TMessage : notnull
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(transaction);
+        ArgumentException.ThrowIfNullOrWhiteSpace(topic);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentNullException.ThrowIfNull(message);
+
+        var command = new CommandDefinition(
+            InsertOutboxOnceSql,
+            new
+            {
+                Topic = topic,
+                MessageKey = key,
+                PayloadJson = JsonSerializer.Serialize(message, JsonOptions)
+            },
+            transaction,
+            cancellationToken: cancellationToken);
         await connection.ExecuteAsync(command);
     }
 }

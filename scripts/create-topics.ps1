@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $topics = @(
     "mapping.file-import"
     "mapping.row-normalize"
+    "mapping.api-delivery"
+    "mapping.json-export-finalize"
 )
 
 $projectRoot = Split-Path -Parent $PSScriptRoot

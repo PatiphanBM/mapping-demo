@@ -39,7 +39,7 @@ public sealed class TransformationCompilerTests
     [Fact]
     public void Compile_rejects_unknown_language_version()
     {
-        var program = Program(Source("raw")) with { LanguageVersion = 2 };
+        var program = Program(Source("raw")) with { LanguageVersion = 3 };
 
         var result = Compile(
             program,
@@ -162,6 +162,26 @@ public sealed class TransformationCompilerTests
             result,
             "outputs[0].fields[0].value.field",
             "UnknownSourceField");
+    }
+
+    [Fact]
+    public void Compile_preserves_the_v1_unknown_target_diagnostic()
+    {
+        var program = new TransformationProgram
+        {
+            SemanticsProfile = "sqlserver-legacy-v1",
+            Outputs = [Output("default", "missing", Source("raw"))]
+        };
+
+        var result = Compile(
+            program,
+            SourceTable(),
+            Target("value", ColumnDataType.Text));
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("outputs[0].fields[0].normalizedColumn", diagnostic.Path);
+        Assert.Equal("UnknownTargetColumn", diagnostic.Code);
+        Assert.Equal("Target column 'missing' does not exist.", diagnostic.Message);
     }
 
     [Fact]
@@ -342,6 +362,63 @@ public sealed class TransformationCompilerTests
     }
 
     [Fact]
+    public void Compile_accepts_system_and_loan_lookup_signature()
+    {
+        var program = new TransformationProgram
+        {
+            SemanticsProfile = "sqlserver-legacy-v1",
+            SourceWhen = new NotExistsExpression
+            {
+                Lookup = TransformationCapabilities.MtiOriginalLoanExistsV1,
+                Arguments = new Dictionary<string, ValueExpression>
+                {
+                    ["systemId"] = Source("raw"),
+                    ["loanNumber"] = Source("raw")
+                }
+            },
+            Outputs = [Output("default", "value", Source("raw"))]
+        };
+
+        var result = Compile(
+            program,
+            SourceTable(),
+            Target("value", ColumnDataType.Text));
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Diagnostics);
+    }
+
+    [Fact]
+    public void Compile_rejects_product_argument_for_system_and_loan_lookup()
+    {
+        var program = new TransformationProgram
+        {
+            SemanticsProfile = "sqlserver-legacy-v1",
+            SourceWhen = new NotExistsExpression
+            {
+                Lookup = TransformationCapabilities.MtiOriginalLoanExistsV1,
+                Arguments = new Dictionary<string, ValueExpression>
+                {
+                    ["systemId"] = Source("raw"),
+                    ["productName"] = Source("raw"),
+                    ["loanNumber"] = Source("raw")
+                }
+            },
+            Outputs = [Output("default", "value", Source("raw"))]
+        };
+
+        var result = Compile(
+            program,
+            SourceTable(),
+            Target("value", ColumnDataType.Text));
+
+        AssertDiagnostic(
+            result,
+            "sourceWhen.arguments.productName",
+            "UnknownLookupArgument");
+    }
+
+    [Fact]
     public void Compile_rejects_unregistered_function_version()
     {
         var result = Compile(
@@ -408,7 +485,7 @@ public sealed class TransformationCompilerTests
     {
         return new TransformationModule().Compile(
             program,
-            new TransformationSchema(source, target));
+            TransformationSchema.FromLegacyTable(source, target));
     }
 
     private static TransformationProgram Program(

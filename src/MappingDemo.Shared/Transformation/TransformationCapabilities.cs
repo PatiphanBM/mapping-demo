@@ -4,6 +4,9 @@ public static class TransformationCapabilities
 {
     public const int LanguageVersion = 1;
 
+    public static IReadOnlyList<int> LanguageVersions { get; } =
+        Array.AsReadOnly([1, 2]);
+
     public const string SqlServerLegacyProfile = "sqlserver-legacy-v1";
 
     public const string AsiaBangkokTimeZone = "Asia/Bangkok";
@@ -12,6 +15,9 @@ public static class TransformationCapabilities
 
     public const string MtiOriginalPolicyExistsV1 =
         "mtiOriginalPolicyExists@1";
+
+    public const string MtiOriginalLoanExistsV1 =
+        "mtiOriginalLoanExists@1";
 
     public const int MaxOutputs = 32;
 
@@ -32,6 +38,7 @@ public static class TransformationCapabilities
             ExpressionValueType.Decimal,
             ExpressionValueType.Integer,
             ExpressionValueType.Date,
+            ExpressionValueType.Time,
             ExpressionValueType.DateTime,
             ExpressionValueType.Boolean,
             ExpressionValueType.Guid
@@ -49,6 +56,9 @@ public static class TransformationCapabilities
             "dd/MM/yyyy HH:mm:ss",
             "yyyyMMddHHmmss"
         ]);
+
+    public static IReadOnlyList<string> TimeInputFormats { get; } =
+        Array.AsReadOnly(["HH:mm:ss", "HH:mm"]);
 
     public static IReadOnlyList<string> BooleanOperators { get; } =
         Array.AsReadOnly(
@@ -79,6 +89,8 @@ public static class TransformationCapabilities
             "metadata",
             "literal",
             "coalesce",
+            "add",
+            "concat",
             "defaultIfBlank",
             "trim",
             "case",
@@ -92,7 +104,11 @@ public static class TransformationCapabilities
         Array.AsReadOnly([FormatRegNoV1]);
 
     public static IReadOnlyList<string> Lookups { get; } =
-        Array.AsReadOnly([MtiOriginalPolicyExistsV1]);
+        Array.AsReadOnly(
+        [
+            MtiOriginalPolicyExistsV1,
+            MtiOriginalLoanExistsV1
+        ]);
 
     public static IReadOnlyList<string> MetadataFields { get; } =
         Array.AsReadOnly(

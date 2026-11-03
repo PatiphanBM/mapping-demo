@@ -3,7 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = [System.IO.Path]::GetFullPath(
     (Split-Path -Parent $PSScriptRoot)
 )
-$runtimeDirectoryNames = @("input", "archive", "data")
+$runtimeDirectoryNames = @("input", "archive", "data", "output")
 $runtimeDirectories = foreach ($directoryName in $runtimeDirectoryNames) {
     $path = [System.IO.Path]::GetFullPath(
         (Join-Path $projectRoot $directoryName)

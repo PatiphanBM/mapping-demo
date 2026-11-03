@@ -7,6 +7,9 @@
 ### Create the A1 Source table
 POST {{baseUrl}}/tables
 Content-Type: application/json
+X-Operator-Id: local-table-admin
+X-Change-Reason: Approved Source table onboarding
+X-Request-Id: create-source-table
 
 {
   "name": "src_orders",
@@ -48,6 +51,9 @@ Content-Type: application/json
 ### Create the A1 Normalized table
 POST {{baseUrl}}/tables
 Content-Type: application/json
+X-Operator-Id: local-table-admin
+X-Change-Reason: Approved Normalized table onboarding
+X-Request-Id: create-normalized-table
 
 {
   "name": "norm_orders",
@@ -87,16 +93,42 @@ Content-Type: application/json
 }
 
 ### List tables
-GET {{baseUrl}}/tables
+GET {{baseUrl}}/tables?limit=100&offset=0
 Accept: application/json
+X-Operator-Id: local-table-admin
 
 ### Get a table by id
 GET {{baseUrl}}/tables/{{tableId}}
 Accept: application/json
+X-Operator-Id: local-table-admin
+
+### Get Table Admin permissions and rollout gate
+GET {{baseUrl}}/tables/permissions
+Accept: application/json
+X-Operator-Id: local-table-admin
+
+### Inspect configuration and pinned-job impact
+GET {{baseUrl}}/tables/{{tableId}}/references
+Accept: application/json
+X-Operator-Id: local-table-admin
+
+### Read the latest persisted verification
+GET {{baseUrl}}/tables/{{tableId}}/verification
+Accept: application/json
+X-Operator-Id: local-table-admin
+
+### Verify physical PostgreSQL schema (read-only, rate limited)
+POST {{baseUrl}}/tables/{{tableId}}/verify
+Accept: application/json
+X-Operator-Id: local-table-admin
+X-Request-Id: verify-table
 
 ### Add an optional column (not part of the A1 schema)
 POST {{baseUrl}}/tables/{{tableId}}/columns
 Content-Type: application/json
+X-Operator-Id: local-table-admin
+X-Change-Reason: Approved additive source field
+X-Request-Id: add-source-tag
 
 {
   "name": "source_tag",

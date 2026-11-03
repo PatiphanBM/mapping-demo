@@ -1,10 +1,32 @@
 using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.Contracts;
 
 namespace MappingDemo.Api.Contracts.MappingConfigs;
 
 public sealed record MappingCapabilitiesResponse(
     InputCapabilitiesResponse Input,
-    TransformationCapabilitiesResponse Transformation);
+    TransformationCapabilitiesResponse Transformation,
+    DestinationCapabilitiesResponse Destinations);
+
+public sealed record DestinationCapabilitiesResponse(
+    IReadOnlyList<string> Kinds,
+    JsonFileCapabilitiesResponse JsonFile);
+
+public sealed record JsonFileCapabilitiesResponse(
+    IReadOnlyList<string> Formatting,
+    IReadOnlyList<string> FileNameTokens,
+    int MaxPreviewBytes,
+    int MaxPreviewRecords,
+    int MaxObjectBytes,
+    int MaxObjectsPerArtifact,
+    long MaxArtifactBytes,
+    IReadOnlyList<FileDestinationProfileSummaryResponse> Profiles);
+
+public sealed record FileDestinationProfileSummaryResponse(
+    string Id,
+    bool Enabled,
+    IReadOnlyList<SupportedContract> SupportedContracts,
+    IReadOnlyList<PayloadBinding> PayloadBindings);
 
 public sealed record InputCapabilitiesResponse(
     IReadOnlyList<string> Formats,
@@ -30,6 +52,7 @@ public sealed record SemanticsProfileCapabilityResponse(
 
 public sealed record InputFormatCapabilitiesResponse(
     IReadOnlyList<string> Date,
+    IReadOnlyList<string> Time,
     IReadOnlyList<string> DateTime);
 
 public sealed record TransformationLimitsResponse(

@@ -1,6 +1,10 @@
 import { apiRequest } from "./client";
 import type {
   CreateMappingConfigRequest,
+  ApiDestinationProfile,
+  ContractSchemaResolveResponse,
+  ContractReference,
+  ContractResolveResponse,
   MappingCapabilities,
   MappingConfig,
   MappingConfigDetails,
@@ -16,6 +20,32 @@ export function getMappingCapabilities(): Promise<MappingCapabilities> {
   return apiRequest<MappingCapabilities>("/mapping-capabilities", {
     cache: "no-store",
   });
+}
+
+export function listApiDestinationProfiles(): Promise<ApiDestinationProfile[]> {
+  return apiRequest<ApiDestinationProfile[]>("/api-destination-profiles", {
+    cache: "no-store",
+  });
+}
+
+export function resolveApiContract(
+  profileId: string,
+  contract: ContractReference,
+): Promise<ContractResolveResponse> {
+  return apiRequest<ContractResolveResponse>(
+    `/api-destination-profiles/${encodeURIComponent(profileId)}/resolve`,
+    { method: "POST", body: contract },
+  );
+}
+
+export function resolveFileContract(
+  profileId: string,
+  contract: ContractReference,
+): Promise<ContractSchemaResolveResponse> {
+  return apiRequest<ContractSchemaResolveResponse>(
+    `/file-destination-profiles/${encodeURIComponent(profileId)}/resolve`,
+    { method: "POST", body: contract },
+  );
 }
 
 export function listMappingConfigs(): Promise<MappingConfig[]> {
@@ -72,6 +102,26 @@ export function previewMappingConfigVersion(
       method: "POST",
       body: request,
     },
+  );
+}
+
+export function previewMappingConfigFile(
+  configId: number,
+  file: File,
+  request: MappingConfigVersionDraft & { evaluationAt: string },
+): Promise<PreviewMappingConfigVersionResponse> {
+  const form = new FormData();
+  form.set("file", file);
+  form.set("evaluationAt", request.evaluationAt);
+  form.set("inputLayoutJson", JSON.stringify(request.inputLayout));
+  form.set(
+    "transformationProgramJson",
+    JSON.stringify(request.transformationProgram),
+  );
+  form.set("destinationJson", JSON.stringify(request.destination));
+  return apiRequest<PreviewMappingConfigVersionResponse>(
+    `/mapping-configs/${configId}/versions/preview-file`,
+    { method: "POST", body: form },
   );
 }
 

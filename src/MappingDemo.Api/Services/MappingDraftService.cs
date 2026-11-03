@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using MappingDemo.Api.Contracts.MappingConfigs;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Tables;
 using MappingDemo.Shared.Transformation;
@@ -10,11 +11,13 @@ namespace MappingDemo.Api.Services;
 
 public sealed partial class MappingDraftService
 {
-    public const int MaxSampleBytes = 1024 * 1024;
+    public const int MaxSampleBytes = JsonArtifactLimits.MaxPreviewBytes;
 
-    public const int MaxSampleRecords = 50;
+    public const int MaxSampleRecords = JsonArtifactLimits.MaxPreviewRecords;
 
     public const int MaxRequestBodyBytes = 3 * 1024 * 1024;
+
+    public const int MaxUploadBytes = 10 * 1024 * 1024;
 
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
@@ -101,6 +104,61 @@ public sealed partial class MappingDraftService
             _ => MappingPreviewResult.Failure(
                 Error("sample", "UnknownSampleKind", "Sample kind is not supported."))
         };
+    }
+
+    public async Task<MappingPreviewResult> PreviewFileAsync(
+        Stream file,
+        string fileName,
+        string evaluationAtValue,
+        InputLayoutDefinition inputLayout,
+        TransformationProgram transformationProgram,
+        TransformationSchema schema,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryParseEvaluationAt(evaluationAtValue, out var evaluationAt))
+        {
+            return MappingPreviewResult.Failure(Error(
+                "evaluationAt", "InvalidEvaluationAt",
+                "evaluationAt must be ISO 8601 with Z or a UTC offset."));
+        }
+
+        var compilation = await CompileAsync(
+            inputLayout, transformationProgram, schema, cancellationToken);
+        var errors = compilation.Diagnostics.Where(diagnostic =>
+            diagnostic.Severity == MappingDraftDiagnosticSeverity.Error).ToArray();
+        if (errors.Length > 0)
+        {
+            return MappingPreviewResult.Failure(errors);
+        }
+
+        var read = await _inputModule.ReadAsync(
+            file,
+            compilation.InputLayout!,
+            Path.GetExtension(fileName),
+            new InputReadLimits(
+                MaxBytes: MaxUploadBytes,
+                MaxRows: MaxSampleRecords,
+                MaxElapsed: TimeSpan.FromSeconds(10)),
+            cancellationToken);
+        if (!read.IsSuccess)
+        {
+            return MappingPreviewResult.Failure(Error(
+                "file", read.Error!.Code, FormatInputError(read.Error)));
+        }
+
+        if (read.Records.Count > MaxSampleRecords)
+        {
+            return MappingPreviewResult.Failure(Error(
+                "file", "TooManySampleRecords",
+                $"A sample may contain at most {MaxSampleRecords} parsed records."));
+        }
+
+        return await BuildFilePreviewAsync(
+            read,
+            fileName,
+            evaluationAt,
+            compilation.TransformationProgram!,
+            cancellationToken);
     }
 
     private async Task<DraftCompilation> CompileAsync(
@@ -199,6 +257,21 @@ public sealed partial class MappingDraftService
                     $"A sample may contain at most {MaxSampleRecords} parsed records."));
         }
 
+        return await BuildFilePreviewAsync(
+            read,
+            sample.FileName,
+            evaluationAt,
+            transformationProgram,
+            cancellationToken);
+    }
+
+    private async Task<MappingPreviewResult> BuildFilePreviewAsync(
+        InputRecordReadResult read,
+        string fileName,
+        DateTimeOffset evaluationAt,
+        CompiledTransformationProgram transformationProgram,
+        CancellationToken cancellationToken)
+    {
         var imported = read.Records
             .Where(record => record.Action == InputRecordAction.Import)
             .Select((record, index) => ToTransformationRow(
@@ -207,7 +280,7 @@ public sealed partial class MappingDraftService
                     pair => pair.Key,
                     pair => (string?)pair.Value,
                     StringComparer.OrdinalIgnoreCase),
-                sample.FileName,
+                fileName,
                 record.RowNumber!.Value,
                 record.PhysicalLineNumber,
                 evaluationAt,
@@ -239,8 +312,17 @@ public sealed partial class MappingDraftService
                 transformation));
         }
 
+        var workbook = read.Workbook is null
+            ? null
+            : new WorkbookPreviewResponse(
+                read.Workbook.Sheets,
+                read.Workbook.SelectedSheet,
+                read.Workbook.Headers);
         return MappingPreviewResult.Success(
-            new PreviewMappingConfigVersionResponse(evaluationAt, records));
+            new PreviewMappingConfigVersionResponse(
+                evaluationAt,
+                records,
+                workbook));
     }
 
     private async Task<MappingPreviewResult> PreviewSourceRowsAsync(

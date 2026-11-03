@@ -9,8 +9,11 @@ public sealed class PostgreSqlTransformationLookupResolver(
 {
     private const string MtiOriginalTable = "mti_original";
 
-    private static readonly string[] RequiredColumns =
+    private static readonly string[] PolicyRequiredColumns =
         ["system_id", "cproductname", "cloannumber"];
+
+    private static readonly string[] LoanRequiredColumns =
+        ["system_id", "cloannumber"];
 
     private const string ResolveMetadataSql = """
         SELECT
@@ -55,11 +58,12 @@ public sealed class PostgreSqlTransformationLookupResolver(
         CancellationToken cancellationToken = default)
     {
         EnsureSupported(capability);
+        var requiredColumns = RequiredColumnsFor(capability);
 
         await using var connection = await dataSource.OpenConnectionAsync(
             cancellationToken);
         var metadata = await ResolveMetadataAsync(connection, cancellationToken);
-        var metadataError = ValidateMetadata(metadata);
+        var metadataError = ValidateMetadata(metadata, requiredColumns);
         if (metadataError is not null)
         {
             return new TransformationLookupValidationResult(false, metadataError);
@@ -71,7 +75,7 @@ public sealed class PostgreSqlTransformationLookupResolver(
                 new
                 {
                     TableName = metadata!.TableName,
-                    RequiredColumns
+                    RequiredColumns = requiredColumns
                 },
                 cancellationToken: cancellationToken));
 
@@ -80,7 +84,7 @@ public sealed class PostgreSqlTransformationLookupResolver(
             : new TransformationLookupValidationResult(
                 false,
                 $"Normalized table '{MtiOriginalTable}' requires a composite " +
-                $"index on ({string.Join(", ", RequiredColumns)}).");
+                $"index on ({string.Join(", ", requiredColumns)}).");
     }
 
     public async ValueTask<IReadOnlyList<TransformationLookupMatch>> ResolveAsync(
@@ -93,10 +97,7 @@ public sealed class PostgreSqlTransformationLookupResolver(
             return [];
         }
 
-        if (requests.Any(request => !string.Equals(
-            request.Capability,
-            TransformationCapabilities.MtiOriginalPolicyExistsV1,
-            StringComparison.Ordinal)))
+        if (requests.Any(request => !IsSupported(request.Capability)))
         {
             throw new ArgumentException(
                 "The batch contains an unsupported lookup capability.",
@@ -106,7 +107,11 @@ public sealed class PostgreSqlTransformationLookupResolver(
         await using var connection = await dataSource.OpenConnectionAsync(
             cancellationToken);
         var metadata = await ResolveMetadataAsync(connection, cancellationToken);
-        var metadataError = ValidateMetadata(metadata);
+        var requiredColumns = requests
+            .SelectMany(request => RequiredColumnsFor(request.Capability))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var metadataError = ValidateMetadata(metadata, requiredColumns);
         if (metadataError is not null)
         {
             throw new InvalidOperationException(metadataError);
@@ -115,36 +120,40 @@ public sealed class PostgreSqlTransformationLookupResolver(
         var columns = metadata!.Columns.ToDictionary(
             column => column,
             StringComparer.OrdinalIgnoreCase);
-        var sql = BuildBatchSql(
-            metadata.TableName,
-            columns[RequiredColumns[0]],
-            columns[RequiredColumns[1]],
-            columns[RequiredColumns[2]]);
-        var distinctRequests = requests.Distinct().ToArray();
-        var rows = await connection.QueryAsync<LookupRow>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    SystemIds = distinctRequests
-                        .Select(request => request.SystemId)
-                        .ToArray(),
-                    ProductNames = distinctRequests
-                        .Select(request => request.ProductName)
-                        .ToArray(),
-                    LoanNumbers = distinctRequests
-                        .Select(request => request.LoanNumber)
-                        .ToArray()
-                },
-                cancellationToken: cancellationToken));
+        var matches = new List<TransformationLookupMatch>();
+        foreach (var group in requests
+            .Distinct()
+            .GroupBy(request => request.Capability, StringComparer.Ordinal))
+        {
+            var rows = group.Key switch
+            {
+                TransformationCapabilities.MtiOriginalPolicyExistsV1 =>
+                    await ResolvePolicyAsync(
+                        connection,
+                        metadata.TableName,
+                        columns,
+                        group.ToArray(),
+                        cancellationToken),
+                TransformationCapabilities.MtiOriginalLoanExistsV1 =>
+                    await ResolveLoanAsync(
+                        connection,
+                        metadata.TableName,
+                        columns,
+                        group.ToArray(),
+                        cancellationToken),
+                _ => throw new InvalidOperationException(
+                    $"Unsupported lookup capability '{group.Key}'.")
+            };
+            matches.AddRange(rows.Select(row => new TransformationLookupMatch(
+                new TransformationLookupRequest(
+                    group.Key,
+                    row.SystemId,
+                    row.ProductName,
+                    row.LoanNumber),
+                row.SourceRowId)));
+        }
 
-        return rows.Select(row => new TransformationLookupMatch(
-            new TransformationLookupRequest(
-                TransformationCapabilities.MtiOriginalPolicyExistsV1,
-                row.SystemId,
-                row.ProductName,
-                row.LoanNumber),
-            row.SourceRowId)).ToArray();
+        return matches;
     }
 
     private static async Task<LookupMetadata?> ResolveMetadataAsync(
@@ -167,7 +176,9 @@ public sealed class PostgreSqlTransformationLookupResolver(
             rows.Select(row => row.ColumnName).ToArray());
     }
 
-    private static string? ValidateMetadata(LookupMetadata? metadata)
+    private static string? ValidateMetadata(
+        LookupMetadata? metadata,
+        IReadOnlyCollection<string> requiredColumns)
     {
         if (metadata is null)
         {
@@ -182,7 +193,7 @@ public sealed class PostgreSqlTransformationLookupResolver(
             return $"Table '{MtiOriginalTable}' must be a Normalized table.";
         }
 
-        var missingColumns = RequiredColumns
+        var missingColumns = requiredColumns
             .Where(required => !metadata.Columns.Contains(
                 required,
                 StringComparer.OrdinalIgnoreCase))
@@ -193,7 +204,51 @@ public sealed class PostgreSqlTransformationLookupResolver(
               $"columns: {string.Join(", ", missingColumns)}.";
     }
 
-    private static string BuildBatchSql(
+    private static async Task<IReadOnlyList<LookupRow>> ResolvePolicyAsync(
+        NpgsqlConnection connection,
+        string tableName,
+        IReadOnlyDictionary<string, string> columns,
+        IReadOnlyList<TransformationLookupRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        var sql = BuildPolicyBatchSql(
+            tableName,
+            columns[PolicyRequiredColumns[0]],
+            columns[PolicyRequiredColumns[1]],
+            columns[PolicyRequiredColumns[2]]);
+        return (await connection.QueryAsync<LookupRow>(new CommandDefinition(
+            sql,
+            new
+            {
+                SystemIds = requests.Select(request => request.SystemId).ToArray(),
+                ProductNames = requests.Select(request => request.ProductName!).ToArray(),
+                LoanNumbers = requests.Select(request => request.LoanNumber).ToArray()
+            },
+            cancellationToken: cancellationToken))).ToArray();
+    }
+
+    private static async Task<IReadOnlyList<LookupRow>> ResolveLoanAsync(
+        NpgsqlConnection connection,
+        string tableName,
+        IReadOnlyDictionary<string, string> columns,
+        IReadOnlyList<TransformationLookupRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        var sql = BuildLoanBatchSql(
+            tableName,
+            columns[LoanRequiredColumns[0]],
+            columns[LoanRequiredColumns[1]]);
+        return (await connection.QueryAsync<LookupRow>(new CommandDefinition(
+            sql,
+            new
+            {
+                SystemIds = requests.Select(request => request.SystemId).ToArray(),
+                LoanNumbers = requests.Select(request => request.LoanNumber).ToArray()
+            },
+            cancellationToken: cancellationToken))).ToArray();
+    }
+
+    private static string BuildPolicyBatchSql(
         string tableName,
         string systemIdColumn,
         string productNameColumn,
@@ -221,18 +276,59 @@ public sealed class PostgreSqlTransformationLookupResolver(
             """;
     }
 
+    private static string BuildLoanBatchSql(
+        string tableName,
+        string systemIdColumn,
+        string loanNumberColumn)
+    {
+        return $"""
+            WITH lookup_keys AS (
+                SELECT *
+                FROM unnest(
+                    @SystemIds::text[],
+                    @LoanNumbers::text[])
+                    AS keys(system_id, loan_number)
+            )
+            SELECT
+                lookup_keys.system_id AS "SystemId",
+                NULL::text AS "ProductName",
+                lookup_keys.loan_number AS "LoanNumber",
+                target.source_row_id AS "SourceRowId"
+            FROM lookup_keys
+            INNER JOIN {SqlIdentifier.Quote(tableName)} AS target
+                ON target.{SqlIdentifier.Quote(systemIdColumn)} = lookup_keys.system_id
+                AND target.{SqlIdentifier.Quote(loanNumberColumn)} = lookup_keys.loan_number;
+            """;
+    }
+
     private static void EnsureSupported(string capability)
     {
-        if (!string.Equals(
-            capability,
-            TransformationCapabilities.MtiOriginalPolicyExistsV1,
-            StringComparison.Ordinal))
+        if (!IsSupported(capability))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(capability),
                 capability,
                 "Unsupported lookup capability.");
         }
+    }
+
+    private static bool IsSupported(string capability) =>
+        capability is TransformationCapabilities.MtiOriginalPolicyExistsV1 or
+            TransformationCapabilities.MtiOriginalLoanExistsV1;
+
+    private static string[] RequiredColumnsFor(string capability)
+    {
+        return capability switch
+        {
+            TransformationCapabilities.MtiOriginalPolicyExistsV1 =>
+                PolicyRequiredColumns,
+            TransformationCapabilities.MtiOriginalLoanExistsV1 =>
+                LoanRequiredColumns,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(capability),
+                capability,
+                "Unsupported lookup capability.")
+        };
     }
 
     private sealed record MetadataRow(
@@ -247,7 +343,7 @@ public sealed class PostgreSqlTransformationLookupResolver(
 
     private sealed record LookupRow(
         string SystemId,
-        string ProductName,
+        string? ProductName,
         string LoanNumber,
         long SourceRowId);
 }

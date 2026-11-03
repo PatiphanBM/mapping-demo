@@ -19,12 +19,35 @@ public sealed class InputRecordModule
         CompiledInputLayout layout,
         CancellationToken cancellationToken = default)
     {
+        return await ReadAsync(
+            input,
+            layout,
+            fileExtension: null,
+            InputReadLimits.Default,
+            cancellationToken);
+    }
+
+    public async Task<InputRecordReadResult> ReadAsync(
+        Stream input,
+        CompiledInputLayout layout,
+        string? fileExtension,
+        InputReadLimits limits,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(layout);
 
-        var decoded = await Utf8InputDecoder.DecodeAsync(
-            input,
-            cancellationToken);
+        if (layout.Definition is ExcelInputLayout excel)
+        {
+            return await ExcelWorkbookReader.ReadAsync(
+                input,
+                excel,
+                fileExtension,
+                limits,
+                cancellationToken);
+        }
+
+        var decoded = await Utf8InputDecoder.DecodeAsync(input, cancellationToken);
         if (decoded.Error is not null)
         {
             return InputRecordReadResult.Failure(decoded.Error);

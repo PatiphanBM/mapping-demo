@@ -3,6 +3,8 @@ using System.Text.Json;
 using Dapper;
 using MappingDemo.Api.Contracts.FileJobs;
 using MappingDemo.Shared.Jobs;
+using MappingDemo.Shared.Delivery;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Messaging;
 using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Tables;
@@ -22,21 +24,56 @@ public sealed class FileJobService
     private const string SelectReprocessFileJobSql = """
         SELECT
             file_jobs.config_id AS "ConfigId",
+            file_jobs.file_name AS "FileName",
             source_table.name AS "SourceTableName"
         FROM file_jobs
         INNER JOIN mapping_configs
             ON mapping_configs.id = file_jobs.config_id
         INNER JOIN table_definitions AS source_table
             ON source_table.id = mapping_configs.source_table_id
-        WHERE file_jobs.id = @FileJobId;
+        WHERE file_jobs.id = @FileJobId
+        FOR UPDATE OF file_jobs;
         """;
 
     private const string SelectReprocessVersionSql = """
         SELECT
             config_id AS "ConfigId",
-            transformation_program::text AS "TransformationProgramJson"
+            version_no AS "VersionNo",
+            transformation_program::text AS "TransformationProgramJson",
+            destination_definition::text AS "DestinationDefinitionJson"
         FROM mapping_config_versions
         WHERE id = @VersionId;
+        """;
+
+    private const string SelectLatestJsonExportSql = """
+        SELECT
+            id AS "Id",
+            artifact_revision AS "ArtifactRevision"
+        FROM json_export_jobs
+        WHERE file_job_id = @FileJobId
+        ORDER BY artifact_revision DESC, id DESC
+        LIMIT 1;
+        """;
+
+    private const string InsertJsonExportSql = """
+        INSERT INTO json_export_jobs (
+            file_job_id,
+            config_version_id,
+            destination_profile_id,
+            artifact_revision,
+            status,
+            relative_temp_path,
+            relative_final_path,
+            previous_export_job_id)
+        VALUES (
+            @FileJobId,
+            @ConfigVersionId,
+            @DestinationProfileId,
+            @ArtifactRevision,
+            'Pending',
+            @RelativeTempPath,
+            @RelativeFinalPath,
+            @PreviousExportJobId);
         """;
 
     private const string RetryFileJobSql = """
@@ -81,6 +118,22 @@ public sealed class FileJobService
                     AS "FailedRows"
             FROM latest_row_jobs
             GROUP BY file_job_id
+        ),
+        delivery_counts AS (
+            SELECT
+                file_job_id,
+                COUNT(*) FILTER (WHERE status = 'Pending')::integer
+                    AS "PendingDeliveries",
+                COUNT(*) FILTER (WHERE status = 'Delivering')::integer
+                    AS "DeliveringDeliveries",
+                COUNT(*) FILTER (WHERE status = 'Delivered')::integer
+                    AS "DeliveredDeliveries",
+                COUNT(*) FILTER (WHERE status = 'RetryableFailed')::integer
+                    AS "RetryableFailedDeliveries",
+                COUNT(*) FILTER (WHERE status = 'PermanentFailed')::integer
+                    AS "PermanentFailedDeliveries"
+            FROM delivery_jobs
+            GROUP BY file_job_id
         )
         SELECT
             file_jobs.id AS "Id",
@@ -95,12 +148,53 @@ public sealed class FileJobService
             COALESCE(row_job_counts."FilteredRows", 0) AS "FilteredRows",
             COALESCE(row_job_counts."InvalidRows", 0) AS "InvalidRows",
             COALESCE(row_job_counts."FailedRows", 0) AS "FailedRows",
+            COALESCE(delivery_counts."PendingDeliveries", 0)
+                AS "PendingDeliveries",
+            COALESCE(delivery_counts."DeliveringDeliveries", 0)
+                AS "DeliveringDeliveries",
+            COALESCE(delivery_counts."DeliveredDeliveries", 0)
+                AS "DeliveredDeliveries",
+            COALESCE(delivery_counts."RetryableFailedDeliveries", 0)
+                AS "RetryableFailedDeliveries",
+            COALESCE(delivery_counts."PermanentFailedDeliveries", 0)
+                AS "PermanentFailedDeliveries",
+            latest_export.status AS "ExportStatus",
+            latest_export.artifact_revision AS "ExportArtifactRevision",
+            latest_export.relative_final_path AS "ExportRelativeDisplayPath",
+            latest_export.object_count AS "ExportObjectCount",
+            latest_export.byte_count AS "ExportByteCount",
+            latest_export.sha256 AS "ExportSha256",
+            latest_export.published_at AS "ExportPublishedAt",
+            CASE
+                WHEN latest_export.status = 'Blocked'
+                    THEN latest_export.last_error_redacted
+                ELSE NULL
+            END AS "ExportBlockReason",
             file_jobs.last_error AS "LastError",
             file_jobs.created_at AS "CreatedAt",
             file_jobs.updated_at AS "UpdatedAt"
         FROM file_jobs
         LEFT JOIN row_job_counts
             ON row_job_counts.file_job_id = file_jobs.id
+        LEFT JOIN delivery_counts
+            ON delivery_counts.file_job_id = file_jobs.id
+        LEFT JOIN LATERAL (
+            SELECT
+                json_export_jobs.status,
+                json_export_jobs.artifact_revision,
+                json_export_jobs.relative_final_path,
+                json_export_jobs.object_count,
+                json_export_jobs.byte_count,
+                json_export_jobs.sha256,
+                json_export_jobs.published_at,
+                json_export_jobs.last_error_redacted
+            FROM json_export_jobs
+            WHERE json_export_jobs.file_job_id = file_jobs.id
+            ORDER BY
+                json_export_jobs.artifact_revision DESC,
+                json_export_jobs.id DESC
+            LIMIT 1
+        ) AS latest_export ON true
         WHERE CAST(@Id AS bigint) IS NULL OR file_jobs.id = @Id
         ORDER BY file_jobs.id DESC;
         """;
@@ -335,6 +429,43 @@ public sealed class FileJobService
                 JsonOptions)
             ?? throw new JsonException(
                 "Persisted transformation program cannot be null.");
+        var destination = PolymorphicJson.Deserialize<DestinationDefinition>(
+            version.DestinationDefinitionJson,
+            JsonOptions);
+
+        if (destination is JsonFileDestination jsonFile)
+        {
+            var latest = await connection
+                .QuerySingleOrDefaultAsync<LatestJsonExport>(
+                    new CommandDefinition(
+                        SelectLatestJsonExportSql,
+                        new { FileJobId = fileJobId },
+                        transaction,
+                        cancellationToken: cancellationToken));
+            var artifactRevision = (latest?.ArtifactRevision ?? 0) + 1;
+            var relativeFinalPath = JsonExportArtifactPath.Resolve(
+                jsonFile,
+                fileJob.FileName,
+                fileJobId,
+                version.VersionNo,
+                versionId,
+                artifactRevision);
+            await connection.ExecuteAsync(new CommandDefinition(
+                InsertJsonExportSql,
+                new
+                {
+                    FileJobId = fileJobId,
+                    ConfigVersionId = versionId,
+                    DestinationProfileId =
+                        jsonFile.FileDestinationProfileId,
+                    ArtifactRevision = artifactRevision,
+                    RelativeTempPath = relativeFinalPath + ".tmp",
+                    RelativeFinalPath = relativeFinalPath,
+                    PreviousExportJobId = latest?.Id
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
 
         var insertRowJobsSql = $"""
             INSERT INTO row_jobs (
@@ -426,6 +557,23 @@ public sealed class FileJobService
             row.FilteredRows,
             row.InvalidRows,
             row.FailedRows);
+        var deliveryStatus = DeliveryStatusCalculator.Calculate(
+            row.PendingDeliveries,
+            row.DeliveringDeliveries,
+            row.DeliveredDeliveries,
+            row.RetryableFailedDeliveries,
+            row.PermanentFailedDeliveries);
+        var export = row.ExportStatus is null
+            ? null
+            : new FileExportStatusResponse(
+                row.ExportStatus,
+                row.ExportArtifactRevision!.Value,
+                row.ExportRelativeDisplayPath!,
+                row.ExportObjectCount,
+                row.ExportByteCount,
+                row.ExportSha256,
+                row.ExportPublishedAt,
+                row.ExportBlockReason);
 
         return new FileJobResponse(
             row.Id,
@@ -443,7 +591,15 @@ public sealed class FileJobService
             row.FailedRows,
             row.LastError,
             row.CreatedAt,
-            row.UpdatedAt);
+            row.UpdatedAt,
+            deliveryStatus,
+            row.PendingDeliveries,
+            row.DeliveringDeliveries,
+            row.DeliveredDeliveries,
+            row.RetryableFailedDeliveries,
+            row.PermanentFailedDeliveries,
+            deliveryStatus ?? normalizationStatus,
+            export);
     }
 
     private sealed class FileJobRow
@@ -471,6 +627,32 @@ public sealed class FileJobService
         public int InvalidRows { get; init; }
 
         public int FailedRows { get; init; }
+
+        public int PendingDeliveries { get; init; }
+
+        public int DeliveringDeliveries { get; init; }
+
+        public int DeliveredDeliveries { get; init; }
+
+        public int RetryableFailedDeliveries { get; init; }
+
+        public int PermanentFailedDeliveries { get; init; }
+
+        public string? ExportStatus { get; init; }
+
+        public int? ExportArtifactRevision { get; init; }
+
+        public string? ExportRelativeDisplayPath { get; init; }
+
+        public int? ExportObjectCount { get; init; }
+
+        public long? ExportByteCount { get; init; }
+
+        public string? ExportSha256 { get; init; }
+
+        public DateTime? ExportPublishedAt { get; init; }
+
+        public string? ExportBlockReason { get; init; }
 
         public string? LastError { get; init; }
 
@@ -514,11 +696,18 @@ public sealed class FileJobService
 
     private sealed record ReprocessFileJobRow(
         long ConfigId,
+        string FileName,
         string SourceTableName);
 
     private sealed record ReprocessVersionRow(
         long ConfigId,
-        string TransformationProgramJson);
+        int VersionNo,
+        string TransformationProgramJson,
+        string DestinationDefinitionJson);
+
+    private sealed record LatestJsonExport(
+        long Id,
+        int ArtifactRevision);
 
     private sealed record CreatedRowJob(
         long RowJobId,

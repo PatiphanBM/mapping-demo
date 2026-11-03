@@ -100,6 +100,10 @@ function physicalLineLimit(layout: InputLayout): number {
     return MAX_SAMPLE_RECORDS;
   }
 
+  if (layout.kind === "excel") {
+    return MAX_SAMPLE_RECORDS;
+  }
+
   return (
     MAX_SAMPLE_RECORDS +
     layout.preambleLines +

@@ -74,7 +74,7 @@ export function assignmentPathByColumn(
 ): Map<string, string> {
   return new Map(
     (program.outputs[outputIndex]?.fields ?? []).map((field, fieldIndex) => [
-      field.normalizedColumn.toLowerCase(),
+      (field.normalizedColumn ?? field.targetPath ?? "").toLowerCase(),
       `transformationProgram.outputs[${outputIndex}].fields[${fieldIndex}]`,
     ]),
   );
@@ -134,6 +134,17 @@ export function expressionValueType(
       return "text";
     case "currentDate":
       return "date";
+    case "add": {
+      const types = expression.values.map((value) =>
+        expressionValueType(value, sourceTable),
+      );
+      if (types.some((type) => type !== "integer" && type !== "decimal")) {
+        return null;
+      }
+      return types.includes("decimal") ? "decimal" : "integer";
+    }
+    case "concat":
+      return "text";
     case "coalesce":
       return expressionValueType(expression.values[0], sourceTable);
     case "defaultIfBlank":
@@ -171,6 +182,8 @@ function combineStats(rootDepth: number, children: ExpressionStats[]): Expressio
 function valueStats(value: ValueExpression, depth: number): ExpressionStats {
   switch (value.kind) {
     case "coalesce":
+    case "add":
+    case "concat":
       return combineStats(
         depth,
         value.values.map((item) => valueStats(item, depth + 1)),

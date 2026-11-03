@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { InputLayoutEditor } from "@/components/input-layout/input-layout-editor";
+import { VersionCompare } from "@/components/contracts/version-compare";
+import { MappingWorkbench } from "@/components/mapping/mapping-workbench";
 import { ErrorPanel, LoadingPanel } from "@/components/page-state";
 import type {
   MappingCapabilities,
+  ApiDestinationProfile,
   MappingConfigDetails,
   MappingConfigVersionDetails,
   TableDefinition,
@@ -16,6 +18,7 @@ import {
   createMappingConfigVersion,
   getMappingCapabilities,
   getMappingConfig,
+  listApiDestinationProfiles,
   listTables,
 } from "@/lib/api/mapping-configs";
 
@@ -27,7 +30,9 @@ export function ConfigDetails() {
   const [tables, setTables] = useState<TableDefinition[]>([]);
   const [capabilities, setCapabilities] =
     useState<MappingCapabilities | null>(null);
+  const [apiProfiles, setApiProfiles] = useState<ApiDestinationProfile[]>([]);
   const [editorVersionId, setEditorVersionId] = useState<number | null>(null);
+  const [compareVersionId, setCompareVersionId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -46,12 +51,14 @@ export function ConfigDetails() {
       getMappingConfig(configId),
       listTables(),
       getMappingCapabilities(),
+      listApiDestinationProfiles(),
     ])
-      .then(([details, tableRows, capabilityRows]) => {
+      .then(([details, tableRows, capabilityRows, profileRows]) => {
         if (!cancelled) {
           setConfig(details);
           setTables(tableRows);
           setCapabilities(capabilityRows);
+          setApiProfiles(profileRows);
           setLoadError(null);
         }
       })
@@ -91,6 +98,8 @@ export function ConfigDetails() {
       const created = await createMappingConfigVersion(configId, {
         inputLayout: version.inputLayout,
         transformationProgram: version.transformationProgram,
+        destination: version.destination,
+        acceptedExtensions: version.acceptedExtensions,
       });
       setNotice(
         `Version ${version.versionNo} was cloned as version ${created.versionNo}.`,
@@ -161,9 +170,6 @@ export function ConfigDetails() {
     (left, right) => right.versionNo - left.versionNo,
   );
   const sourceTable = tables.find((table) => table.id === config.sourceTableId);
-  const normalizedTable = tables.find(
-    (table) => table.id === config.normalizedTableId,
-  );
   const editorVersion =
     versions.find((version) => version.id === editorVersionId) ?? versions[0];
   const outputCount = versions.reduce(
@@ -251,11 +257,16 @@ export function ConfigDetails() {
         </div>
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Normalized table
+            Destination
           </p>
           <p className="mt-2 font-semibold text-slate-900">
-            {tableNames.get(config.normalizedTableId) ??
-              `#${config.normalizedTableId}`}
+            {config.destination?.kind === "apiContract"
+              ? `API Contract · ${config.destination.contract.reference}`
+              : config.destination?.kind === "jsonFile"
+                ? `JSON File · ${config.destination.contract.reference}`
+                : config.normalizedTableId === null
+                  ? "Legacy Table · not selected"
+                  : `Legacy Table · ${tableNames.get(config.normalizedTableId) ?? `#${config.normalizedTableId}`}`}
           </p>
         </div>
         <div>
@@ -282,25 +293,24 @@ export function ConfigDetails() {
         </div>
       ) : null}
 
-      {sourceTable && normalizedTable && capabilities ? (
-        <div id="input-layout-editor">
-          <InputLayoutEditor
-            capabilities={capabilities}
-            configId={config.id}
-            initialLayout={editorVersion?.inputLayout}
-            key={editorVersion?.id ?? `new:${config.id}`}
-            normalizedTable={normalizedTable}
-            onVersionCreated={(created) => {
-              setEditorVersionId(created.id);
-              setNotice(`Version ${created.versionNo} was created from the draft.`);
-              setActionError(null);
-              setReloadKey((current) => current + 1);
-            }}
-            sourceTable={sourceTable}
-            transformationProgram={editorVersion?.transformationProgram}
-            versionNo={editorVersion?.versionNo}
-          />
-        </div>
+      {sourceTable && capabilities ? (
+        <MappingWorkbench
+          apiProfiles={apiProfiles}
+          capabilities={capabilities}
+          configDestination={config.destination}
+          configId={config.id}
+          key={editorVersion?.id ?? `new:${config.id}`}
+          normalizedTableId={config.normalizedTableId}
+          onVersionCreated={(created) => {
+            setEditorVersionId(created.id);
+            setNotice(`Version ${created.versionNo} was created from the mapping workbench.`);
+            setActionError(null);
+            setReloadKey((current) => current + 1);
+          }}
+          sourceTable={sourceTable}
+          tables={tables}
+          version={editorVersion}
+        />
       ) : (
         <div className="mt-8">
           <ErrorPanel
@@ -331,7 +341,8 @@ export function ConfigDetails() {
             </p>
           </div>
         ) : (
-          versions.map((version) => {
+          versions.map((version, index) => {
+            const previous = versions[index + 1];
             const inputSummary =
               version.inputLayout.kind === "fixedWidth"
                 ? `${version.inputLayout.recordRules.length} record rules`
@@ -341,7 +352,6 @@ export function ConfigDetails() {
                 (total, output) => total + output.fields.length,
                 0,
               );
-
             return (
               <article
                 className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
@@ -360,12 +370,23 @@ export function ConfigDetails() {
                       ) : null}
                     </div>
                     <p className="mt-1 text-sm text-slate-500">
+                      {version.destination.kind === "legacyTable"
+                        ? `Legacy Table #${version.destination.normalizedTableId}`
+                        : version.destination.kind === "apiContract"
+                          ? `API Contract · ${version.destination.contract.reference}`
+                          : `JSON File · ${version.destination.contract.reference}`}
+                      {" · "}
                       {version.inputLayout.kind === "fixedWidth"
                         ? "Fixed width"
                         : "Delimited"}
                       {" · "}
                       {inputSummary}
                     </p>
+                    {version.contractSnapshot ? (
+                      <p className="mt-2 font-mono text-xs text-slate-500">
+                        {version.contractSnapshot.schemaHash} · {version.contractSnapshot.paths.filter((path) => path.isAssignable).length} assignable paths · {version.contractSnapshot.payloadBindings.length} system bindings
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -388,6 +409,22 @@ export function ConfigDetails() {
                         ? "Open in editor"
                         : "Edit layout"}
                     </button>
+                    {previous ? (
+                      <button
+                        aria-expanded={compareVersionId === version.id}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                        onClick={() =>
+                          setCompareVersionId((current) =>
+                            current === version.id ? null : version.id,
+                          )
+                        }
+                        type="button"
+                      >
+                        {compareVersionId === version.id
+                          ? "Hide comparison"
+                          : `Compare with v${previous.versionNo}`}
+                      </button>
+                    ) : null}
                     <button
                       className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={busyAction !== null}
@@ -441,6 +478,9 @@ export function ConfigDetails() {
                     </p>
                   </div>
                 </div>
+                {previous && compareVersionId === version.id ? (
+                  <VersionCompare current={version} previous={previous} />
+                ) : null}
               </article>
             );
           })

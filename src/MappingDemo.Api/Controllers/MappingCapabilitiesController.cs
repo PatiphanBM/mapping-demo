@@ -1,5 +1,7 @@
 using MappingDemo.Api.Contracts.MappingConfigs;
 using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Contracts;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Transformation;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,7 +9,8 @@ namespace MappingDemo.Api.Controllers;
 
 [ApiController]
 [Route("mapping-capabilities")]
-public sealed class MappingCapabilitiesController : ControllerBase
+public sealed class MappingCapabilitiesController(
+    FileDestinationProfileCatalog fileProfiles) : ControllerBase
 {
     private const string SqlServerLegacySummary =
         "Immutable SQL Server legacy subset: three-valued boolean logic, " +
@@ -23,7 +26,7 @@ public sealed class MappingCapabilitiesController : ControllerBase
                 InputCapabilities.Encodings,
                 InputCapabilities.PositionUnits),
             new TransformationCapabilitiesResponse(
-                [TransformationCapabilities.LanguageVersion],
+                TransformationCapabilities.LanguageVersions,
                 [
                     new SemanticsProfileCapabilityResponse(
                         TransformationCapabilities.SqlServerLegacyProfile,
@@ -33,6 +36,7 @@ public sealed class MappingCapabilitiesController : ControllerBase
                 TransformationCapabilities.TargetConversionTypes,
                 new InputFormatCapabilitiesResponse(
                     TransformationCapabilities.DateInputFormats,
+                    TransformationCapabilities.TimeInputFormats,
                     TransformationCapabilities.DateTimeInputFormats),
                 TransformationCapabilities.ValueExpressions,
                 TransformationCapabilities.BooleanOperators,
@@ -44,6 +48,30 @@ public sealed class MappingCapabilitiesController : ControllerBase
                     TransformationCapabilities.MaxFieldsPerOutput,
                     TransformationCapabilities.MaxCollectionItems,
                     TransformationCapabilities.MaxExpressionDepth,
-                    TransformationCapabilities.MaxExpressionNodes))));
+                    TransformationCapabilities.MaxExpressionNodes)),
+            new DestinationCapabilitiesResponse(
+                ["legacyTable", "apiContract", "jsonFile"],
+                new JsonFileCapabilitiesResponse(
+                    ["compact", "indented"],
+                    [
+                        "{sourceBaseName}",
+                        "{fileJobId}",
+                        "{configVersion}",
+                        "{configVersionId}",
+                        "{artifactRevision}"
+                    ],
+                    JsonArtifactLimits.MaxPreviewBytes,
+                    JsonArtifactLimits.MaxPreviewRecords,
+                    JsonArtifactLimits.MaxObjectBytes,
+                    JsonArtifactLimits.MaxObjectsPerArtifact,
+                    JsonArtifactLimits.MaxArtifactBytes,
+                    fileProfiles.GetSafeProfiles()
+                        .Select(profile =>
+                            new FileDestinationProfileSummaryResponse(
+                                profile.Id,
+                                profile.Enabled,
+                                profile.SupportedContracts,
+                                profile.PayloadBindings))
+                        .ToArray()))));
     }
 }

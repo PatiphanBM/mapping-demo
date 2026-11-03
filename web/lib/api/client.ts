@@ -33,14 +33,21 @@ export async function apiRequest<TResponse>(
   const headers = new Headers(initialHeaders);
   headers.set("Accept", "application/json");
 
-  if (body !== undefined) {
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !isFormData) {
     headers.set("Content-Type", "application/json");
   }
 
   const response = await fetch(toApiPath(path), {
     ...requestInit,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body:
+      body === undefined
+        ? undefined
+        : isFormData
+          ? (body as FormData)
+          : JSON.stringify(body),
   });
 
   if (!response.ok) {

@@ -18,6 +18,10 @@ internal static class InputLayoutCompiler
         {
             ValidateFixedWidth(fixedWidth, sourceTable, diagnostics);
         }
+        else if (layout is ExcelInputLayout excel)
+        {
+            ValidateExcel(excel, sourceTable, diagnostics);
+        }
 
         if (diagnostics.Any(diagnostic =>
                 diagnostic.Severity == InputLayoutDiagnosticSeverity.Error))
@@ -28,6 +32,79 @@ internal static class InputLayoutCompiler
         return new InputLayoutCompilationResult(
             new CompiledInputLayout(layout),
             diagnostics);
+    }
+
+    private static void ValidateExcel(
+        ExcelInputLayout layout,
+        TableDefinition sourceTable,
+        ICollection<InputLayoutDiagnostic> diagnostics)
+    {
+        if (!Enum.IsDefined(layout.WorkbookKind))
+        {
+            AddError(diagnostics, "workbookKind", "UnknownWorkbookKind",
+                "Workbook kind is not supported.");
+        }
+
+        if (string.IsNullOrWhiteSpace(layout.Sheet))
+        {
+            AddError(diagnostics, "sheet", "SheetRequired",
+                "A worksheet name is required.");
+        }
+
+        if (layout.HeaderRow <= 0)
+        {
+            AddError(diagnostics, "headerRow", "InvalidHeaderRow",
+                "Header row must be greater than zero.");
+        }
+
+        if (layout.DataStartRow <= layout.HeaderRow)
+        {
+            AddError(diagnostics, "dataStartRow", "DataStartRowMustFollowHeader",
+                "Data start row must follow the header row.");
+        }
+
+        if (!Enum.IsDefined(layout.BlankRowPolicy))
+        {
+            AddError(diagnostics, "blankRowPolicy", "UnknownBlankRowPolicy",
+                "Blank row policy is not supported.");
+        }
+
+        if (layout.Fields.Count == 0)
+        {
+            AddError(diagnostics, "fields", "InputFieldsRequired",
+                "At least one input field is required.");
+        }
+
+        var sourceColumns = sourceTable.Columns.Select(column => column.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var headers = new HashSet<string>(StringComparer.Ordinal);
+        var targets = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < layout.Fields.Count; index++)
+        {
+            var field = layout.Fields[index];
+            var path = $"fields[{index}]";
+            if (string.IsNullOrWhiteSpace(field.InputHeader))
+            {
+                AddError(diagnostics, $"{path}.inputHeader", "InputHeaderRequired",
+                    "Input header is required.");
+            }
+            else if (!headers.Add(field.InputHeader))
+            {
+                AddError(diagnostics, $"{path}.inputHeader", "DuplicateInputHeader",
+                    "Input headers must be unique.");
+            }
+
+            if (!sourceColumns.Contains(field.SourceColumn))
+            {
+                AddError(diagnostics, $"{path}.sourceColumn", "SourceColumnNotFound",
+                    "Source column does not exist.");
+            }
+            else if (!targets.Add(field.SourceColumn))
+            {
+                AddError(diagnostics, $"{path}.sourceColumn", "DuplicateSourceColumn",
+                    "Source columns can only be mapped once.");
+            }
+        }
     }
 
     private static void ValidateFixedWidth(

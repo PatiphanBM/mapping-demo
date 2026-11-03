@@ -12,7 +12,7 @@ public sealed class WatcherRegistry : IDisposable
 
     public void Update(
         IReadOnlyCollection<WatcherConfig> configs,
-        Action<long, string> onFileDetected,
+        Action<WatcherConfig, string> onFileDetected,
         Action<WatcherConfig> onScanRequested)
     {
         foreach (var config in configs.Where(
@@ -28,9 +28,7 @@ public sealed class WatcherRegistry : IDisposable
             .Where(config => config.ActiveVersionId.HasValue)
             .ToDictionary(config => config.ConfigId);
 
-        foreach (var configId in _watchers.Keys
-                     .Where(configId => !activeConfigs.ContainsKey(configId))
-                     .ToArray())
+        foreach (var configId in _watchers.Keys.ToArray())
         {
             Remove(configId);
         }
@@ -43,7 +41,7 @@ public sealed class WatcherRegistry : IDisposable
 
     private void Add(
         WatcherConfig config,
-        Action<long, string> onFileDetected,
+        Action<WatcherConfig, string> onFileDetected,
         Action<WatcherConfig> onScanRequested)
     {
         if (_watchers.ContainsKey(config.ConfigId))
@@ -53,21 +51,24 @@ public sealed class WatcherRegistry : IDisposable
 
         var watcher = new FileSystemWatcher(config.InputPath)
         {
-            Filter = "*.csv",
+            Filter = "*.*",
             NotifyFilter = NotifyFilters.FileName |
                            NotifyFilters.LastWrite |
                            NotifyFilters.Size
         };
 
         watcher.Created += (_, eventArgs) =>
-            onFileDetected(config.ConfigId, eventArgs.FullPath);
+        {
+            if (Accepts(config, eventArgs.FullPath))
+            {
+                onFileDetected(config, eventArgs.FullPath);
+            }
+        };
         watcher.Renamed += (_, eventArgs) =>
         {
-            if (eventArgs.FullPath.EndsWith(
-                    ".csv",
-                    StringComparison.OrdinalIgnoreCase))
+            if (Accepts(config, eventArgs.FullPath))
             {
-                onFileDetected(config.ConfigId, eventArgs.FullPath);
+                onFileDetected(config, eventArgs.FullPath);
             }
         };
         watcher.Error += (_, eventArgs) =>
@@ -80,6 +81,14 @@ public sealed class WatcherRegistry : IDisposable
             "Watching config {ConfigId} at {InputPath}",
             config.ConfigId,
             config.InputPath);
+    }
+
+    private static bool Accepts(WatcherConfig config, string path)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        return config.AcceptedExtensions.Contains(
+            extension,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     private void Remove(long configId)

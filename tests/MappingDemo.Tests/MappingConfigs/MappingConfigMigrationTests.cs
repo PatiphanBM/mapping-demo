@@ -58,6 +58,47 @@ public sealed class MappingConfigMigrationTests
         Assert.Contains("ALTER COLUMN expression_path SET NOT NULL", sql);
     }
 
+    [Fact]
+    public async Task Destination_migration_is_expand_only_and_backfills_legacy()
+    {
+        var sql = await ReadMigrationAsync(
+            "0007_destination_definition.sql");
+
+        Assert.Contains("destination_definition jsonb", sql);
+        Assert.Contains("api_destination_profile_id text", sql);
+        Assert.Contains("contract_reference text", sql);
+        Assert.Contains("contract_schema_snapshot jsonb", sql);
+        Assert.Contains("contract_schema_hash text", sql);
+        Assert.Contains("contract_schema_fetched_at timestamptz", sql);
+        Assert.Contains("payload_bindings_snapshot jsonb", sql);
+        Assert.Contains("jsonb_build_object", sql);
+        Assert.Contains("'kind', 'legacyTable'", sql);
+        Assert.Contains("'normalizedTableId'", sql);
+        Assert.Contains("ALTER COLUMN normalized_table_id DROP NOT NULL", sql);
+        Assert.Contains(
+            "mapping_config_versions_destination_kind_check",
+            sql);
+        Assert.Contains("ix_mapping_config_versions_destination_kind", sql);
+        Assert.DoesNotContain("DROP COLUMN", sql);
+    }
+
+    [Fact]
+    public async Task Json_file_destination_migration_only_expands_kind_check()
+    {
+        var sql = await ReadMigrationAsync(
+            "0011_json_file_destination.sql");
+
+        Assert.Contains(
+            "DROP CONSTRAINT mapping_config_versions_destination_kind_check",
+            sql);
+        Assert.Contains("'legacyTable'", sql);
+        Assert.Contains("'apiContract'", sql);
+        Assert.Contains("'jsonFile'", sql);
+        Assert.DoesNotContain("UPDATE ", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("SET NOT NULL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DROP COLUMN", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<string> ReadMigrationAsync(string fileName)
     {
         var resourceName =

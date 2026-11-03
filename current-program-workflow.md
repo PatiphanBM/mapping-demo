@@ -38,7 +38,7 @@
 | `Mapping-<partner>-01` | ระบุการจับคู่ field จากตารางต้นทางไปยัง field ของตารางปลายทาง รวมค่าคงที่/default ตาม configuration |
 | `Condition-<partner>-01` | ระบุเงื่อนไขเพิ่มเติม การแปลงข้อมูล หรือการตรวจสอบกับตารางอื่นที่จำเป็นสำหรับ mapping |
 
-ตรวจไฟล์ [NewMapping-NTL-Pro.xlsx](NewMapping-NTL-Pro.xlsx) พบชื่อแท็บจริงคือ `Configuration`, `Timer`, `TableName`, `Table-NTL-01`, `Mapping-NTL-01` และ `Condition-NTL-01` โดย `TableName!A2:D2` ระบุ partner `NTL`, job `01`, ตารางต้นทาง `trnNtlJob` และตารางปลายทาง `MTI_ORIGINAL` ตัวอย่างนี้จึงแสดง configuration ของ NTL/job 01 ไม่ได้แสดง configuration ของ KK หรือยืนยันว่าทุกประเภทงานใช้ตารางปลายทางเดียวกัน
+ตรวจไฟล์หลักฐานภายนอก `NewMapping-NTL-Pro.xlsx` (ไม่ได้เก็บใน repository นี้) พบชื่อแท็บจริงคือ `Configuration`, `Timer`, `TableName`, `Table-NTL-01`, `Mapping-NTL-01` และ `Condition-NTL-01` โดย `TableName!A2:D2` ระบุ partner `NTL`, job `01`, ตารางต้นทาง `trnNtlJob` และตารางปลายทาง `MTI_ORIGINAL` ตัวอย่างนี้จึงแสดง configuration ของ NTL/job 01 ไม่ได้แสดง configuration ของ KK หรือยืนยันว่าทุกประเภทงานใช้ตารางปลายทางเดียวกัน
 
 ในตัวอย่าง `Mapping-NTL-01` มีทั้งการจับคู่ `TransID` → `TransID` และการกำหนด default `I` ให้ `cSTATUS`; `Condition-NTL-01` มีคอลัมน์สำหรับชนิด/วิธีของเงื่อนไข ชื่อ field, substring, replace, split, concat และรูปแบบค่า การมีคอลัมน์ใน Excel ไม่ได้หมายความว่าทุกค่าจะถูกนำไปใช้เหมือนกันทั้งหมด รายละเอียดการนำเข้า metadata และการประมวลผลจริงอยู่ในหัวข้อ 5 และหัวข้อ mapping/condition ถัดไป
 
@@ -864,3 +864,10 @@ Raw ExecuteNonQuery/ExecuteNonQueryEx/QueryDataTable/QueryDataTableEx กำห�
 [MERGE-EXCEL]: ../Infrastructure/Common/Interface/Files/Commands/ICreateExcels.cs#L17 "Infrastructure/Common/Interface/Files/Commands/ICreateExcels.cs:17"
 [LEGACY-PARTNER]: ../Application/Common/AbStract/AbPartnerMapping.cs#L43 "Application/Common/AbStract/AbPartnerMapping.cs:43"
 [LEGACY-TRANSFER]: ../Application/Common/AbStract/AbPartnerTransfer.cs#L22 "Application/Common/AbStract/AbPartnerTransfer.cs:22"
+# Current destination workflow (Phase 25)
+
+File Intake pins an immutable Config Version before parsing. All three destinations persist raw Source rows and run the same Transformation/Contract Modules. A `LegacyTable` version adapts the flat target schema and reconciles the current normalized result. An `ApiContract` version uses its pinned Contract Snapshot and payload bindings, creates one encrypted Delivery Job plus outbox message per valid output in the Row Job transaction, and never creates or writes a Normalized Table. A `JsonFile` version stages encrypted canonical mapped objects in the Row Job transaction and creates one JSON Export Job when the latest Row Jobs are terminal; it creates neither Normalized rows nor API Delivery Jobs.
+
+The Delivery Worker sends persisted API bytes through a server-owned profile. Retry uses the same bytes/hash/idempotency key; manual reprocess selects a Config Version and business resend is separately authorized/audited. The JSON Finalizer streams staged objects in deterministic `rowNumber/outputOrdinal` order, calculates SHA-256 while writing a temporary file, and atomically publishes one UTF-8 JSON array. Zero outputs publish `[]`; any latest `Invalid` or `Failed` row blocks the whole artifact.
+
+SQL-backed controls independently gate API activation/delivery and JSON activation/finalization without rerouting pinned jobs. Rollback activates the prior Config Version only for new files; existing API jobs remain API and existing JSON exports retain their profile, revision, path and staged identity. API operations are in [docs/phase-24-operations-runbook.md](docs/phase-24-operations-runbook.md); JSON publication, retention, backup/restore and rollback are in [docs/phase-25-json-export-operations-runbook.md](docs/phase-25-json-export-operations-runbook.md). The historical workflow above remains useful for the legacy path.

@@ -60,6 +60,28 @@ public sealed class TransformationLookupTests
     }
 
     [Fact]
+    public async Task Loan_lookup_filters_existing_system_and_loan_across_products()
+    {
+        var resolver = new InMemoryLookupResolver();
+        resolver.Matches.Add(new TransformationLookupMatch(
+            LoanRequest(),
+            SourceRowId: 2));
+
+        var result = await EvaluateAsync(
+            resolver,
+            [Row("duplicate-loan", 1)],
+            LoanProgram());
+
+        Assert.Equal(
+            TransformationRowStatus.Filtered,
+            Assert.Single(result.Rows).Status);
+        var request = Assert.Single(resolver.LastRequests);
+        Assert.Equal(TransformationCapabilities.MtiOriginalLoanExistsV1,
+            request.Capability);
+        Assert.Null(request.ProductName);
+    }
+
+    [Fact]
     public async Task Dependency_validation_reports_the_lookup_expression_path()
     {
         var resolver = new InMemoryLookupResolver
@@ -71,7 +93,7 @@ public sealed class TransformationLookupTests
         var module = new TransformationModule(resolver);
         var compilation = module.Compile(
             Program(),
-            new TransformationSchema(SourceTable(), TargetTable()));
+            TransformationSchema.FromLegacyTable(SourceTable(), TargetTable()));
 
         var diagnostic = Assert.Single(await module.ValidateDependenciesAsync(
             compilation.CompiledProgram!));
@@ -83,12 +105,13 @@ public sealed class TransformationLookupTests
 
     private static async Task<TransformationBatchResult> EvaluateAsync(
         ITransformationLookupResolver resolver,
-        IReadOnlyList<TransformationSourceRow> rows)
+        IReadOnlyList<TransformationSourceRow> rows,
+        TransformationProgram? program = null)
     {
         var module = new TransformationModule(resolver);
         var compilation = module.Compile(
-            Program(),
-            new TransformationSchema(SourceTable(), TargetTable()));
+            program ?? Program(),
+            TransformationSchema.FromLegacyTable(SourceTable(), TargetTable()));
         Assert.True(compilation.IsSuccess);
 
         return await module.EvaluateAsync(
@@ -129,6 +152,44 @@ public sealed class TransformationLookupTests
         };
     }
 
+    private static TransformationProgram LoanProgram()
+    {
+        return new TransformationProgram
+        {
+            SemanticsProfile = TransformationCapabilities.SqlServerLegacyProfile,
+            Outputs =
+            [
+                new TransformationOutput
+                {
+                    OutputKey = "default",
+                    EmitWhen = new NotExistsExpression
+                    {
+                        Lookup = TransformationCapabilities.MtiOriginalLoanExistsV1,
+                        Arguments = new Dictionary<string, ValueExpression>
+                        {
+                            ["systemId"] = new SourceExpression
+                            {
+                                Field = "SYSTEM_ID"
+                            },
+                            ["loanNumber"] = new SourceExpression
+                            {
+                                Field = "CLOANNUMBER"
+                            }
+                        }
+                    },
+                    Fields =
+                    [
+                        new FieldAssignment
+                        {
+                            NormalizedColumn = "VALUE",
+                            Value = Text("accepted")
+                        }
+                    ]
+                }
+            ]
+        };
+    }
+
     private static TransformationSourceRow Row(string key, long sourceRowId)
     {
         return new TransformationSourceRow(
@@ -150,6 +211,15 @@ public sealed class TransformationLookupTests
             TransformationCapabilities.MtiOriginalPolicyExistsV1,
             "SYS",
             productName,
+            "LN-001");
+    }
+
+    private static TransformationLookupRequest LoanRequest()
+    {
+        return new TransformationLookupRequest(
+            TransformationCapabilities.MtiOriginalLoanExistsV1,
+            "SYS",
+            ProductName: null,
             "LN-001");
     }
 

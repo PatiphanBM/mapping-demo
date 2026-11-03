@@ -5,6 +5,7 @@ namespace MappingDemo.Shared.Input;
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(DelimitedInputLayout), "delimited")]
 [JsonDerivedType(typeof(FixedWidthInputLayout), "fixedWidth")]
+[JsonDerivedType(typeof(ExcelInputLayout), "excel")]
 public abstract record InputLayoutDefinition;
 
 public sealed record DelimitedInputLayout(

@@ -8,6 +8,10 @@ const apiBaseUrl = (process.env.API_BASE_URL ?? "http://localhost:5181").replace
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    agentUpgrade: "security",
+  },
+  allowedDevOrigins: ["127.0.0.1"],
   async rewrites() {
     return [
       {

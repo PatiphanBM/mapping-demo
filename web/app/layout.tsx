@@ -45,6 +45,30 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 Configurations
               </Link>
               <Link
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                href="/delivery"
+              >
+                Delivery
+              </Link>
+              <Link
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                href="/admin/api-destination-profiles"
+              >
+                API profiles
+              </Link>
+              <Link
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                href="/admin/contracts"
+              >
+                Contracts
+              </Link>
+              <Link
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                href="/admin/tables"
+              >
+                Tables
+              </Link>
+              <Link
                 className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
                 href="/configs/new"
               >

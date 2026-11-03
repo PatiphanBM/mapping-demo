@@ -9,8 +9,19 @@ public static class ApiJsonOptions
 {
     public static void Configure(JsonOptions options)
     {
-        options.JsonSerializerOptions.Converters.Add(
-            new UnattributedStringEnumConverter());
+        Configure(options.JsonSerializerOptions);
+    }
+
+    public static JsonSerializerOptions CreateSerializerOptions()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        Configure(options);
+        return options;
+    }
+
+    private static void Configure(JsonSerializerOptions options)
+    {
+        options.Converters.Add(new UnattributedStringEnumConverter());
     }
 
     private sealed class UnattributedStringEnumConverter : JsonConverterFactory

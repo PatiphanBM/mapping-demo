@@ -14,7 +14,7 @@ public interface ITransformationLookupResolver
 public sealed record TransformationLookupRequest(
     string Capability,
     string SystemId,
-    string ProductName,
+    string? ProductName,
     string LoanNumber);
 
 public sealed record TransformationLookupMatch(

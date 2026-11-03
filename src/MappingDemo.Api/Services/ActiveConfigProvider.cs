@@ -2,6 +2,7 @@ using Dapper;
 using MappingDemo.Api.Options;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using System.Text.Json;
 
 namespace MappingDemo.Api.Services;
 
@@ -12,7 +13,11 @@ public sealed class ActiveConfigProvider
             id AS "ConfigId",
             name AS "Name",
             input_folder AS "InputFolder",
-            active_version_id AS "ActiveVersionId"
+            active_version_id AS "ActiveVersionId",
+            (SELECT accepted_extensions::text
+             FROM mapping_config_versions
+             WHERE id = mapping_configs.active_version_id)
+                AS "AcceptedExtensionsJson"
         FROM mapping_configs
         ORDER BY id;
         """;
@@ -46,7 +51,11 @@ public sealed class ActiveConfigProvider
                 row.ConfigId,
                 row.Name,
                 Path.GetFullPath(row.InputFolder, _inputRootPath),
-                row.ActiveVersionId))
+                row.ActiveVersionId,
+                row.AcceptedExtensionsJson is null
+                    ? []
+                    : JsonSerializer.Deserialize<string[]>(
+                        row.AcceptedExtensionsJson) ?? []))
             .ToArray();
     }
 
@@ -59,6 +68,8 @@ public sealed class ActiveConfigProvider
         public string InputFolder { get; init; } = string.Empty;
 
         public long? ActiveVersionId { get; init; }
+
+        public string? AcceptedExtensionsJson { get; init; }
     }
 }
 
@@ -66,4 +77,5 @@ public sealed record WatcherConfig(
     long ConfigId,
     string Name,
     string InputPath,
-    long? ActiveVersionId);
+    long? ActiveVersionId,
+    IReadOnlyList<string> AcceptedExtensions);

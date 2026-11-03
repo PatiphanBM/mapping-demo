@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Dapper;
+using MappingDemo.Shared.Destinations;
+using MappingDemo.Shared.Contracts;
 using MappingDemo.Shared.Jobs;
 using MappingDemo.Shared.Messaging;
 using MappingDemo.Shared.Serialization;
@@ -30,14 +32,25 @@ public sealed class RowNormalizeHandler
             row_jobs.source_row_id AS SourceRowId,
             row_jobs.row_number AS RowNumber,
             row_jobs.config_version_id AS ConfigVersionId,
+            row_jobs.kind AS Kind,
             row_jobs.status AS Status,
             row_jobs.evaluation_at AS EvaluationAt,
             mapping_config_versions.transformation_program::text
                 AS TransformationProgramJson,
+            mapping_config_versions.destination_definition::text
+                AS DestinationDefinitionJson,
             mapping_configs.source_table_id AS SourceTableId,
-            mapping_configs.normalized_table_id AS NormalizedTableId,
+            (mapping_config_versions.destination_definition
+                ->> 'normalizedTableId')::bigint AS NormalizedTableId,
             source_table.name AS SourceTableName,
             normalized_table.name AS NormalizedTableName,
+            mapping_config_versions.contract_schema_snapshot::text
+                AS ContractSchemaSnapshotJson,
+            mapping_config_versions.contract_schema_hash AS ContractSchemaHash,
+            mapping_config_versions.payload_bindings_snapshot::text
+                AS PayloadBindingsSnapshotJson,
+            mapping_config_versions.api_destination_profile_version_id
+                AS ApiDestinationProfileVersionId,
             file_jobs.file_name AS FileName
         FROM row_jobs
         INNER JOIN file_jobs
@@ -48,8 +61,10 @@ public sealed class RowNormalizeHandler
             ON mapping_configs.id = mapping_config_versions.config_id
         INNER JOIN table_definitions AS source_table
             ON source_table.id = mapping_configs.source_table_id
-        INNER JOIN table_definitions AS normalized_table
-            ON normalized_table.id = mapping_configs.normalized_table_id
+        LEFT JOIN table_definitions AS normalized_table
+            ON normalized_table.id =
+                (mapping_config_versions.destination_definition
+                    ->> 'normalizedTableId')::bigint
         WHERE row_jobs.id = @RowJobId
         FOR UPDATE OF row_jobs;
         """;
@@ -109,8 +124,11 @@ public sealed class RowNormalizeHandler
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly TransformationModule _transformationModule;
+    private readonly IDestinationRouter _destinationRouter;
+    private readonly ContractSchemaModule _contractSchemas;
     private readonly IReadOnlySet<int> _failNormalizeRowNumbers;
     private readonly TimeSpan _normalizeDelay;
+    private readonly bool _useDestinationModule;
     private readonly ILogger<RowNormalizeHandler> _logger;
     private readonly ConcurrentDictionary<long, CompiledRowConfig>
         _compiledConfigs = new();
@@ -118,17 +136,40 @@ public sealed class RowNormalizeHandler
     public RowNormalizeHandler(
         NpgsqlDataSource dataSource,
         TransformationModule transformationModule,
+        IDestinationRouter destinationRouter,
+        IConfiguration configuration,
+        ILogger<RowNormalizeHandler> logger)
+        : this(
+            dataSource,
+            transformationModule,
+            destinationRouter,
+            new ContractSchemaModule(),
+            configuration,
+            logger)
+    {
+    }
+
+    public RowNormalizeHandler(
+        NpgsqlDataSource dataSource,
+        TransformationModule transformationModule,
+        IDestinationRouter destinationRouter,
+        ContractSchemaModule contractSchemas,
         IConfiguration configuration,
         ILogger<RowNormalizeHandler> logger)
     {
         _dataSource = dataSource;
         _transformationModule = transformationModule;
+        _destinationRouter = destinationRouter;
+        _contractSchemas = contractSchemas;
         var failNormalizeRowNumbers = configuration
             .GetSection("Demo:FailNormalizeRowNumbers")
             .Get<int[]>() ?? [];
         _failNormalizeRowNumbers = failNormalizeRowNumbers.ToHashSet();
         _normalizeDelay = TimeSpan.FromMilliseconds(
             configuration.GetValue<int>("Demo:NormalizeDelayMs"));
+        _useDestinationModule = configuration.GetValue(
+            "Features:UseDestinationModule",
+            true);
         _logger = logger;
 
         if (_failNormalizeRowNumbers.Any(rowNumber => rowNumber <= 0))
@@ -279,20 +320,63 @@ public sealed class RowNormalizeHandler
         {
             case TransformationRowStatus.Done:
             case TransformationRowStatus.Filtered:
-                completedStatus = await NormalizedRowWriter
-                    .ReconcileAndCompleteAsync(
-                        connection,
-                        transaction,
-                        rowJob.NormalizedTableName,
+                if (_useDestinationModule)
+                {
+                    var envelope = new DeliveryEnvelope(
                         rowJob.SourceRowId,
                         rowJob.FileJobId,
                         rowJob.RowNumber,
                         rowJob.Id,
                         rowJob.ConfigVersionId,
-                        compiledConfig.NormalizedColumnNames,
                         result.Outputs,
                         attempt,
+                        rowJob.Kind,
+                        rowJob.FileName);
+                    var delivered = await _destinationRouter.DeliverAsync(
+                        compiledConfig.Destination,
+                        envelope,
+                        connection,
+                        transaction,
                         cancellationToken);
+                    completedStatus = delivered.CompletionStatus;
+                    if (delivered.Diagnostics.Count > 0)
+                    {
+                        await InsertDeliveryErrorsAsync(
+                            connection,
+                            transaction,
+                            rowJob,
+                            delivered.Diagnostics,
+                            cancellationToken);
+                    }
+
+                    await CompleteRowJobAsync(
+                        connection,
+                        transaction,
+                        rowJob.Id,
+                        completedStatus,
+                        attempt,
+                        cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                else
+                {
+                    completedStatus = await NormalizedRowWriter
+                        .ReconcileAndCompleteAsync(
+                            connection,
+                            transaction,
+                            rowJob.NormalizedTableName!,
+                            rowJob.SourceRowId,
+                            rowJob.FileJobId,
+                            rowJob.RowNumber,
+                            rowJob.Id,
+                            rowJob.ConfigVersionId,
+                            compiledConfig.NormalizedColumnNames,
+                            result.Outputs,
+                            attempt,
+                            cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                }
+
                 break;
 
             case TransformationRowStatus.Invalid:
@@ -310,14 +394,13 @@ public sealed class RowNormalizeHandler
                     completedStatus,
                     attempt,
                     cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
                 break;
 
             default:
                 throw new InvalidOperationException(
                     $"Transformation returned unsupported status '{result.Status}'.");
         }
-
-        await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
             "Completed row job {RowJobId} with status {RowJobStatus} using config version {ConfigVersionId}",
@@ -344,11 +427,91 @@ public sealed class RowNormalizeHandler
             transaction,
             rowJob.SourceTableId,
             cancellationToken);
-        var normalizedColumns = await LoadTableColumnsAsync(
-            connection,
-            transaction,
-            rowJob.NormalizedTableId,
-            cancellationToken);
+        var destination = PolymorphicJson.Deserialize<DestinationDefinition>(
+                rowJob.DestinationDefinitionJson,
+                JsonOptions)
+            ?? throw new JsonException(
+                "Persisted destination definition cannot be null.");
+        var sourceDefinition = new TableDefinition(
+            rowJob.SourceTableName,
+            TableKind.Source,
+            sourceColumns);
+        TargetSchema targetSchema;
+        IReadOnlyList<ColumnDefinition> normalizedColumns;
+        DestinationCompilationResult destinationCompilation;
+        if (destination is LegacyTableDestination)
+        {
+            if (!rowJob.NormalizedTableId.HasValue ||
+                string.IsNullOrWhiteSpace(rowJob.NormalizedTableName))
+            {
+                throw new InvalidOperationException(
+                    "LegacyTable destination is missing its normalized table.");
+            }
+
+            normalizedColumns = await LoadTableColumnsAsync(
+                connection,
+                transaction,
+                rowJob.NormalizedTableId.Value,
+                cancellationToken);
+            var normalizedDefinition = new TableDefinition(
+                rowJob.NormalizedTableName,
+                TableKind.Normalized,
+                normalizedColumns);
+            targetSchema = new LegacyTableTargetSchemaAdapter()
+                .Adapt(normalizedDefinition);
+        }
+        else if (destination is ApiContractDestination
+                 or JsonFileDestination)
+        {
+            if (string.IsNullOrWhiteSpace(rowJob.ContractSchemaSnapshotJson))
+            {
+                throw new InvalidOperationException(
+                    "Contract destination is missing its pinned schema snapshot.");
+            }
+
+            var schemaCompilation = _contractSchemas.Compile(
+                rowJob.ContractSchemaSnapshotJson);
+            var contract = destination switch
+            {
+                ApiContractDestination api => api.Contract,
+                JsonFileDestination jsonFile => jsonFile.Contract,
+                _ => throw new InvalidOperationException(
+                    "Contract destination type is not supported.")
+            };
+            if (!schemaCompilation.IsSuccess ||
+                !string.Equals(
+                    schemaCompilation.SchemaHash,
+                    rowJob.ContractSchemaHash,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    schemaCompilation.SchemaHash,
+                    contract.SchemaHash,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The pinned contract schema hash is invalid or has drifted.");
+            }
+
+            targetSchema = schemaCompilation.TargetSchema!;
+            normalizedColumns = [];
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Unsupported destination type '{destination.GetType().Name}'.");
+        }
+        var bindings = string.IsNullOrWhiteSpace(
+            rowJob.PayloadBindingsSnapshotJson)
+            ? []
+            : JsonSerializer.Deserialize<PayloadBinding[]>(
+                rowJob.PayloadBindingsSnapshotJson,
+                JsonOptions) ?? [];
+        destinationCompilation = _destinationRouter.Compile(
+            destination,
+            new DestinationCompilationContext(
+                targetSchema,
+                bindings,
+                rowJob.ApiDestinationProfileVersionId));
         var program = PolymorphicJson.Deserialize<TransformationProgram>(
                 rowJob.TransformationProgramJson,
                 JsonOptions)
@@ -357,14 +520,11 @@ public sealed class RowNormalizeHandler
         var compilation = _transformationModule.Compile(
             program,
             new TransformationSchema(
-                new TableDefinition(
-                    rowJob.SourceTableName,
-                    TableKind.Source,
-                    sourceColumns),
-                new TableDefinition(
-                    rowJob.NormalizedTableName,
-                    TableKind.Normalized,
-                    normalizedColumns)));
+                sourceDefinition,
+                targetSchema,
+                bindings
+                    .Select(binding => binding.TargetPath)
+                    .ToHashSet(StringComparer.Ordinal)));
         if (!compilation.IsSuccess)
         {
             throw new InvalidOperationException(
@@ -375,9 +535,20 @@ public sealed class RowNormalizeHandler
                         $"{diagnostic.Path}: {diagnostic.Code}")));
         }
 
+        if (!destinationCompilation.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                "Persisted destination definition did not compile: " +
+                string.Join(
+                    "; ",
+                    destinationCompilation.Diagnostics.Select(diagnostic =>
+                        $"{diagnostic.Path}: {diagnostic.Code}")));
+        }
+
         var compiled = compilation.CompiledProgram!;
         var loaded = new CompiledRowConfig(
             compiled,
+            destinationCompilation.CompiledDestination!,
             _transformationModule.GetSourceDependencies(compiled),
             normalizedColumns
                 .OrderBy(column => column.Ordinal)
@@ -487,6 +658,32 @@ public sealed class RowNormalizeHandler
         }
     }
 
+    private static async Task InsertDeliveryErrorsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        RowJob rowJob,
+        IReadOnlyList<RowDeliveryDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        foreach (var diagnostic in diagnostics)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                InsertRowErrorSql,
+                new
+                {
+                    RowJobId = rowJob.Id,
+                    rowJob.FileJobId,
+                    rowJob.RowNumber,
+                    diagnostic.OutputKey,
+                    Field = (string?)null,
+                    ExpressionPath = $"delivery.{diagnostic.Path}",
+                    diagnostic.Reason
+                },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
+    }
+
     private static async Task CompleteRowJobAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -559,13 +756,19 @@ public sealed class RowNormalizeHandler
         long SourceRowId,
         int RowNumber,
         long ConfigVersionId,
+        string Kind,
         string Status,
         DateTime EvaluationAt,
         string TransformationProgramJson,
+        string DestinationDefinitionJson,
         long SourceTableId,
-        long NormalizedTableId,
+        long? NormalizedTableId,
         string SourceTableName,
-        string NormalizedTableName,
+        string? NormalizedTableName,
+        string? ContractSchemaSnapshotJson,
+        string? ContractSchemaHash,
+        string? PayloadBindingsSnapshotJson,
+        long? ApiDestinationProfileVersionId,
         string FileName);
 
     private sealed record TableColumnRow(
@@ -579,6 +782,7 @@ public sealed class RowNormalizeHandler
 
     private sealed record CompiledRowConfig(
         CompiledTransformationProgram Program,
+        CompiledDestination Destination,
         IReadOnlyList<string> SourceDependencies,
         IReadOnlyList<string> NormalizedColumnNames);
 

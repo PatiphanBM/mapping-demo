@@ -1,4 +1,6 @@
-# Mapping Demo — แผน Input Layout, Transformation Config และหน้าเว็บ (Phase 19–20)
+# Mapping Demo — แผน Input Layout, Transformation Config, Contract Mapping และหน้าเว็บ (Phase 19–28)
+
+> **Design source:** Phase 21–24 ในเอกสารนี้เป็น implementation plan ของ [Contract API and Legacy Table Delivery Design](../spec/spec-design-contract-api-legacy-delivery.md) หากรายละเอียดขัดกันให้ design specification เป็น authoritative source ส่วน Phase 19–20 เก็บเป็น baseline ของ behavior เดิมที่ต้องไม่ regression Phase 25 เป็นภาคต่อจากการเลือก Prototype C และต้องแก้ design specification ให้รองรับ `JsonFile` อย่างเป็นทางการใน Step 25.0 ก่อนเริ่ม implementation ส่วน Phase 26 ย้าย API destination profile จาก duplicated application config ไปเป็น versioned server-owned catalog พร้อมหน้า Admin และต้องล็อก design/addendum ใน Step 26.0 ก่อนเริ่ม implementation ส่วน Phase 27 ย้าย Contract schema จาก bundled fixture ไปเป็น versioned Contract Registry พร้อมหน้า Admin และต้องล็อก lifecycle/authorization/compatibility contract ใน Step 27.0 ก่อนเริ่ม implementation ส่วน Phase 28 เพิ่ม Table Admin และ physical schema verification โดยต้องล็อก comparison/authorization/drift contract ใน Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation
 
 แผนนี้ต่อจาก [learning-plan.md](learning-plan.md) โดยขยาย Mapping Config จาก CSV field mapping แบบ 1:1 ให้รองรับ fixed-width text จาก `Mapping-TIB-PRD.xlsx`, transformation ที่พบใน `Mapping-PMIB-PRD.xlsx` และหน้าเว็บตั้งค่า Config Version ผ่าน `MappingDemo.Api`
 
@@ -15,6 +17,11 @@
 3. โค้ดเว็บอยู่ใน `web/`; การแก้ .NET, migration และ script ทำได้เฉพาะ step ที่ระบุ
 4. ถ้า Next.js เวอร์ชันที่ติดตั้งมีชื่อไฟล์หรือ API ต่างจากแผน ให้ใช้ตามเวอร์ชันที่ติดตั้ง แล้วบอกว่าต่างตรงไหน
 5. ห้ามแปลง pseudo-SQL จาก workbook แล้ว execute โดยตรง ทุก config ต้องผ่าน typed model, compiler และ allowlist เดียวกัน
+6. Phase 21–28 ต้องทำตามลำดับและผ่าน Phase Gate ก่อนเริ่ม Phase ถัดไป ห้ามเปิด `ApiContract` delivery ก่อน Phase 24, ห้าม activate `JsonFile` ก่อนผ่าน Gate E ใน Phase 25, ห้ามเปิด profile administration ใน production ก่อนผ่าน Gate F ใน Phase 26, ห้าม publish Contract ผ่าน Admin ใน production ก่อนผ่าน Gate G ใน Phase 27 และห้ามเปิด Table Admin mutation ใน production ก่อนผ่าน Gate H ใน Phase 28
+7. ทุก step ใหม่ต้องรักษา `LegacyTable` characterization tests ให้ผ่าน และห้ามเปลี่ยน destination ของ File Job ที่ pin Config Version ไปแล้ว
+8. Schema endpoint, delivery endpoint, Output Root, authentication และ secret ต้องมาจาก server-owned profile ห้ามรับ raw URL/path/credential จาก browser
+9. ห้าม dual-delivery production payload เดียวข้าม `LegacyTable`, `ApiContract` และ `JsonFile`; shadow test ใช้ stub/sandbox/output root แยกที่ไม่มี business side effect เท่านั้น
+10. JSON ของ PA MTLS เป็น illustrative profile สำหรับ coverage ไม่ใช่ schema กลางและห้าม hard-code path ลง core Module
 
 ### คำสั่งตั้งต้นสำหรับ AI agent (copy ไปใช้ได้)
 
@@ -22,9 +29,10 @@
 อ่าน docs/web-config-plan.md, docs/learning-plan.md (เฉพาะหัวข้อ "วิธีใช้แผนนี้"),
 docs/demo-plan.md หัวข้อ "ข้อสรุปรอบที่ 7–9", CONTEXT.md และ current-program-workflow.md หัวข้อ 6.2 กับ 8.2
 ก่อน implement ให้ตรวจเครื่องตาม "Requirement ของเครื่อง" ในแผนนี้ ถ้าไม่ตรงให้หยุดและบอกฉันก่อน
-ถ้าฉันสั่งเริ่ม Phase 19 หรือ Phase 20 ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จของ Phase นั้น แล้วหยุดรอคำสั่งใหม่
+ถ้าฉันสั่งเริ่ม Phase 19–28 ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จของ Phase นั้น แล้วหยุดรอคำสั่งใหม่
 ถ้าฉันสั่ง Step ที่ระบุเลข ให้ทำเฉพาะ step นั้น อธิบาย concept ก่อนเขียนโค้ด แล้วบอกวิธีตรวจผล
-ห้ามติดตั้ง npm package เพิ่มเอง ห้ามรับหรือ execute raw SQL จาก config และห้ามสร้าง git commit เอง
+สำหรับ Phase 21–28 ให้อ่าน spec/spec-design-contract-api-legacy-delivery.md เพิ่มก่อนเริ่ม, ใน Phase 25 ให้อ่าน spec/spec-design-file-to-json-export.md เป็น historical reliability reference เท่านั้น, Phase 26–27 ต้องทำ design step ของ Phase ก่อนแก้ schema/runtime และ Phase 28 ต้องอ่าน docs/table-creation-old-vs-new.md พร้อมทำ Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation
+ห้ามติดตั้ง package เพิ่มเอง ห้ามรับ raw URL/credential หรือ execute raw SQL จาก config และห้ามสร้าง git commit เอง
 ```
 
 ## ผลวิเคราะห์ `Mapping-PMIB-PRD.xlsx`
@@ -384,6 +392,7 @@ Truth table และ known-literal expected values ของ profile นี้�
 - Reprocess ที่สำเร็จต้อง reconcile desired output set ใน transaction เดียว: upsert output ปัจจุบันและลบ stale output ที่ไม่ emit แล้ว; ถ้า desired set ว่างให้ลบ outputs เดิมทั้งหมดและ mark Row Job เป็น `Filtered` ใน transaction เดียว ส่วน `Invalid`/`Failed` ห้าม reconcile และต้องเก็บชุดเดิม
 - จำกัด AST depth, node count, CASE arms, output count และ lookup keys เพื่อกัน config ที่ใช้ทรัพยากรเกินขอบเขต
 - Config Version pin logic แต่ lookup ใช้ live committed business state; `mtiOriginalPolicyExists@1` ใช้ business key `(systemId, productName, loanNumber)` และตัดทุกผลที่มี `source_row_id = currentSourceRowId` ออกจากคำตอบ จึงทำให้ retry/reprocess ของ Source row เดิมไม่ block ตัวเอง ขณะที่ Source row อื่นที่มี product + loan เดียวกันยัง match และ loan เดียวกันคนละ product ไม่ match
+- กรณี business rule ไม่แยก product ให้ใช้ `mtiOriginalLoanExists@1` ด้วย business key `(systemId, loanNumber)`; ห้ามส่ง `productName` เพื่อทำให้ความหมายต่างจาก lookup แบบ 3-key ชัดเจน ทั้งสอง lookup ตัด `currentSourceRowId` แบบเดียวกัน
 
 ### ชนิด error
 
@@ -403,11 +412,12 @@ Truth table และ known-literal expected values ของ profile นี้�
 | PostgreSQL config/source/result | Local-substitutable | ใช้ Postgres จริงใน integration test; persistence อยู่นอก evaluator |
 | `formatRegNo@1` | In-process | demo stand-in แบบ null-preserving และ trim เฉพาะหัวท้ายตาม 19.0; ไม่มีคำกล่าวอ้าง legacy parity และหากได้ source จริงที่ behavior ต่างต้องเพิ่ม version ใหม่ |
 | `mtiOriginalPolicyExists@1` | Local-substitutable | ใน demo อ่าน PMIB Normalized table เดียวกับที่ Transformation Program เขียน; config เห็น logical capability เท่านั้น ส่วน Adapter resolve physical table ที่เชื่อถือได้และ in-memory Adapter ใช้ใน unit tests |
+| `mtiOriginalLoanExists@1` | Local-substitutable | อ่านตารางเดียวกัน แต่เทียบเฉพาะ `SYSTEM_ID + CLOANNUMBER` สำหรับ config ที่ไม่แยก `CPRODUCTNAME`; ใช้ Adapter และ current-row exclusion ชุดเดียวกัน |
 | เวลา | In-process input | Worker ส่ง persisted `evaluation_at` ซึ่งเป็น instant; evaluator ใช้ timezone `Asia/Bangkok` จาก semantics profile และ test ส่งค่าคงที่ |
 
-ใน demo ให้ถือ PMIB Normalized table เป็น `MTI_ORIGINAL` ตามความหมายใน workbook และสร้างผ่าน Tables API โดย `configure-demo.ps1`; config เรียกเพียง `mtiOriginalPolicyExists@1(systemId, productName, loanNumber)` โดยไม่รู้ table/SQL ส่วน runtime เติม `currentSourceRowId` จาก Row Job context ให้ lookup request เอง ห้ามรับ identity นี้จากค่าที่ผู้ใช้กำหนด
+ใน demo ให้ถือ PMIB Normalized table เป็น `MTI_ORIGINAL` ตามความหมายใน workbook และสร้างผ่าน Tables API โดย `configure-demo.ps1`; config เลือก `mtiOriginalPolicyExists@1(systemId, productName, loanNumber)` หรือ `mtiOriginalLoanExists@1(systemId, loanNumber)` โดยไม่รู้ table/SQL ส่วน runtime เติม `currentSourceRowId` จาก Row Job context ให้ lookup request เอง ห้ามรับ identity นี้จากค่าที่ผู้ใช้กำหนด
 
-Production Adapter ต้อง resolve physical table จาก server-owned metadata แล้ว query แบบ parameterized ด้วย business key `(SYSTEM_ID, CPRODUCTNAME, CLOANNUMBER)` พร้อมคืน `source_row_id` ที่ match เพื่อให้ caller ตัด `currentSourceRowId` ออก การ resolve ทั้ง batch ต้อง deduplicate keys และใช้จำนวน query คงที่ตาม batch ไม่ query ต่อ field/row; `configure-demo.ps1` สร้าง composite index อย่างน้อย `(SYSTEM_ID, CPRODUCTNAME, CLOANNUMBER)` ด้วย trusted setup SQL หลัง Tables API สร้างตาราง และตอน activate ต้องตรวจว่าคอลัมน์กับ index นี้มีจริง
+Production Adapter ต้อง resolve physical table จาก server-owned metadata แล้ว query แบบ parameterized ด้วย business key ที่ lookup เลือก พร้อมคืน `source_row_id` ที่ match เพื่อให้ caller ตัด `currentSourceRowId` ออก การ resolve ทั้ง batch ต้อง deduplicate keys และใช้จำนวน query คงที่ต่อชนิด lookup ไม่ query ต่อ field/row; `configure-demo.ps1` สร้าง composite index `(SYSTEM_ID, CPRODUCTNAME, CLOANNUMBER)` และ `(SYSTEM_ID, CLOANNUMBER)` ด้วย trusted setup SQL หลัง Tables API สร้างตาราง และตอน activate ต้องตรวจ required columns/index ของ lookup ที่ config ใช้
 
 Lookup อ่าน committed state ล่าสุดและ cache ได้เฉพาะภายใน batch นั้น จึงรองรับ retry และ reprocess ของ Source row เดิม แต่ไม่ใช่ concurrency uniqueness guarantee: สอง Source rows ใหม่ที่ชน key และประมวลผลพร้อมกันอาจผ่านทั้งคู่ หากต้องห้ามกรณีนี้ต้องเพิ่ม unique constraint/locking เป็น requirement แยก
 
@@ -693,3 +703,816 @@ Browser ตรวจ `File.size`, อ่าน `ArrayBuffer`, decode ด้ว�
   - ตรวจ: คนที่ไม่เคยเห็น repo ทำตาม README ตั้งแต่หยุด process → reset → configure แล้วสร้าง/preview/activate Config Version ใหม่ได้ และไม่พบคำแนะนำให้ใช้ legacy payload
   - Commit: ให้ผู้ใช้สั่ง commit แยกต่างหาก; AI agent ห้ามสร้าง commit เอง
   - ผล: ปรับ Domain Context ให้ Mapping Config ชี้ ownership ของ immutable Input Layout/Transformation Program ชัดเจน; README ครบ prerequisites, การหยุด process, destructive reset, เปิด API/Web/Worker, UI flow สร้าง config → แก้/preview draft → Create version → Activate, same-origin/API URL, breaking baseline และ rollback แบบ reset/reconfigure โดยกล่าวถึง legacy payload เฉพาะคำเตือนว่าใช้ไม่ได้; ระหว่างตรวจ handoff พบ editor ยัง persist draft ไม่ได้จึงเพิ่มปุ่ม `Create version` ที่ validate ก่อนเรียก API และ refresh ไปยังรุ่นใหม่ พร้อมแก้ Development ArchiveRoot จาก `archived/` ให้ตรง `archive/` ที่ reset/.gitignore/docs ใช้; runtime ผ่าน Next proxy โดยหน้า config ตอบ 200 และสร้าง/activate version 2 สำเร็จ, ESLint/production build กับ regression 239/239 ผ่าน, ติ๊ก Phase 20 แล้วและคืน demo เป็น Orders/PMIB 2 configs/2 versions/0 jobs โดยยังไม่สร้าง commit ตามข้อกำหนด
+
+---
+
+## ภาคต่อ Feature ใหม่ Phase 21–24
+
+### เป้าหมาย
+
+เพิ่มความสามารถต่อจาก baseline โดยยังใช้ Source Table, Input Layout, Transformation expressions, conditions, named transforms/lookups และ output branches เดิม:
+
+```text
+.txt/.csv/.xlsx/.xls
+        │
+        ▼
+Input Record Module ──► Source Table ──► Transformation Module
+                                                │ 0..N outputs
+                                                ▼
+                                      Destination Module seam
+                                      ┌─────────┴──────────┐
+                                      ▼                    ▼
+                              LegacyTable Adapter   ApiContract Adapter
+                              Normalized Table      Delivery Job/Outbox
+                                                           │
+                                                           ▼
+                                                    Partner Endpoint
+```
+
+กติกาหลัก:
+
+- Config Version เลือก destination ได้หนึ่งแบบ: `LegacyTable` หรือ `ApiContract`
+- Config เก่าที่ไม่มี Destination Definition อ่านเป็น `LegacyTable`
+- `ApiContract` ยังเขียน raw Source Table แต่ไม่ scaffold, สร้าง หรือเขียน Normalized Table
+- หนึ่ง mapped output/proposal สร้างหนึ่ง API request และ retry แยกรายการ
+- Contract Version ถูก snapshot พร้อม canonical SHA-256 ตอนสร้าง Config Version และ runtime ห้าม fetch schema ใหม่
+- Mapping แบบ API ใช้ Source/expression → Contract Path; object/array containers ถูกสร้างอัตโนมัติ
+- System-bound Paths มาจาก runtime metadata และแสดง read-only; Mapped Paths จึงเลือก expression ได้
+- operator ชุดแรกใช้ของเดิมจาก Phase 19–20 ไม่มี raw code/SQL และไม่มี operator ใหม่เพียงเพื่อรองรับ JSON
+- prototype `web/app/prototype/file-to-json/` เป็น throwaway reference ไม่ใช่ production route และไม่ใช่ source of truth
+- `JsonFile` destination และ JSON file import/export ไม่อยู่ใน Phase 21–24 ตาม requirement ล่าสุด
+
+### Dependency map ปัจจุบันและ seam ที่ต้องสร้าง
+
+```text
+FileWatcherService / FileIntake
+  → FileImportRequested
+  → FileImportHandler
+      → InputRecordModule
+      → SourceRowWriter
+      → Row Job + RowNormalizeRequested
+  → RowNormalizeHandler
+      → TransformationModule
+          → TransformationSchema (ปัจจุบันผูก NormalizedTable แบบ flat)
+      → NormalizedRowWriter (ปัจจุบันเรียกตรง)
+
+เป้าหมายหลัง Phase 24
+  → TargetSchema Module
+      ├─ LegacyTableTargetSchemaAdapter
+      └─ ContractSnapshotTargetSchemaAdapter
+  → Destination Module seam
+      ├─ LegacyTableDestinationAdapter → NormalizedRowWriter
+      └─ ApiContractDestinationAdapter → Delivery Job/Outbox
+  → Contract Registry Module → server-owned schema profile
+  → Payload Binding Module → System-bound Paths + final validation
+  → API Delivery Worker → server-owned endpoint/auth profile
+```
+
+Seam มีเหตุผลเพราะมี adapter จริงสองตัว ห้ามสร้าง interface แบบ pass-through ที่เพียงย้าย method เดิมโดยไม่ซ่อน target compilation, persistence หรือ delivery behavior
+
+### ขอบเขต Phase 21–24
+
+**อยู่ใน scope**
+
+- `.txt`, `.csv`, `.xlsx`, `.xls` เป็น input ของ File-to-Source
+- Excel เลือก sheet, header row และ data-start row ใน Input Layout
+- `LegacyTable` และ `ApiContract` อยู่ร่วมกันต่อ Mapping Config Version
+- JSON Schema snapshot/hash, typed path catalog และ supported-subset validation
+- nested object, fixed array index, wildcard Array Group และ array item type
+- หลาย Source columns ต่อหนึ่ง array item, empty-item skip และ source-slot `seq`
+- server-owned payload bindings สำหรับ runtime metadata
+- persisted Delivery Job/outbox, one request per output, retry/idempotency/reprocess
+- หน้าเว็บ Setup → Input → Destination → Mapping → Preview พร้อม version history/compare
+- metrics, kill switch, config-by-config canary และ rollback ไป Legacy version สำหรับ File Jobs ใหม่
+
+**นอก scope**
+
+- arbitrary URL/header/credential/SQL/script จาก browser
+- dynamic entity/Normalized Table scaffolding สำหรับ `ApiContract`
+- runtime schema fetch หรือการเปลี่ยน snapshot ของ version ที่ถูกสร้างแล้ว
+- dual-delivery production output เดียวไปทั้ง API และ LegacyTable
+- arbitrary JSON property เมื่อ schema ไม่อนุญาต
+- external/recursive `$ref`, ambiguous `oneOf`/`anyOf` ใน v1
+- percent-random routing ภายใน Mapping Config เดียว
+- retire `LegacyTable` ก่อนทุก partner ผ่าน migration gate
+
+### Planned endpoints สำหรับ Phase 21–24
+
+ชื่อ endpoint นี้เป็น implementation contract ของแผน หากเปลี่ยนระหว่างทำต้องอัปเดต API contracts, web client และเอกสารใน step เดียวกัน:
+
+| งาน | Endpoint |
+|---|---|
+| Server-owned destination profiles | `GET /api-destination-profiles` |
+| Contract/version catalog ของ profile | `GET /api-destination-profiles/{id}/contracts` |
+| Resolve schema สำหรับ draft โดยไม่ persist version | `POST /mapping-configs/{id}/contract-schema/resolve` |
+| Validate/preview draft | ใช้ `POST /mapping-configs/{id}/versions/validate` และ `/preview` เดิม แต่เพิ่ม destination/target schema |
+| Preview binary Excel | `POST /mapping-configs/{id}/versions/preview-file` แบบ multipart และ server-side limits |
+| Create immutable version | ใช้ `POST /mapping-configs/{id}/versions` เดิม; server fetch/snapshot schema ใน transaction workflow |
+| ดู version target schema/path catalog | `GET /mapping-configs/{id}/versions/{n}/target-schema` |
+| Delivery status ต่อ File Job | `GET /file-jobs/{id}` ขยาย summary และ `GET /file-jobs/{id}/deliveries` |
+| Retry delivery ที่ retryable/permanent ตาม policy | `POST /delivery-jobs/{id}/retry` |
+
+Browser ห้ามส่ง schema snapshot/hash ที่เชื่อถือเป็น authoritative input ตอน Create Version; server ต้อง resolve/canonicalize/hash เองจาก logical profile + Contract Reference
+
+### Phase gates และ rollback summary
+
+| Gate | ผ่านเมื่อ | Rollback |
+|---|---|---|
+| Gate A หลัง Phase 21 | Legacy characterization/golden tests ผ่าน, SQL effects และ statuses เท่า baseline | feature flag กลับ direct legacy path; schema ใหม่เป็น expand-only |
+| Gate B หลัง Phase 22 | สี่ extension import → Source ได้ตาม layout, error ไม่มี partial rows/jobs | activate Config Version เดิมและปิด accepted extension ใหม่ |
+| Gate C หลัง Phase 23 | schema/path/nested/array/payload binding preview ผ่านโดยไม่มี external side effect | ปิด ApiContract config creation; Legacy versions ยังทำงาน |
+| Gate D หลัง Phase 24 | stub/sandbox, retry/idempotency, canary และ metrics ผ่านครบหนึ่ง release cycle | pause Delivery Worker; activate previous LegacyTable version สำหรับ File Jobs ใหม่; ห้าม reroute pinned jobs |
+
+---
+
+## Phase 21 — Characterization Safety Net และ Destination Seam
+
+- [x] **21.0 ตรวจ baseline, dependency และ external contract inventory**
+  - ทำ: รัน backend/web baseline; บันทึก dependency map จาก `RowNormalizeHandler` ถึง `NormalizedRowWriter`, Config Version persistence, File/Row Job statuses, reprocess และ API/web contracts; inventory PostgreSQL, Kafka, Source/Normalized dynamic tables, schema endpoint, delivery endpoint และ secret provider; สร้าง risk register พร้อม owner/rollback trigger
+  - เข้าใจ: Phase นี้เป็น assessment ของ behavior ปัจจุบัน ไม่แก้ business semantics; ต้องรู้ external integrations/data contracts ก่อนออก seam
+  - ตรวจ: `dotnet test`, formatter check, `npm run lint`, `npm run build` ผ่าน; dependency map ชี้ call site ที่เขียน Normalized Table ครบ; risk ทุกข้อมี impact/probability/mitigation/rollback trigger และไม่มี endpoint/credential ที่ browser เป็นเจ้าของ
+
+- [x] **21.1 เพิ่ม Legacy characterization และ golden SQL effects**
+  - ทำ: เพิ่ม tests ครอบ direct/default/CASE/lookup/output `0..N`, `Done/Filtered/Invalid/Failed`, retry, reprocess `2→1→0`, stale-output reconciliation, config version pinning และ exact Normalized row identity/values ก่อน refactor
+  - เข้าใจ: tests ตรึง behavior ที่มีอยู่แม้บาง behavior จะไม่สวย; ห้ามแก้ expected ให้เข้ากับ implementation ใหม่โดยไม่มี approved behavior change
+  - ตรวจ: characterization suite ผ่านบน code path เดิม; critical legacy path มี line/branch coverage เป้าหมายอย่างน้อย 80% หรือมีรายการ exception พร้อมเหตุผล; เก็บ baseline duration/status/row counts สำหรับเทียบ Phase 21.5
+
+- [x] **21.2 ทำ expand-only database migration สำหรับ Destination Definition**
+  - ทำ: เพิ่ม `destination_definition jsonb`, contract/profile snapshot metadata ที่ nullable ใน `mapping_config_versions`; backfill version เดิมเป็น `legacyTable` ที่อ้าง Normalized Table เดิม; ผ่อน `mapping_configs.normalized_table_id` ให้ nullableสำหรับ config ใหม่โดยยังรักษา FK ของ legacy; เพิ่ม constraints/index ที่ตรวจ discriminators ขั้นพื้นฐาน
+  - เข้าใจ: Destination ถูก pin ที่ Config Version ไม่ใช่ active config ล่าสุด; migration ระยะนี้ยังไม่สร้าง Delivery Job และต้องให้ binary เดิมอ่านฐานข้อมูลใหม่ได้ใน rollback window
+  - ตรวจ: migration จาก baseline data ผ่าน; ทุก version เดิม resolve เป็น `LegacyTable`; rollback application version เดิมยังทำงานกับ schema ที่ expand แล้ว; invalid destination JSON ถูก application validator ปฏิเสธด้วย exact path
+
+- [x] **21.3 สร้าง Target Schema Module โดยเริ่มจาก LegacyTable adapter**
+  - ทำ: เปลี่ยน `TransformationSchema` จากการเปิด `NormalizedTable` ตรงเป็น typed `TargetSchema` tree; ทำ `LegacyTableTargetSchemaAdapter` แปลง flat table definition เป็น root object + scalar leaves; compiler/evaluator เรียกผ่าน Interface เดียว
+  - เข้าใจ: Module ต้องซ่อนแหล่ง schema จาก Transformation caller และคืน immutable compiled model; Phase นี้ยังไม่มี JSON Schema adapter แต่ Interface ต้องไม่ใช้ชื่อ column-only ที่ปิดทาง nested path
+  - ตรวจ: transformation unit/golden tests เดิมผ่านโดย payload v1 ไม่เปลี่ยน; flat column diagnostics/path เท่าเดิม; deletion test แสดงว่าถ้าลบ Module ความรู้เรื่อง source schema จะกระจายกลับ compiler/caller มากกว่าหนึ่งจุด
+
+- [x] **21.4 สร้าง Destination Module seam และ LegacyTable adapter**
+  - ทำ: สร้าง Destination Definition discriminated union, compiled destination/result contracts และ `LegacyTableDestinationAdapter` ที่ครอบ `NormalizedRowWriter.ReconcileAndCompleteAsync`; register ผ่าน DI; ยังไม่เพิ่ม HTTP implementation
+  - เข้าใจ: Transformation Module คืน outputs โดยไม่รู้ SQL/HTTP ส่วน Destination Module รับ compiled destination + output context; retry/persistence semantics ของ legacy อยู่หลัง adapter
+  - ตรวจ: Interface มี surface เล็กและ tests เรียกผ่าน Interface เดียวกับ caller; Legacy adapter ทำ upsert/reconcile/complete ใน transaction เดิม; ไม่มี fake `ApiContract` adapter ที่ silently เขียน table
+
+- [x] **21.5 เปลี่ยน RowNormalizeHandler ให้ route ตาม pinned destination**
+  - ทำ: แยก load/compile/evaluate ออกจาก delivery orchestration; ให้ handler โหลด Destination Definition จาก pinned Config Version และเรียก Legacy adapter; ใส่ temporary feature flag สำหรับกลับ direct legacy pathระหว่าง rollout ของ seam
+  - เข้าใจ: branch-by-abstraction ต้องเปลี่ยน call site ก่อนเพิ่ม adapter ใหม่; ห้ามเลือก destination จาก active version หรือ percentage random routing
+  - ตรวจ: run characterization ทั้ง direct path และ adapter path แล้ว outputs, SQL effects, attempts, statuses และ errors เท่ากัน; config activate รุ่นใหม่ระหว่าง job รันไม่เปลี่ยน pinned behavior; rollback flag ใช้ได้โดยไม่ migrate data กลับ
+
+- [x] **21.6 ปรับ Mapping Config API contracts แบบ backward-compatible**
+  - ทำ: เพิ่ม Destination Definition ใน create/get/clone/validate/activate responses; request เก่าที่ไม่มี destination และมี Normalized Table ถูก normalize เป็น `legacyTable`; ApiContract draft อนุญาต `normalizedTableId = null` แต่ creation ยังถูก feature flag ปิดจน Phase 23 พร้อม
+  - เข้าใจ: compatibility normalization อยู่ที่ contract boundary จุดเดียว ไม่กระจาย null/default checks; active version immutable และเปลี่ยน destination ต้องสร้าง version ใหม่
+  - ตรวจ: old request fixtures round-trip เป็น LegacyTable; API reject destination ที่ใส่ทั้ง normalized table และ contract fields; clone รักษา destination; response แสดง destination ของทุก version ชัดเจน
+
+- [x] **21.7 ปรับหน้า Config ให้รู้จัก destination โดยยังเปิดใช้ LegacyTable เท่านั้น**
+  - ทำ: เพิ่ม Destination step/summary ใน production config page; แสดง `LegacyTable` เป็นค่าของ version เดิม; render `ApiContract` option หลัง feature flag แต่ disable พร้อมข้อความ dependency ที่ยังไม่พร้อม; ลบ assumption ว่า Normalized Table มีเสมอจาก TypeScript contracts/components
+  - เข้าใจ: UI migration ต้องไม่สร้าง state model แยกจาก backend discriminated union; prototype ใช้ดูแนวคิดได้แต่ห้าม import production logic จาก prototype
+  - ตรวจ: list/details/clone/activate เดิมยังทำงาน; null Normalized Table ไม่ทำหน้า crash; validation path ของ destination map กลับ control ถูก; lint/build ผ่าน
+
+- [x] **21.8 Gate A — legacy parity และ handoff**
+  - ทำ: reset/configure demo, รัน CSV/fixed-width, reprocess และ web flow ผ่าน adapter path; เปรียบเทียบ baseline metrics; อัปเดต dependency/risk register และบันทึก rollback command/flag
+  - เข้าใจ: Phase 22 เริ่มได้เมื่อ seam ไม่ทำให้ legacy behavior เปลี่ยนเท่านั้น
+  - ตรวจ: regression suite ทั้งหมดผ่าน, critical-path coverage ถึงเกณฑ์, row/status/SQL parity 100%, ไม่มี Delivery Job/API call และ Gate A ได้รับ sign-off
+
+---
+
+## Phase 22 — Input `.txt`, `.csv`, `.xlsx`, `.xls`
+
+- [x] **22.0 ตรึง Excel/File semantics และสร้าง minimal fixtures**
+  - ทำ: สร้าง fixtures `.xlsx`/`.xls` ขนาดเล็กที่มีหลาย sheets, sheet ไทย, header row ไม่ใช่แถวแรก, data-start row แยกจาก header, blank rows, mixed cell types, date/time/number/boolean/formula/error/merged cell; ตรึงว่า Source Table เก็บ text representation อะไรและ row/physical row นับอย่างไร
+  - เข้าใจ: Excel อยู่ใน File-to-Source Input Layout ก่อน Transformation; transformation operator ไม่ควรรู้ cell/workbook; formula v1 อ่าน cached value หรือ reject ตาม policy ที่ตรึง ห้าม execute formula
+  - ตรวจ: coverage matrix ระบุ expected Source values/row numbers ทุก case; มี corrupted/password-protected/wrong extension/unknown sheet/header duplicate/missing required column fixtures และ stable error codes
+
+- [x] **22.1 เลือกและอนุมัติ workbook reader dependency**
+  - ทำ: ประเมิน .NET library ที่อ่านทั้ง Open XML `.xlsx` และ binary `.xls` แบบ streaming/read-only; ตรวจ license, maintenance, security, memory behavior และ code-pages requirement; ขออนุมัติก่อนเพิ่ม package และ pin version ใน project
+  - เข้าใจ: package choice เป็น implementation dependency ไม่ใช่ domain interface; Input Record Module ต้องซ่อน library-specific workbook/cell types
+  - ตรวจ: spike อ่าน golden `.xlsx`/`.xls` ได้เหมือนกัน, ไม่ evaluate macro/formula, dispose stream ถูก และ memory limit ผ่าน fixture ที่กำหนด; บันทึกเหตุผลเลือก/ไม่เลือกไว้ในแผนหรือ ADR
+
+- [x] **22.2 เพิ่ม accepted extensions และ Excel Input Layout contract**
+  - ทำ: เพิ่ม `acceptedExtensions` ใน Config Version; เพิ่ม `ExcelInputLayout` discriminator ที่มี workbook kind/auto-detect policy, sheet selector, `headerRow`, `dataStartRow`, fields `inputHeader → sourceColumn` และ blank-row policy; compiler ตรวจ extension/layout compatibility และ Source schema
+  - เข้าใจ: `.txt` อาจใช้ delimited หรือ fixed-width, `.csv` ใช้ delimited, `.xlsx/.xls` ใช้ excel; extension เป็น intake filter แต่ reader ต้องตรวจ file signature จริง
+  - ตรวจ: serialization/canonical clone ครบทุก layout; reject duplicate/unknown extensions, sheet ว่าง, row < 1, `dataStartRow <= headerRow`, duplicate target/header และ extension-layout mismatch ด้วย exact diagnostics
+
+- [x] **22.3 เพิ่ม Excel reader หลัง Input Record Module Interface เดิม**
+  - ทำ: implement internal workbook adapter; เลือก sheet, อ่าน header/data rows ตาม compiled layout, map cells เป็น raw Source strings ตาม invariant policy, คืน import row number + worksheet row number และหยุดทั้งไฟล์เมื่อ structural validation fail
+  - เข้าใจ: API preview และ Worker ต้องใช้ implementation เดียวกัน; reader ไม่รู้ File Job, database, archive หรือ destination
+  - ตรวจ: `.xlsx`/`.xls` golden fixtures ให้ Source rows เท่ากัน; blank/formula/date/time/number/boolean/error cases ตรง policy; file signature mismatch, encrypted/corrupt workbook และ limits คืน stable code โดยไม่ leak library exception
+
+- [x] **22.4 เชื่อม accepted extensions เข้ากับ Watcher และ File Intake**
+  - ทำ: เปลี่ยน watcher จาก extension hard-code เป็น union ของ accepted extensions จาก active Config Versions; normalize case/dot; ตรวจ folder ownership/ambiguity; File Job pin extension/layout/version ก่อน publish import message
+  - เข้าใจ: watcher เพียงเลือก candidate; Input Module ยังตรวจ signature/content authoritative และ active-version change ห้ามเปลี่ยน job ที่ intake แล้ว
+  - ตรวจ: `.TXT/.CSV/.XLSX/.XLS` เข้า config ที่ถูกต้อง; unsupported/ambiguous file ไม่สร้าง wrong job; activate version ใหม่มีผลเฉพาะ file ใหม่; duplicate-file policy เดิมผ่าน
+
+- [x] **22.5 เชื่อม Excel reader เข้า FileImportHandler และ Source persistence**
+  - ทำ: pre-scan workbook ทั้ง structural/limits ก่อนเขียน Source row แรก; เขียนเฉพาะ data rows พร้อม worksheet row metadata; สร้าง Row Jobs/outbox เหมือน text; raw file snapshot/audit/archive/retry ใช้ lifecycle เดิม
+  - เข้าใจ: `ApiContract` และ `LegacyTable` ใช้ Source persistence เดียวกัน; input failure ต้องไม่มี partial Source/Row Job/outbox
+  - ตรวจ: สี่ extensions import สำเร็จ; sheet/header/data-start เลือกได้; invalid workbook ทุก case ได้ `ImportFailed` และ zero partial side effects; retry snapshot deterministic
+
+- [x] **22.6 เพิ่ม binary preview endpoint พร้อม limits**
+  - ทำ: เพิ่ม multipart `preview-file` สำหรับ `.xlsx/.xls` และอนุญาต text filesเพื่อใช้ endpoint เดียวได้ภายหลัง; stream เข้า Input Module โดยไม่ persist; กำหนด request/file/worksheet-row/column/cell-length/time limits, filename display-only และ content sniffing
+  - เข้าใจ: binary Excel ส่งผ่าน JSON text contract เดิมไม่ได้; preview เป็น side-effect-free และ server เป็น authoritative parser/limit checker
+  - ตรวจ: valid preview คืน sheet catalog, selected sheet, header, Source rows และ diagnostics; oversized/corrupt/wrong signature/too-many-row cases reject ไม่ truncate; DB/file-system/job counts ไม่เปลี่ยนและ payload content ไม่ถูก log
+
+- [x] **22.7 เพิ่ม Excel controls ใน Input Layout editor**
+  - ทำ: เพิ่ม format selector, file picker, sheet selector จาก preview, header row, data-start row, blank-row policy และ field mapping grid; แสดง workbook/worksheet row numbers; text layout controls เดิมไม่เปลี่ยน
+  - เข้าใจ: browser ไม่ parse Excel เป็น source of truth; file ใช้ preview เท่านั้น ส่วน saved Config Version เก็บ layout ไม่เก็บ sample
+  - ตรวจ: ผู้ใช้เลือก sheet/header/data-start แล้ว preview `.xlsx/.xls` ได้; validation map exact control; switching layout ไม่ทำ stale fields รั่ว; browser/API error state, lint และ build ผ่าน
+
+- [x] **22.8 Gate B — File-to-Source end-to-end**
+  - ทำ: สร้าง Config Versions อย่างน้อยหนึ่งต่อ layout, activate, drop files จริง, รัน Worker และตรวจ Source/audit/reprocess; ทดสอบ rollback ด้วย activate version เดิมที่ไม่รับ Excel
+  - เข้าใจ: Phase นี้จบที่ Source + transformation legacy path ยังไม่ส่ง partner API
+  - ตรวจ: `.txt/.csv/.xlsx/.xls` ผ่าน expected matrices; invalid input ไม่มี partial write; legacy normalized outputs ยัง parity; metrics/limits documented และ Gate B sign-off
+
+---
+
+## Phase 23 — Contract Schema, Nested Mapping และหน้า Config
+
+- [x] **23.0 ตรึง supported JSON Schema subset และ contract fixtures**
+  - ทำ: สร้าง contract fixtures อย่างน้อย PA MTLS illustrative profile และอีกหนึ่ง profile ที่ใช้ envelope paths ต่างกัน; ครอบ string/integer/number/boolean/date/time/object/array, required/nullable, local `$ref`, constraints, fixed index, wildcard array group และ `additionalProperties`; สร้าง negative fixtures สำหรับ external/recursive ref และ ambiguous union
+  - เข้าใจ: PA MTLS ใช้พิสูจน์ coverage ไม่ใช่ global schema; path/type/required จริงมาจาก snapshot
+  - ตรวจ: fixture-to-requirement matrix ครบ R3/R4/R26–R31 และ PAY-001–PAY-008; profile ที่สองไม่ใช้ชื่อ `proposal`, `fileJobId` หรือ `beneficiaries` เหมือน profileแรกทั้งหมด
+
+- [x] **23.1 สร้าง server-owned API Destination Profile catalog**
+  - ทำ: เพิ่ม typed configuration/persistence สำหรับ logical profile ID, schema/delivery path templates, HTTP method, allowed headers, auth/secret reference, timeout, supported contracts และ payload bindings; expose read-only safe metadata ให้ browser
+  - เข้าใจ: browser เลือก logical ID เท่านั้น; base URL, credential และ secret value ไม่อยู่ Mapping Config JSON/response/log
+  - ตรวจ: invalid URL scheme/host/path template/header/auth reference ถูก reject ตอน startup/admin load; API response ไม่เผย secret/base URL ที่ไม่ควรเห็น; disabled profile สร้าง version ใหม่ไม่ได้
+
+- [x] **23.2 สร้าง Contract Registry Module**
+  - ทำ: implement Interface `ResolveAsync(profileId, contractReference)` ที่ authenticate/fetch schema, enforce size/timeout/content type, parse supported subset, resolve local refs, canonicalize, hash SHA-256 และคืน snapshot + typed path catalog; ใช้ fake adapter ใน tests
+  - เข้าใจ: Interface ซ่อน HTTP/auth/canonicalization; runtime Row Job/Delivery Worker ห้ามเรียก Module นี้
+  - ตรวจ: same logical schema ต่าง whitespace/property order ได้ canonical hash เดียวกัน; schema drift hash ต่าง; timeout/auth/invalid JSON/unsupported feature คืน stable diagnostics และไม่ persist partial version
+
+- [x] **23.3 Persist immutable Contract Snapshot และ Payload Binding Snapshot**
+  - ทำ: ตอน Create ApiContract Version ให้ server resolve schema และ profile bindings, validate binding path/type, แล้ว persist contract reference, canonical schema, hash, fetched-at, logical profile ID และ bindings ใน transaction เดียวกับ version; drift refresh ใช้เฉพาะ draft
+  - เข้าใจ: client-provided hash/snapshot เป็น display input ที่เชื่อถือไม่ได้; used version ห้าม update/delete snapshot
+  - ตรวจ: create failure ไม่ทิ้ง version; registry เปลี่ยนหลัง create แล้ว runtime/preview version เดิมยังใช้ old bytes/hash; clone เลือกชัดว่าจะ pin snapshot เดิมหรือ resolve ใหม่ตาม action และ history แสดงผลต่าง
+
+- [x] **23.4 เพิ่ม Contract Snapshot adapter ให้ Target Schema Module**
+  - ทำ: compile JSON Schema เป็น immutable TargetNode tree/path tokens/path catalog; แยก leaf assignable กับ object/array containers; รองรับ local refs, constraints, required/nullable/item schema; cache ตาม schema hash
+  - เข้าใจ: Transformation compiler ใช้ TargetSchema เดียวกันทั้ง flat legacy และ nested contract โดยไม่รู้ source ของ schema
+  - ตรวจ: path catalog/type tree ตรง fixtures; unknown/container/parent-child/duplicate path คืน exact diagnostics; second profile compile โดยไม่แก้ core Module
+
+- [x] **23.5 เพิ่ม Transformation Program language v2 และ compatibility v1**
+  - ทำ: เพิ่ม `targetPath` และ target value type `Time`; v1 LegacyTable ยังใช้ normalized column semantics; Config Version pin language version; reuse value/boolean expressions, sourceWhen, emitWhen, CASE, transform, lookup และ operators เดิม
+  - เข้าใจ: ความ nested อยู่ที่ target addressing/assembler ไม่ใช่ operator ใหม่; active v1 program ห้าม auto-rewrite
+  - ตรวจ: v1 golden suite ผ่าน unchanged; v2 reject path absent/type incompatible/duplicate/parent-child conflict; serialization order/discriminator round-tripผ่าน PostgreSQL jsonb
+
+- [x] **23.6 สร้าง Document Assembler สำหรับ object และ fixed-index array**
+  - ทำ: parse target paths เป็น immutable tokens ตอน compile; evaluate leaf assignments แล้วสร้าง intermediate object/array; รองรับ `proposal.insured.fullName` และ contiguous `[0]`, `[1]`; omit optional empty container และสร้าง required empty arrayตาม schema policy
+  - เข้าใจ: caller map เฉพาะ leaf; assembler เป็น pure implementation ภายใน Transformation Module และยังไม่ส่ง HTTP
+  - ตรวจ: three-level object, required/optional/null, fixed indices, array gap, scalar/container conflict, deterministic JSON ordering/hash และ error paths ผ่าน golden tests
+
+- [x] **23.7 เพิ่ม Array Group semantics R29–R31**
+  - ทำ: เพิ่ม array path, sequence path, empty-item policy, items/source slots และ relative item target paths; evaluate business fields, skip เมื่อทั้งหมด null/blank/whitespace/`-`, retain `0`/`false`, inject source slot เป็น seq แล้ว compact emitted array
+  - เข้าใจ: wildcard `[]` ใช้ใน Array Group เท่านั้น; synthetic seq ไม่นับ empty; direct fixed-index กับ group ห้ามเขียน array เดียวกัน
+  - ตรวจ: `cBenf_1/cRelate_1` และ `_2` ครบ, slot 1 ถูก skip แต่ emitted item แรกมี `seq:2`, partially filled item, required empty array, duplicate group/direct conflict และ nested item path ผ่าน
+
+- [x] **23.8 สร้าง Payload Binding Module สำหรับ System-bound Paths**
+  - ทำ: compile server-owned bindings จาก runtime value source เช่น ContractReference/FileJobId/SourceRowId/SourceRowNumber/ConfigVersionReference/OutputKey ไป Contract Path; เติมค่าหลัง business mapping; ตรวจ conflict/type/required และ final schema validation; คืน immutable Delivery Payload
+  - เข้าใจ: field/path ของ PA MTLS ห้าม hard-code; Module มี Interface เดียวที่ซ่อน insertion/conversion/final validation และไม่มี HTTP/SQL side effect
+  - ตรวจ: PA MTLS illustrative payload เติม envelope ได้; profile ที่สอง bind runtime values ไป path อื่นโดยไม่แก้ code; system/mapped conflict, missing required binding และ invalid conversion คืน exact diagnostics
+
+- [x] **23.9 ขยาย validate/preview/capabilities API สำหรับ ApiContract**
+  - ทำ: validate draft ด้วย snapshot/path catalog/TargetSchema/Transformation v2/Array Groups/bindings; preview คืน Input → Source → Mapped Document → Delivery Payload/Request summary → Diagnostics; ไม่สร้าง Delivery Jobและไม่ call endpoint
+  - เข้าใจ: preview ใช้ schema/profile safe metadata แต่ credential/secret/raw internal URL ไม่ออก response; example idempotency key ต้องระบุว่า preview เท่านั้น
+  - ตรวจ: preview outputs `0..N`, skipped array items/reasons, system-bound values และ hash/reference ถูกต้อง; DB/outbox/HTTP side effects เป็นศูนย์; malformed browser path ถูก server rejectแม้ UI ไม่เปิดให้เลือก
+
+- [x] **23.10 ทำหน้า Destination และ Contract Schema flow**
+  - ทำ: เปิด `ApiContract` option หลัง feature flag; เลือก profile/contract/version, resolve schema preview, แสดง hash/fetched-at/drift; เมื่อเลือก LegacyTable แสดง Normalized Table เดิม; form state เป็น discriminated unionและ clear fields ของอีก destination
+  - เข้าใจ: schema resolve ตอน draft เป็น preview ส่วน Create Version server resolve/snapshot authoritative อีกครั้ง; destination เปลี่ยนต้องเป็น version ใหม่
+  - ตรวจ: ไม่มี Normalized Table/create table control ใน API mode; ไม่มี raw URL/header/credential; loading/drift/error/disabled-profile states ครบ; clone/history แสดง destination ถูก
+
+- [x] **23.11 สร้าง Contract Path browser และ scalar mapping editor**
+  - ทำ: แสดง searchable tree พร้อม type/required/constraints/description; object/array expand ได้แต่ assign ตรงไม่ได้; System-bound leaves lock พร้อม runtime source; Mapped leavesเลือก expression editor เดิม; diagnostics map path กลับ control
+  - เข้าใจ: path list มาจาก version/draft catalog ไม่ประกอบเองจากชื่อ; browser และ Worker ใช้ compiler contract เดียวกัน
+  - ตรวจ: nested paths เลือกได้, system path เลือกไม่ได้, required missing/type mismatch/unknown path ชี้ control ถูก; LegacyTable editor ยังแสดง flat columnsและ v1 config แก้/clone ได้
+
+- [x] **23.12 สร้าง Array Group editor**
+  - ทำ: เลือก target array, sequence integer leaf, empty policy; เพิ่ม/reorder source slotsและ item fields; item target ใช้ relative path; แสดง derived `slot → seq`; block fixed-index/group conflict
+  - เข้าใจ: UI สร้าง AST เดียวกับ backend ไม่มี JSON-specific hidden payload; `seq` เป็น system-derivedภายใน group ไม่ใช่ manual expression
+  - ตรวจ: สร้าง MTLS beneficiary slots 1–2 ผ่าน UI; blank/`-` preview แสดง skipped reason; `0`/`false` ไม่ถูก skip; errors หลัง reorder/remove ยัง map index/control ถูก
+
+- [x] **23.13 เพิ่ม Delivery Preview, version compare และ frontend acceptance**
+  - ทำ: เพิ่ม tabs Input/Source/Mapped/Delivery/Diagnostics; แสดง endpoint profile/method/pathแบบ safe, headers ที่ไม่ secret, schema hash, idempotency example และ JSON read-only; compare destination/reference/hash/paths/groups/bindings; ห้ามมี send buttonใน Phase นี้
+  - เข้าใจ: design-time จบก่อน runtime side effect; ผู้ใช้ตรวจ payload ทุก branch ได้โดยไม่ยิง partner
+  - ตรวจ: PA MTLS และ second profile config/preview ผ่าน UI; JSON ตรง golden snapshot; preview ไม่เพิ่ม rows/jobsและไม่ network callออก partner; lint/build/E2E ผ่าน
+
+- [x] **23.14 Gate C — contract design-time sign-off**
+  - ทำ: รัน schema drift, nested/object/array, payload binding, preview security และ legacy parity suites; ทบทวน unsupported schema subsetกับ contract owner; บันทึก feature flags/rollback
+  - เข้าใจ: Phase 24 เริ่มได้เมื่อ final Delivery Payload deterministicและผ่าน contract validationโดยยังไม่มี external delivery
+  - ตรวจ: requirements R1–R4/R26–R31/PAY trace ไป test ได้; two-profile portabilityผ่าน; secrets/PIIไม่อยู่ logs; legacy suite green; Gate C sign-off
+
+---
+
+## Phase 24 — API Delivery, Retry, Reprocess และ Strangler Rollout
+
+- [x] **24.0 ปิด Required Decisions ก่อนทำ side effect**
+  - ทำ: ยืนยัน per profile เรื่อง auth, idempotency header/key/retention, timeout, retry/backoff, success response, correlation ID, reprocess หลัง Delivered, payload encryption/retention, identifier formats, `extras` policy, SLA และ risk thresholds; สร้าง stub contract fixtures
+  - เข้าใจ: PA MTLS example ไม่ตัดสิน policy เหล่านี้แทน partner contract; ไม่มี production send ก่อน decision owner sign-off
+  - ตรวจ: decision checklist มี owner/date/value ทุกข้อ; API stub จำลอง 2xx/400/408/429/5xx/timeout/commit-before-timeout/idempotency conflict ได้
+  - ผล: บันทึก owner sign-off และ rollback policy ที่ `docs/phase-24-delivery-decisions.md`; เพิ่ม stub scenario fixture ครบทุก outcome และ automated fixture/policy tests
+
+- [x] **24.1 เพิ่ม Delivery Job, Attempt และ outbox schema**
+  - ทำ: migration เพิ่ม `delivery_jobs` ที่เก็บ file/row/source/config/output identity, destination/contract/hash, payload JSON/bytes + hash, idempotency key, status/attempts/next-at/http/correlation/redacted error/timestamps; เพิ่ม delivery attempts audit และ outbox message; unique constraint ตาม approved identity
+  - เข้าใจ: retry โหลด persisted payload bytes/key เดิมและไม่ rebuild จาก Source/schema/config ล่าสุด; schema เป็น expand-only เพื่อ rollback workerได้
+  - ตรวจ: migrations/up/down policy ผ่าน test DB; duplicate schedulingไม่สร้าง jobซ้ำ; encrypted/retention fieldsเป็นไปตาม decision; indexesรองรับ pending queue/file-job lookup
+  - ผล: migration `0009_api_delivery.sql` เป็น expand-only เพิ่ม encrypted Delivery Job, attempt audit, resend audit, identity constraints, lease/queue/file indexes และ retention timestamps; rollback ใช้ worker/activation disable โดยไม่ drop audit ระหว่าง retention
+
+- [x] **24.2 Implement ApiContract scheduling adapter**
+  - ทำ: เพิ่ม second real adapter ที่รับ final Delivery Payload แล้วสร้าง Delivery Job + outbox ใน transaction ของ Row Job; ApiContract pathไม่เรียก NormalizedRowWriter/DDL; `Filtered`/zero outputไม่สร้าง delivery; invalid outputบันทึก row errors
+  - เข้าใจ: adapter นี้ schedule durable work ไม่ทำ HTTP ภายใน RowNormalize transaction; one output = one Delivery Job
+  - ตรวจ: one row two outputsสร้างสอง jobs/keys; Source Tableยังมี raw row; query/probeยืนยันไม่มี Normalized Table insert/update/delete; transaction crashไม่เกิด jobโดยไม่มี outboxหรือกลับกัน
+  - ผล: ApiContract adapter bind/validate pinned snapshot แล้ว encrypt payload และ insert job+outbox ใน Row Job transaction; integration test ยืนยัน two outputs, rollback atomic, duplicate no-op และไม่มี Normalized destination/write
+
+- [x] **24.3 เพิ่ม Delivery consumer/worker และ HTTP adapter**
+  - ทำ: เพิ่ม topic/message/dispatcher/consumer; resolve server-owned profile+secret, สร้าง requestจาก persisted payload, allowed headersและ idempotency key; ใช้ timeout/cancellation; redact logs; บันทึก response metadataโดยไม่เก็บ body default
+  - เข้าใจ: Delivery Worker ไม่ fetch schemaและไม่ re-evaluate transformation; HTTP/auth/retry classificationอยู่หลัง Destination adapter implementation
+  - ตรวจ: local stubได้รับหนึ่ง requestต่อ jobพร้อม exact bytes/header; secretไม่อยู่ DB/log; disabled profile pause/fail controlled; cancellation/disposal/connection reuseผ่าน tests
+  - ผล: เพิ่ม delivery consumer, reusable authenticated transport สำหรับ mTLS/OAuth2 client credentials, server-owned environment secret provider, exact-byte HTTP adapter, timeout/cancellation, correlation metadata และ body-free/redacted logging
+
+- [x] **24.4 ทำ retry classifier, lease และ idempotent state machine**
+  - ทำ: classify network/timeout/408/429/5xx เป็น retryableและ 4xxอื่น permanentตาม profile; bounded exponential backoff+jitter; atomic lease/attempt update; recover stale Delivering; preserve bytes/hash/keyทุก attempt
+  - เข้าใจ: timeoutหลัง partner commitเป็นเหตุผลที่ endpointต้องรองรับ idempotency; process crashต้องไม่ทำให้ stateสูญหายแม้อาจเกิด at-least-once call
+  - ตรวจ: failure injectionครบก่อน/หลัง send/response persistence; concurrent consumersส่ง jobเดียวตาม lease policy; retriesมี hash/keyเดิม; max attemptsไป terminal stateและไม่ busy-loop
+  - ผล: เพิ่ม atomic lease/stale recovery, persisted attempt audit, bounded backoff+jitter/Retry-After, due-job scheduler และ terminal max-attempt guard; integration test ยืนยัน 503→202 ใช้ payload/hash/keyเดิม และ commit-before-timeout ยัง retry ด้วย keyเดิม
+
+- [x] **24.5 เชื่อม Row/File Job status โดยไม่ปน transformation กับ delivery**
+  - ทำ: กำหนด transformation completionกับ delivery lifecycleแยก field/summary; ขยาย File Job responseให้แสดง Pending/Delivering/Delivered/RetryableFailed/PermanentFailed countsและ end-to-end status; Legacy responseยัง compatible
+  - เข้าใจ: Row transformationสำเร็จไม่ได้แปลว่า partnerรับแล้ว; status modelต้องไม่ทำให้ legacy consumerตีความผิด
+  - ตรวจ: status matrixสำหรับ zero/one/multiple outputsและ mixed outcomesตรง spec; polling API deterministic; old clientsยังอ่าน fieldsเดิมได้
+  - ผล: File Job response คง fields เดิมและเพิ่ม additive delivery counts/status/end-to-end status; transformation Row Job จบหลัง durable scheduling โดยไม่รอ partner HTTP
+
+- [x] **24.6 ทำ retry/reprocess/resend semantics**
+  - ทำ: retry Delivery Jobเดิมใช้ payload/keyเดิม; reprocess Source rowด้วย Config Versionใหม่สร้าง identityตาม approved policy; Delivered resendต้อง explicitและมี audit/authorization hook; pending jobsห้ามแก้ payload; Legacy reprocess `2→1→0`คงเดิม
+  - เข้าใจ: retry, reprocessและbusiness resendเป็นคนละ action; rollbackห้าม reroute pending API jobไป LegacyTableอัตโนมัติ
+  - ตรวจ: retry determinism, new-version reprocess, duplicate request, Delivered guardและauditผ่าน; source/config/schemaเปลี่ยนแล้ว retryเดิมยังส่ง bytesเดิม
+  - ผล: manual retry อนุญาตเฉพาะ RetryableFailed และไม่แก้ payload/key; Delivered retry ได้ 409; explicit resend ต้องผ่าน authorization hook/เหตุผลและสร้าง audited job/key ใหม่; Config Version ใหม่สร้าง identity ใหม่ ขณะที่ version เดิม dedupe
+
+- [x] **24.7 เพิ่ม Delivery status/retry UI**
+  - ทำ: ขยาย File Job detailsหรือสร้างหน้า delivery list; แสดง contract/config/output key, status, attempts, next attempt, HTTP status, correlation, redacted errorและ payload hash; retry buttonเฉพาะ policyอนุญาตพร้อม confirmation; ไม่แสดง secret/PII body default
+  - เข้าใจ: operation UIต้องแยก automatic retryจาก explicit reprocess/resend; APIเป็น authoritative permission/state check
+  - ตรวจ: mixed delivery states renderครบ; stale actionได้ 409พร้อม refresh; accessibility/loading/error states, lint/build/E2Eผ่าน; browser devtoolsไม่มี credential
+  - ผล: เพิ่ม `/delivery` operations UI, file-job selector, mixed status/attempt/next-at/HTTP/correlation/redacted error/hash และ policy-aware retry confirmation; stale 409 refresh จาก API authoritative state และ Playwright ยืนยันว่าไม่มี payload body/credential
+
+- [x] **24.8 เพิ่ม observability, alert และ kill switches**
+  - ทำ: metrics success/failure/status distribution, p50/p95/p99 latency, queue age, retry count, duplicate conflict, schema validation failureและ source-to-delivered durationแยก config/contract; alert thresholdsจาก 24.0; kill switch pause deliveryและ disable new ApiContract activation
+  - เข้าใจ: kill switchหยุด side effectแต่ไม่เปลี่ยน destinationของ pinned jobs; metric labelsต้องไม่ใช้ PII/high-cardinality IDs
+  - ตรวจ: dashboards/alertsจาก stub failuresทำงาน; pauseแล้วไม่มี outbound callแต่ jobsคง durable; resumeส่งต่อด้วย keyเดิม; runbookระบุ ownerและrollback trigger
+  - ผล: เพิ่ม SQL-backed operations snapshot/UI, status/success/failure/latency/queue/retry/conflict/schema/end-to-end metrics, approved threshold alerts และ audited database kill switches; schedulerหยุด dispatchและ queued consumerคืนงาน durableเมื่อ pause
+
+- [x] **24.9 Shadow validation กับ stub/sandbox**
+  - ทำ: เปิด scheduling/deliveryเฉพาะ test Mapping Configที่ชี้ non-mutating stub/sandbox; เปรียบเทียบ golden Delivery Payloadและ contract response; soak retry/crash/queue behavior
+  - เข้าใจ: ห้าม dual-send production proposalไป partnerจริงและ LegacyTableเพื่อเทียบ; shadow environmentต้องไม่มี business side effect
+  - ตรวจ: contract validation 100%, duplicate business recordsเป็นศูนย์, queue age/error/latencyอยู่thresholdและ security log scanผ่านก่อน canary
+  - ผล: เพิ่ม profile environment `Stub|Sandbox|Production`, rollout stage `Shadow` และ activation guardที่ห้าม Shadowชี้ Production; deterministic stub fixture/testsครอบคลุม outcomes, exact bytes/headers, retry identityและ no body/credential exposure
+
+- [x] **24.10 Canary ราย Mapping Config และ rollback rehearsal**
+  - ทำ: เลือก low-risk partner/config, สร้าง ApiContract versionและ activateสำหรับ filesใหม่; monitorหนึ่ง release cycle; ซ้อม pause pending jobs, activate previous LegacyTable versionสำหรับ filesใหม่และ compensation pathสำหรับ delivered side effect
+  - เข้าใจ: canaryเป็น config-by-config ไม่ใช่สุ่มเปอร์เซ็นต์ภายใน config; already pinned API jobsยังคง APIหรือ pauseตาม runbook
+  - ตรวจ: rollback timeอยู่ SLA, filesใหม่หลัง rollbackใช้ LegacyTable, pending API jobsไม่ถูก reroute, Delivered side effectมี audit/compensation ownerและ metricsผ่าน gate
+  - ผล: เพิ่ม audited config-by-config rollout (`Shadow/Canary/Expanded`), activation gate และ configure script; integration rehearsalยืนยัน rollbackต่ำกว่า local SLA, jobเดิมยัง pin APIและ fileใหม่ pin Legacy version โดย runbookระบุ compensation owner
+
+- [x] **24.11 Full end-to-end acceptance**
+  - ทำ: ทดสอบ `.txt/.csv/.xlsx/.xls` → Source → nested mapping/array/system bindings → one API request per output พร้อม retry/reprocess; ทดสอบ LegacyTableคู่ขนานคนละ config; รวม failure injectionและschema drift
+  - เข้าใจ: acceptanceวัดทั้งสอง destinationและ immutable version behavior ไม่ใช่เพียง happy-path JSON shape
+  - ตรวจ: requirementsทุกข้อ traceถึง automated test; no Normalized writesใน API mode; raw Source auditครบ; retry bytes/keyเดิม; second contract profileผ่านโดยไม่แก้ core; full backend/web regression green
+  - ผล: Gate D matrix trace inputสี่ชนิด, nested/array/system binding, API scheduling/send/retry/reprocess, no Normalized write, second profile, Legacy parity, rollout/rollbackและ UI securityไปยัง automated suites; full regression commandsอยู่ใน acceptance/runbook
+
+- [x] **24.12 Documentation, operations และ commit handoff**
+  - ทำ: อัปเดต CONTEXT, README, current workflow, OpenAPI/examples, configure/reset scripts, secret/profile setup, migration/rollback/retention/runbooksและ learning plan; ระบุ prototype/superseded specชัด; สรุป files/migrations/tests/known limits
+  - เข้าใจ: `LegacyTable` retireได้ภายหลังเมื่อทุก partnerผ่านอย่างน้อยหนึ่ง release cycleและไม่มี pending retention obligations; Phase นี้ยังไม่ลบ adapter
+  - ตรวจ: คนใหม่ทำ local stub flowและ rollbackตาม READMEได้; linksไม่เสีย; ไม่มี secret/sample PII; all checksผ่าน; ผู้ใช้เป็นผู้สั่ง commitแยกต่างหากและ AI agentไม่สร้าง commitเอง
+  - ผล: อัปเดต README/CONTEXT/current workflow/learning plan, เพิ่ม operations runbook, acceptance matrix, Gate D handoff, rollout script, profile/secret/OpenAPI guidance และ hourly payload/audit retention cleanup; ระบุ prototype/superseded spec/known limitsชัดและไม่สร้าง commit
+
+### Definition of Done ของ Feature ใหม่
+
+- Config Versionหนึ่งรุ่นเลือก `LegacyTable` หรือ `ApiContract`ได้แบบ immutable
+- Config/versionเก่าทั้งหมดยังทำงานเป็น LegacyTableและ golden parityผ่าน
+- `.txt`, `.csv`, `.xlsx`, `.xls` เข้า Source Tableด้วย versioned Input Layoutและไม่มี partial importเมื่อ fail
+- ApiContract versionเก็บ canonical Contract Snapshot/hashและ Payload Binding Snapshot; runtimeไม่ fetch schema
+- UI map Source/expressionไป nested Contract Path, fixed indexและ Array Groupได้ โดย System-bound Pathเป็น read-only
+- array empty/seq semanticsตรง R29–R31 และ profileที่สองพิสูจน์ว่า coreไม่ hard-code PA MTLS
+- API modeเก็บ raw Source แต่ไม่ scaffoldหรือเขียน Normalized Table
+- mapped outputแต่ละรายการมี durable Delivery Job, request, retryและidempotencyแยกกัน
+- previewไม่มี DB/file/API side effect; logs/responseไม่เผย credentialหรือ payload PIIโดย default
+- metrics, kill switch, canary, rollbackและrunbookผ่านการซ้อม
+- backend tests, integration/E2E, formatter, web lint/buildและsecurity checksผ่านก่อน activate production profile
+
+---
+
+## ภาคต่อ Feature ใหม่ Phase 25 — Variant C และ JSON ทั้งไฟล์
+
+### Product decision ที่ยืนยันแล้ว
+
+- เลือก Prototype C (`Mapping workbench`) เป็นทิศทางของ production UI แต่ต้องเขียน production implementation จาก Module และ Interface จริง ห้าม promote throwaway prototype ตรง ๆ
+- `Whole file · Batch` หมายถึง destination ใหม่ `JsonFile`: รวม mapped outputs ของหนึ่ง File Job เป็น JSON array หนึ่งไฟล์
+- `One record at a time` หมายถึง `ApiContract` เดิม: หนึ่ง mapped output เป็นหนึ่ง Delivery Job และหนึ่ง HTTP request
+- Production config editor ยังต้องรองรับ `LegacyTable` เป็นตัวเลือกที่สาม แม้ Prototype C เน้นเปรียบเทียบ JSON file กับ API
+- Config Version หนึ่งรุ่นเลือก destination ได้หนึ่งชนิดแบบ immutable: `LegacyTable`, `ApiContract` หรือ `JsonFile`
+- UI ใช้คำว่า Delivery mode เพื่อให้ผู้ใช้เข้าใจง่าย แต่ persisted model ใช้ discriminated union `destination.kind`; ไม่เพิ่ม `deliveryMode` แยกอีก field เพราะจะสร้าง combination ที่ไม่มีความหมาย เช่น `jsonFile + perRecord`
+- Config Version เดิมไม่ถูก rewrite: destination ที่หายไปยัง normalize เป็น `LegacyTable`, `apiContract` เดิมยังส่งทีละ mapped output และ `legacyTable` เดิมยัง reconcile Normalized Table เหมือนเดิม
+- การเลือก `JsonFile` ต้องเกิดจากการสร้างหรือ clone เป็น Config Version ใหม่เท่านั้น ห้ามเปลี่ยน destination ของ File Job หรือ Config Version ที่ pin แล้ว
+- Phase นี้เพิ่ม destination ทางเลือก ไม่ทำ dual-delivery; mapped output ชุดเดียวต้องไม่ถูกส่งทั้งไฟล์, API และ Legacy Table พร้อมกัน
+
+### Config model ที่เลือก
+
+```json
+{
+  "destination": {
+    "kind": "jsonFile",
+    "fileDestinationProfileId": "local-json-export",
+    "contract": {
+      "id": "customer-export",
+      "version": "1",
+      "reference": "customer-export/1",
+      "schemaHash": "<sha256>"
+    },
+    "relativeFolder": "customers",
+    "fileNameTemplate": "{sourceBaseName}.{fileJobId}.json",
+    "formatting": "compact"
+  }
+}
+```
+
+`fileDestinationProfileId` อ้าง server-owned profile ที่กำหนด Output Root, temporary publish directory, quota และ retention; browser ส่งได้เฉพาะ relative folder กับ filename template ที่ผ่าน allowlist ส่วน v1 ตรึง document root เป็น array, encoding เป็น UTF-8 without BOM และ row error policy เป็น fail whole file จึงแสดงเป็น read-only summary ใน UI แทนการเพิ่ม field ที่ยังไม่มีทางเลือกจริง
+
+`JsonFile` reuse Contract Snapshot, Target Schema, nested path mapping, Array Group, Document Assembler และ Payload Binding ที่ pin ใน Config Version เดียวกับ `ApiContract` แต่ไม่มี endpoint/auth และไม่สร้างหรือเขียน Normalized Table
+
+### Target flow และ seam
+
+```text
+Input file → Source rows → Transformation Module → 0..N mapped outputs
+                                                   │
+                                      Destination router by kind
+                         ┌─────────────────┼──────────────────┐
+                         ▼                 ▼                  ▼
+               LegacyTable Adapter  ApiContract Adapter  JsonFile Adapter
+               reconcile per row    schedule per output  stage per row
+                                                               │
+                                                all latest Row Jobs terminal
+                                                               ▼
+                                                    JsonFile Finalizer
+                                              temp file → fsync → atomic rename
+```
+
+`JsonFile Adapter` เป็น Adapter ตัวที่สามหลัง Destination Module seam ไม่ใช่ branch ของ Transformation Module ความซับซ้อนเรื่อง ordering, staging, retry, atomic publish และ path safety ต้องอยู่หลัง Interface ของ adapter/finalizer เพื่อให้ caller ไม่ต้องรู้วิธีประกอบไฟล์
+
+### ขอบเขต Phase 25
+
+อยู่ในขอบเขต:
+
+- JSON array หนึ่งไฟล์ต่อหนึ่ง File Job โดยเรียง `rowNumber` แล้ว `outputOrdinal`
+- zero output สำเร็จเป็น `[]`; Source row หนึ่งแถวที่ emit หลาย branch เขียนหลาย object ตาม branch order
+- temporary result ที่รองรับ parallel Row Jobs, retry และ reprocess `2 → 1 → 0`
+- atomic publish, SHA-256, deterministic bytes, crash recovery และ status ระดับ File Job
+- typed Value Expressions `add` และ `concat` ที่ใช้ร่วมกันได้ทั้ง `LegacyTable`, `ApiContract` และ `JsonFile`
+- validate/preview แบบไม่มี DB/file/API side effect
+- Production Mapping workbench ตาม Variant C พร้อม destination selector และ live preview
+
+อยู่นอกขอบเขต:
+
+- HTTP batch request ที่ส่ง array ทั้งไฟล์ไป partner endpoint
+- JSON หนึ่งไฟล์ต่อ mapped output
+- dual-delivery หรือ fallback อัตโนมัติข้าม destination
+- raw absolute path, storage credential หรือ arbitrary filename expression จาก browser
+- object storage implementation จนกว่า Step 25.0 จะเลือกและทดสอบ Adapter แยกอย่างชัดเจน
+
+### Gate E และ rollback
+
+| Gate | ผ่านเมื่อ | Rollback |
+|---|---|---|
+| Gate E หลัง Phase 25 | existing config parity ผ่าน, JSON bytes/order/hash deterministic, invalid row ไม่ publish, retry ก่อน/หลัง rename ไม่สร้างไฟล์ซ้ำ, Variant C ใช้ API จริงและ E2E ครบสี่ input formats | ปิดการสร้าง/activate `JsonFile` version, pause JsonFile finalizer และ activate version เดิมสำหรับ File Jobs ใหม่; pinned JsonFile jobs คง destination เดิมหรือ pause ตาม runbook ห้าม reroute ไป API/LegacyTable |
+
+## Phase 25 — Implement Variant C และ `JsonFile` Destination
+
+- [x] **25.0 แก้ authoritative specification และปิด Required Decisions**
+  - ทำ: แก้ `spec/spec-design-contract-api-legacy-delivery.md` ให้เพิ่ม `JsonFile` เป็น destination ที่สามและบันทึกว่า decision ใหม่นี้ supersede ข้อความที่ตัด `JsonFile` ออกจาก scope; ใช้ `spec/spec-design-file-to-json-export.md` เฉพาะ requirement เรื่อง ordering/atomicity/recovery; ยืนยัน storage ชนิดจริง, Output Root/profile owner, file/row/byte limits, temp/final volume, retention/encryption, filename tokens, collision/reprocess policy, formatting, download authorization, cleanup SLA และ rollout owner
+  - เข้าใจ: การเลือก Variant C ยืนยัน interaction แต่ยังไม่ตอบ operational policy; implementation เริ่มได้เมื่อ contract ของไฟล์, ownership และ recovery semantics เป็นข้อยุติเดียวกัน
+  - ตรวจ: specification ไม่มีข้อความขัดกันเรื่องจำนวน destination; decision table มี owner/date/value ทุกข้อ; requirement ทุกข้อใน Phase 25 trace ไป acceptance ID ได้; review ยืนยันว่า `JsonFile` ไม่ใช่ HTTP batch และไม่ใช่ dual-send
+  - ผล: ยกระดับ authoritative specification เป็น v2.0/Accepted และรองรับ discriminated union สาม destination; ตรึงว่า `JsonFile` reuse Contract Snapshot/Target Schema/Document Assembler แต่ stage ต่อ row และ publish JSON array ระดับ File Job โดยไม่สร้าง API Delivery Job/Normalized write; ปิด filesystem profile, limits, same-volume atomic rename, retention/encryption, filename/collision/reprocess, formatting, no-download, cleanup SLA, rollout/rollback owner ครบวันที่ 2026-10-21; เพิ่ม JF/EXP requirements, acceptance IDs และ traceability ครบ Step 25.0–25.14 โดยยังเก็บ spec File-to-JSON เดิมเป็น historical ordering/atomicity/recovery reference เท่านั้น
+
+- [x] **25.1 ตรึง compatibility baseline ก่อนเพิ่ม destination**
+  - ทำ: เพิ่ม characterization fixtures สำหรับ config เก่าที่ไม่มี destination, explicit `legacyTable`, `apiContract`, clone/version activation, pinned File Job และ retry payload เดิม; เก็บ golden responses/DB effects ของทั้ง LegacyTable และ ApiContract
+  - เข้าใจ: default ของข้อมูลเก่าคือ behavior ที่มีอยู่จริง ไม่ใช่ค่าเริ่มต้นใน prototype; baseline นี้ป้องกัน migration หรือ router ใหม่เปลี่ยน destination เงียบ ๆ
+  - ตรวจ: fixtures เดิม round-trip โดยไม่ rewrite JSON; missing destination ยังเป็น LegacyTable; ApiContract หนึ่ง output ยังสร้างหนึ่ง Delivery Job/HTTP request; query ยืนยันจำนวน Normalized writes, delivery jobs และ outbox เท่า baseline
+  - ผล: เพิ่ม `Fixtures/Phase25/compatibility-baseline.golden.json` ตรึง request/response ของ missing destination, explicit `legacyTable`, `apiContract`, Legacy/API DB effects และ retry payload; เพิ่ม contract + PostgreSQL integration tests ที่ clone version ผ่าน public service, activate สลับรุ่น, intake File Job ก่อน/หลัง activation และยืนยัน pinned Config Version/JSON เดิม/outbox; ผูก LegacyTable และ ApiContract runtime tests กับ golden counts โดยยืนยันหนึ่ง Delivery Job/outbox ต่อ output, หนึ่ง HTTP request ต่อ attempt และ retry ใช้ payload bytes/idempotency เดิม ระหว่าง full regression พบและแก้ Dapper `timestamptz` mapping ของ operations/delivery status โดยคง `DateTimeOffset` response contract และแก้ success-rate denominator ให้ตรง golden behavior; `dotnet format --verify-no-changes` ผ่าน และ full backend/PostgreSQL integration ผ่าน 316/316 โดยบังคับไม่ให้ skip
+
+- [x] **25.2 เพิ่ม `JsonFileDestination` แบบ expand-only**
+  - ทำ: เพิ่ม derived type `JsonFileDestination` ใน `DestinationDefinition`, request/response/OpenAPI และ TypeScript union; เพิ่ม validator สำหรับ profile ID, Contract Reference, relative folder, filename template และ formatting; ทำ migration ขยาย destination kind check โดยไม่ update row เดิม และให้ `normalizedTableId`/`apiDestinationProfileId` เป็น null ตามชนิด destination
+  - เข้าใจ: persisted discriminated union เป็น source of truth ส่วนคำว่า Delivery mode เป็น presentation; Config Version เดิมจึงไม่ต้องมี field ใหม่และไม่มี default ที่เปลี่ยน behavior
+  - ตรวจ: serialize/deserialize ทั้งสามชนิดผ่าน; unknown/ผสม field ข้ามชนิดถูก reject ด้วย exact path; path traversal, absolute path, separator ที่ไม่อนุญาตและ token ไม่รู้จักถูก reject; migration up + application rollback compatibility ผ่าน test DB
+  - ผล: เพิ่ม `JsonFileDestination` พร้อม Contract Reference, logical File Destination Profile, relative folder, filename template และ `compact`/`indented` ใน .NET request/response, OpenAPI `oneOf` และ TypeScript union; validator ใช้ทั้ง raw/typed seam และปฏิเสธ unknown/mixed fields, unsafe Windows path/name, traversal/absolute path, separator, reserved/overlong name และ token นอก allowlist ด้วย exact path ก่อนถึง filesystem; migration `0011_json_file_destination.sql` ขยาย kind check โดยไม่ rewrite row เดิม และ PostgreSQL test ยืนยัน row token/JSON เดิมไม่เปลี่ยน, Legacy application flow ยังสร้าง/อ่าน version ได้ และ JsonFile row ใช้ `normalized_table_id`/`api_destination_profile_id` เป็น null; ตรึง expand-only guard ไม่ให้ create/activate JsonFile ผ่าน runtime ก่อน Step 25.3; full backend/PostgreSQL integration ผ่าน 341/341 โดยไม่ skip, web lint/build และ `dotnet format --verify-no-changes` ผ่าน
+
+- [x] **25.3 แยก Contract Snapshot/Target Schema ออกจาก HTTP transport**
+  - ทำ: reuse schema fetch/canonicalize/hash, Payload Binding Snapshot, Target Schema และ Document Assembler สำหรับ `JsonFile`; เพิ่ม server-owned File Destination Profile resolver โดยไม่บังคับ endpoint/auth; resolve และ pin snapshot ตอนสร้าง versionเหมือน ApiContract และไม่ fetch schemaตอน runtime
+  - เข้าใจ: JSON file กับ API ต่างกันที่ Destination Adapter ไม่ใช่ mapping language; contract-aware Module เดียวต้องประกอบ document เดียวกันได้ก่อนเลือก transport
+  - ตรวจ: contract fixture เดียวกันให้ mapped document เท่ากันแบบ parsed JSON ใน JsonFile/ApiContract; nested object, fixed index, Array Group, system binding และ second profile ผ่านโดยไม่ hard-code path; secret/output root ไม่อยู่ response หรือ browser state
+  - ผล: เพิ่ม transport-neutral contract profile และ server-owned File Destination Profile resolver; JsonFile resolve/pin Contract Snapshot, Target Schema และ Payload Binding ตอนสร้าง version โดยไม่ fetch schema ตอน runtime; Document Assembler parity ครอบคลุม nested object, fixed index, Array Group, system binding และ second profile พร้อมยืนยันว่า output root/encryption policy ไม่รั่วสู่ response/browser state
+
+- [x] **25.4 เพิ่ม typed Value Expressions `add` และ `concat` แบบ end-to-end**
+  - ทำ: เพิ่ม `AddExpression` (`kind: "add"`, `values[]`) และ `ConcatExpression` (`kind: "concat"`, `values[]`, `separator`) ใน polymorphic backend model, request/response/OpenAPI, TypeScript union และ capabilities; ขยาย compiler/type inference, evaluator, dependency/node/depth counting, diagnostics และ production `ValueExpressionEditor`; กำหนดอย่างน้อย 2 operandsและใช้ collection limitเดิม โดย `add` รับเฉพาะ Integer/Decimal, promoteผลเป็น Decimalเมื่อมี Decimalอย่างน้อยหนึ่ง operandและใช้ checked overflow ส่วน `concat` รับเฉพาะ Textและ separatorเป็น string literal
+  - เข้าใจ: ทั้งสอง expression อยู่ใน Transformation Moduleและทำงานก่อนเลือก Destination Adapter; v1 ใช้ null propagation—operandใดเป็น nullให้ผลเป็น null—เพื่อไม่แอบแทนค่าด้วย `0`/ข้อความว่าง ผู้ใช้ต้องใช้ `coalesce` เมื่อต้องการ default และต้องใช้ explicit `convert` ที่ compilerรองรับเมื่อต้องการเปลี่ยนชนิด
+  - ตรวจ: serialization reject unknown/missing/extra fields; compiler reject operandsน้อยกว่า 2, typeไม่ตรง, collection/depth/nodeเกิน limitพร้อม exact path `values[i]`; testsครอบ Integer+Integer, Integer+Decimal promotion, negative/zero, decimal/integer overflow, Thai/Unicode concat, empty/non-empty separator, nested expression, null propagationและ `coalesce`; evaluator/preview/runtimeให้ typed resultและ diagnosticเดียวกัน; capabilitiesซ่อน controlจาก clientเก่าที่ยังไม่รองรับ; config/versionเดิม round-tripและ evaluateเท่าเดิม
+  - ผล: เพิ่ม `AddExpression`/`ConcatExpression` ครบ polymorphic JSON และ OpenAPI, compiler inference/limits/dependencies, null-propagating evaluator พร้อม checked overflow diagnostics, capabilities/TypeScript union และ production editor ที่บังคับอย่างน้อย 2 operands; focused tests ครอบคลุม promotion, Unicode, separator, nested/null/coalesce/overflow และยืนยัน typed result ผ่าน preview กับ worker runtime โดย full regression เดิมยังผ่าน
+
+- [x] **25.5 ทำ Destination router ให้รองรับ Adapter ตัวที่สามโดยไม่เพิ่ม type branch กระจาย**
+  - ทำ: สร้าง registry/router หลัง Destination Module seam ที่เลือก adapter จาก `destination.kind`; ทำ transaction-aware row delivery Interface ให้ LegacyTable reconcile, ApiContract schedule และ JsonFile stage ผ่าน call site เดียว; ย้าย special-case `IsApiContract` ออกจาก `RowNormalizeHandler` เมื่อ characterization tests ป้องกัน behavior แล้ว
+  - เข้าใจ: caller ควรรู้เพียง compiled destination + Delivery Envelope; transport-specific transaction, persistence และ completion semantics อยู่หลัง Adapter เพื่อให้เพิ่ม destination แล้วไม่เพิ่ม `if` ในทุก caller
+  - ตรวจ: router มี adapter ครบทุก declared kindและ fail fastเมื่อ registration หาย/ซ้ำ; tests เรียก Interface เดียวกับ production caller; Legacy/API golden baseline จาก 25.1 ผ่าน byte/row/job parity; deletion test ยืนยันว่าถ้าลบ router complexity จะกลับไปกระจายใน caller
+  - ผล: เพิ่ม `IDestinationRouter`/registry ที่ตรวจ declared destination ทุกชนิดและ fail fast เมื่อ adapter หาย/ซ้ำ พร้อม transaction-aware `IDestinationAdapter` call เดียวสำหรับ compile/deliver; ย้าย Legacy reconcile และ API schedule ให้อยู่หลัง adapter, ลงทะเบียน JsonFile adapter slot สำหรับ staging ใน Step 25.7 และลบ `IDestinationModule`, `DeliveryAttemptResult`, `IsApiContract` กับ concrete-adapter dependency ออกจาก `RowNormalizeHandler`; router/architecture tests บังคับให้ production caller พึ่ง seam เดียว และ PostgreSQL full suite ผ่าน 366/366 โดยไม่ skip ครอบคลุม Legacy golden behavior, API byte/row/job/outbox parity, rollback และ idempotency
+
+- [x] **25.6 เพิ่ม JSON export persistence และ outbox แบบ expand-only**
+  - ทำ: เพิ่ม `json_export_jobs` สำหรับ identity/status/profile/temp/final path/object count/bytes/hash/lease/error/timestamps และ `json_export_items` สำหรับ file/config/source/row/output identity, output ordinal, canonical payload, hash และ retention; เพิ่ม unique constraints/indexes และ outbox message สำหรับ finalization
+  - เข้าใจ: Row Jobs ทำงาน parallel/retry จึงห้ามเขียน final file โดยตรง; durable staged items เป็นจุดรวมที่ทำให้ ordering, reconciliation และ crash recovery deterministic
+  - ตรวจ: duplicate stage เป็น idempotent; key รองรับหนึ่ง row หลาย outputs และ reprocess; query ตาม file/order ใช้ index; migration ไม่ lock/rewrite payload เดิมเกิน policy; encryption/retention/cleanup fields ตรง decision 25.0
+  - ผล: เพิ่ม expand-only migration `0012_json_export_persistence.sql` พร้อม `json_export_jobs` สำหรับ profile/revision/status/path/count/bytes/hash/lease/recovery/audit และ `json_export_items` สำหรับ row/output identity กับ AES-256-GCM ciphertext metadata; unique/composite foreign keys รองรับ idempotent upsert, หลาย outputs และ artifact revision ใหม่, finalization index เรียง `rowNumber/outputOrdinal/outputKey/id`, cleanup indexes รองรับ staged payload 30 วัน/final artifact 30 วัน/audit 365 วันและ legal hold ที่บังคับ reason/owner/until; เพิ่ม unique outbox topic `mapping.json-export-finalize`, message contract และ topic provisioning โดยไม่เริ่ม finalizer; PostgreSQL tests ยืนยัน no rewrite, upsert/revision/order/index/purge/encryption/legal-hold/outbox deduplication และ full suite ผ่าน 369/369 โดยไม่ skip
+
+- [x] **25.7 Implement `JsonFileDestinationAdapter` สำหรับ staging ต่อ row**
+  - ทำ: compile JsonFile settings/profile/snapshot; ใน transaction เดียวกับ Row Job ให้ upsert canonical mapped outputs, ลบ outputs เดิมที่หายเมื่อ reprocess, เก็บ `rowNumber/outputOrdinal/outputKey` และประเมิน race-safe ว่า latest Row Jobs ครบ terminal แล้วหรือยัง; สร้าง export job/outbox เพียงครั้งเดียวเมื่อพร้อม
+  - เข้าใจ: Adapter ยังไม่ publish file แต่ทำให้ row completion กับ staged results atomic; filtered/zero-output เป็นผลสำเร็จที่ยังมีส่วนต่อการตัดสินใจ finalize
+  - ตรวจ: crash ก่อน/หลัง commit ไม่เกิด completed row ที่ขาด stage หรือ stage orphan; parallel last rows สร้าง finalization jobเดียว; source row `2 → 1 → 0` reconcile ถูก; JsonFile pathไม่มี Normalized write, API Delivery Job หรือ outbound call
+  - ผล: `JsonFileDestinationAdapter` compile destination/schema/bindings และ stage canonical JSON ที่เข้ารหัส AES-256-GCM พร้อม hash/row/output identity ใน transaction เดียวกับ Row Job; upsert คง ciphertext เดิมเมื่อ payload ไม่เปลี่ยนและลบ stale outputs สำหรับ reprocess/filtered row; `JsonExportReadiness` lock ระดับ File Job ตรวจ latest Row Jobs กับ config snapshot และสร้าง export job/outbox แบบ once-only ทั้งจาก row completion และจุดเปลี่ยน import เป็น `Imported` จึงครอบ race ที่ rows เสร็จก่อน import; ไม่มี normalized write, API Delivery Job หรือ outbound call และ PostgreSQL tests ยืนยัน rollback atomicity, parallel last rows, `2 → 1 → 0`, delayed import readiness พร้อม full suite ผ่าน 373/373 โดยไม่ skip
+
+- [x] **25.8 Implement streaming `JsonFileFinalizer` และ atomic publish**
+  - ทำ: claim export jobด้วย lease; ตรวจ latest Row Job summary; stream `[` + itemsตาม `rowNumber/outputOrdinal` + `]` เป็น UTF-8 no BOM ไป temp file, คำนวณ SHA-256/byte/object countระหว่างเขียน, flushตาม durability policy และ atomic renameไป final path; mark Publishedพร้อม metadata
+  - เข้าใจ: finalizer เป็น Module ระดับ File Job แยกจาก row adapter; memory usageต้องขึ้นกับ buffer ไม่ใช่จำนวน outputs และ final pathต้องไม่ visibleก่อนเอกสารครบ
+  - ตรวจ: `[]`, one/many outputs, Thai Unicode, null/date/decimal/boolean, compact/indentedและไฟล์ใหญ่ผ่าน byte/hash tests; orderingคงที่เมื่อ Row Jobsจบสลับลำดับ; watcherเห็นเฉพาะ final fileที่ valid JSON; memory/performanceอยู่ใน limit 25.0
+  - ผล: เพิ่ม `JsonFileFinalizer` ที่ lock/claim งานด้วย lease และ recheck latest Row Jobs ก่อนอ่าน staged ciphertext แบบ sequential ตาม `rowNumber/outputOrdinal/outputKey/id`; decrypt/ตรวจ payload hash ทีละ object แล้ว stream JSON array ผ่าน UTF-8 no BOM writer โดย pin compact/indented และ LF ให้ byte deterministicทุก OS พร้อมคำนวณ SHA-256/byte/object countระหว่างเขียนและบังคับ 1 MiB/object, 320,000 objects, 256 MiB/artifact; `FileSystemJsonExportPublisher` จำกัด pathใต้ server-owned Output Root, reject reparse escape, ใช้ WriteThrough + durable flush และ create-no-overwrite atomic moveก่อน mark `Published`/retention metadata; เพิ่ม Kafka finalization consumer กับ Worker-owned file profile catalog; PostgreSQL testsยืนยัน `[]`, ordered one/many, Thai/null/date/decimal/boolean, exact compact/indented bytes/hash, large streaming artifact, active lease/parallel claim, latest-row recheck และ final pathไม่ visibleก่อน valid document โดย full suiteผ่าน 380/380 ไม่มี skip
+
+- [x] **25.9 ทำ failure, retry, reprocess และ crash-recovery state machine**
+  - ทำ: invalid/failed latest row mark export Blockedและไม่ publish; retry stale lease; reconcileกรณี crashก่อน rename, หลัง renameก่อน DB update และ final path collisionด้วย expected hash; กำหนด reprocess filename/revisionจาก 25.0 และห้าม overwrite successful artifactโดยไม่มี audit link
+  - เข้าใจ: retry export เดิมต้องใช้ staged canonical payload/config/profileเดิม ส่วน reprocessด้วย Config Versionใหม่เป็น artifact identityใหม่; rollbackห้ามเปลี่ยน destinationของ pinned job
+  - ตรวจ: failure injectionทุก transitionไม่สร้าง partial/duplicate final file; hashตรงจึง reconcileได้แต่ hashต่างต้องหยุดพร้อม diagnostic; Invalidหนึ่ง row blockทั้งไฟล์; retry/reprocess/collision testsยืนยัน auditและ retentionครบ
+  - ผล: finalizer block ทั้ง export เมื่อ latest Row Job มี `Invalid`/`Failed`, claim `RetryableFailed` และ stale `Finalizing` lease ได้อย่างปลอดภัย และมี recovery scheduler scan งานค้าง; publish ใช้ temp เดิมอย่าง atomic โดย retry ก่อน rename ไม่ทิ้ง partial file, crash หลัง rename reconcile จาก byte count + SHA-256 เมื่อ bytes ตรงกัน และ block ด้วย redacted diagnostic โดยไม่ overwrite เมื่อ final path มี bytes ต่างกัน; readiness สร้าง initial export identity แม้ทุก row invalid/ไม่มี output; reprocess allocate artifact revision แบบ monotonic ก่อนสร้าง Row Jobs, pin config/profile/path ใหม่, เชื่อม `previous_export_job_id` และคง retention/audit ของ artifact เดิม; เพิ่ม shared path resolver และ failure/recovery/reprocess integration tests โดย full suite ผ่าน 390/390 ไม่มี skip
+
+- [x] **25.10 ขยาย validate/preview/status API โดยไม่มี side effect**
+  - ทำ: เพิ่ม JsonFile capabilities/profile summaryใน create/get/clone/compare; preview คืน ordered final JSON representation, object count, estimated bytesและ diagnosticsโดยไม่ stage/write; ขยาย File Job responseแบบ additiveด้วย export status/path-safe display/object count/bytes/hash/published-at/block reason
+  - เข้าใจ: preview ใช้ compiler/assembler/serializerเดียวกับ runtimeแต่ใช้ in-memory adapter; transformation completion, API delivery status และ file export statusเป็นคนละ lifecycle
+  - ตรวจ: preview bytesเท่ากับ runtime serializerสำหรับ fixtureเดียวกัน; previewไม่เพิ่ม source/row/export/outboxและไม่แตะ filesystem; old clientsยังอ่าน responseเดิมได้; status matrix zero/valid/invalid/retry/published deterministic
+  - ผล: เพิ่ม JsonFile capabilities/limits และ safe profile summary โดยไม่เปิดเผย Output Root พร้อมแนบ summary แบบ additive ใน create/get/version data สำหรับ clone/compare; เปิด validate/preview ทั้ง JSON และ multipart ให้คืน ordered final JSON, relative display path, object count, estimated UTF-8 bytes และ diagnostics ผ่าน `JsonArtifactSerializer` เดียวกับ runtime โดย in-memory preview ไม่เพิ่ม source/row/export/outbox และไม่แตะ filesystem; ขยาย File Job response ด้วย latest export lifecycle/metadata แบบ nullable และซ่อน block reason นอกสถานะ `Blocked`; compatibility golden เดิมคงรูปเพราะ field ใหม่ที่ไม่มีค่าถูก omit, status matrix และ exact byte/hash parity ผ่าน รวม web lint/build และ PostgreSQL full suite 397/397 ไม่มี skip
+
+- [x] **25.11 Promote แนวคิด Variant C เข้าหน้า production config**
+  - ทำ: สร้าง production Mapping workbenchจาก real Input Layout, Transformation, Contract Path และ preview Modules; วาง destination selectorในแผง Deliveryตาม Prototype C โดยมี `Legacy Table`, `Whole file · JSON file` และ `One record at a time · API Contract`; แสดง controlเฉพาะชนิดที่เลือกและ read-only summaryสำหรับ root/encoding/error policy; create/cloneเป็น Config Versionใหม่เสมอ
+  - เข้าใจ: prototypeตอบตำแหน่งและ interactionเท่านั้น; production UIต้องใช้ validation, loading/error/accessibilityและ immutable version flowจริง โดย reuse editorเดิมแทน copy mock state/fixture
+  - ตรวจ: สลับ destinationแล้ว stale fieldsของชนิดก่อนหน้าถูก clearก่อน submit; clone versionเดิมไม่เปลี่ยน destinationจนผู้ใช้เลือกและสร้าง versionใหม่; live previewเปลี่ยน array/object/tableตามชนิด; keyboard/screen reader, responsive layout, lint/buildและ Playwright E2Eผ่าน
+  - ผล: เพิ่ม production `MappingWorkbench` ที่วาง Delivery selector แบบ Variant C เหนือ editor จริงและเลือกได้ `Legacy Table`, `Whole file · JSON file` หรือ `One record at a time · API Contract` โดยแสดงเฉพาะ controls ของชนิดปัจจุบันและล้าง state ของชนิดก่อนหน้า; reuse Input Layout/Transformation editor เดิมสำหรับ Legacy และ Contract Path editor เดิมสำหรับ API/JsonFile พร้อม file contract resolver และ read-only root/UTF-8/error-scope/path summary ที่ไม่เปิดเผย Output Root; เพิ่ม JSON final-array preview แบบไม่มี filesystem side effect, คง clone request จาก immutable version เดิมรวม accepted extensions และสร้างการแก้ไขเป็น Config Version ใหม่เท่านั้น; keyboard-accessible radio/tab semantics, responsive layout, lint, TypeScript, production build และ Playwright regression 6/6 ผ่าน ครอบคลุม stale-field submit, schema resolution, object/array preview และ clone destination parity
+
+- [x] **25.12 เพิ่ม export operations, security และ observability**
+  - ทำ: แสดง export status/history/pathแบบ relative/hash/count/size/เวลาและ retry actionตาม policy; เพิ่ม metrics queue age/finalize latency/bytes/objects/blocked/retry/hash conflict/cleanup failureแยก profile/configโดยไม่มี PII; เพิ่ม kill switchสำหรับ new JsonFile activationกับ finalizer dispatch และ authorizationสำหรับ downloadถ้ามีใน scope 25.0
+  - เข้าใจ: file payloadอาจมี PIIเท่ากับ API payload; path, logs, metricsและoperations UIต้องไม่กลายเป็นช่องทางอ่านข้อความหรือ filesystem topology
+  - ตรวจ: traversal/symlink/collision/quota/disk-full/permission/oversize testsผ่าน; logsและbrowserไม่มี absolute root, credentialหรือ payload body; pause/resumeรักษา staged dataและ identityเดิม; alert/runbookครอบ queue/disk/cleanup/hash conflict
+  - ผล: ขยาย `/delivery` และ JSON export API ให้แสดงเฉพาะ relative path/hash/count/bytes/timestamps/redacted error พร้อม retry ที่ API ตรวจ authoritative state และ audit operator/reason; เพิ่ม aggregate metrics แยก config/version/profileโดยไม่ส่ง config nameหรือ payload, alert queue/publication/blocked/hash conflict/cleanup failure และ runbookตอบสนอง queue/disk/permission/cleanup/hash conflict; เพิ่ม audited kill switches สำหรับ new JsonFile activation/finalizer โดย pause ก่อน claim และ resume ด้วย staged revision/path/hashเดิม; เพิ่ม secure publisher/cleanup ที่ป้องกัน traversal/reparse point, collision, quota/minimum disk, permission failure และ redact exception จาก logs/UI; ไม่มี download endpoint/buttonตาม v1 scope; local backend suite 404/404, focused security 8/8, Playwright 2/2, formatter, lint, TypeScript และ production buildผ่าน โดย PostgreSQL-gated assertions compileผ่านแต่ไม่ได้ executeในรอบนี้เพราะ environmentไม่มี integration connection/daemon
+
+- [x] **25.13 Full regression, E2E และ Gate E sign-off**
+  - ทำ: รัน `.txt/.csv/.xlsx/.xls` → Source → nested mapping/array/`add`/`concat` → JsonFileสำหรับ zero/one/many outputs รวม parallel/retry/reprocess/failure injection; รัน LegacyTable characterizationและ ApiContract exact-byte/idempotency suites; ทดสอบ create/clone/activate/rollbackผ่าน Variant C production UI
+  - เข้าใจ: acceptanceวัดสาม Destination Adapterกับ immutable Config Version ไม่ใช่ตรวจว่าไฟล์ JSON parseได้เพียงอย่างเดียว
+  - ตรวจ: requirementทุกข้อ traceถึง automated test; existing config parity 100%; no partial/duplicate file; JsonFileไม่มี Normalized/API side effect; full backend tests, integration, formatter, web lint/build/E2Eและ security scanผ่าน; Gate E ownerลงนามก่อนเปิด production profile
+  - ผล: `docs/phase-25-gate-e-evidence.md` trace AC-JF-E2E-01..02 ไปยัง production seams/tests; PostgreSQL-required backend 404/404, formatter, lint, TypeScript, Next.js 16.4.3 build, Playwright 9/9 แบบ workerเดียว และ npm/NuGet vulnerability scans ผ่าน; create/clone/activate JsonFile/rollback Legacy ผ่าน UI จริง; วันที่ 2026-10-26 ผู้ใช้ยืนยัน Gate E ในนาม Business/Contract, Platform/Operations และ Security โดยอนุมัติผลทดสอบกับ rollback plan; production activation และ finalizer kill switch ยังคง fail-closed และไม่ได้ถูกเปิดจากการ sign-off นี้
+
+- [x] **25.14 Documentation, prototype capture และ commit handoff**
+  - ทำ: อัปเดต CONTEXT, README, current workflow, OpenAPI/examples, setup/reset scripts, retention/cleanup/backup/restore/rollback runbooksและ acceptance matrix; บันทึกว่า Variant Cชนะและเหตุผล; เก็บ prototypeเป็น primary-source pointerตาม prototype policyแล้วให้ production codeไม่ dependบน `/prototype/file-to-json`
+  - เข้าใจ: prototypeเป็นหลักฐานการตัดสินใจ ไม่ใช่ production dependency; operatorและผู้พัฒนาคนใหม่ต้องแยก JSON file publish, API deliveryและ Legacy reconcileออกจากกันได้จากเอกสาร
+  - ตรวจ: คนใหม่สร้าง JsonFile version, preview, process sample,ตรวจ hash,จำลอง blocked exportและ rollbackตาม runbookได้; links/commandsไม่เสีย; ไม่มี secret/sample PII; สรุป changed files/migrations/tests/known limitsครบและ AI agentไม่สร้าง commitเอง
+  - ผล: อัปเดต README, CONTEXT, current workflow และ API `.http` examples ให้แยก `LegacyTable`/`ApiContract`/`JsonFile` กับ lifecycle/control ชัดเจน; เพิ่ม `phase-25-handoff.md` walkthrough ด้วยข้อมูลสังเคราะห์ตั้งแต่ create/preview/publish/hash/blocked/rollback, `phase-25-acceptance-matrix.md` และขยาย operations runbookด้วย retention/cleanup/backup/restore/rollback; เก็บ Variant C decision recordไว้ที่ prototypeโดยชี้ production workbenchเป็น implementationจริงและสแกน production sourceแล้วไม่พบ prototype dependency; resetล้าง/ignore outputและ ignore backup, rollout scriptรองรับ JSON activation/finalizer switchesแบบ explicit; PowerShell parse, local Markdown links และ `git diff --check` ผ่าน ไม่มี secret/sample PIIใหม่และไม่ได้สร้าง commit
+
+### Definition of Done ของ Phase 25
+
+- Config Version เดิมทุกชนิดให้ผลเท่า baselineและไม่มี data rewrite
+- Config Version ใหม่เลือก `LegacyTable`, `ApiContract` หรือ `JsonFile` ได้หนึ่งชนิดแบบ immutable
+- `add` และ `concat` ผ่าน typed AST, compiler, evaluator, capabilities, production editorและ preview/runtime parity โดย configเดิมไม่เปลี่ยนผล
+- `JsonFile` reuse mapping/contract Modules เดิม, ไม่เขียน Normalized Tableและไม่สร้าง API Delivery Job
+- หนึ่ง File Job publish JSON array deterministicหนึ่งไฟล์หรือไม่ publishเลยเมื่อมี invalid/failed row
+- retry/reprocess/crash recoveryไม่สร้าง partial, duplicateหรือ overwrite artifactโดยไม่มี audit
+- Production UI ใช้แนวคิด Variant Cกับ real API/state; prototypeไม่เป็น runtime dependency
+- Gate E, regression, security, observability, rollback rehearsalและ documentationผ่านก่อน activate `JsonFile` production profile
+
+---
+
+## Phase 26 — Admin สำหรับ API Destination Profiles
+
+### เป้าหมายและขอบเขต
+
+เพิ่มหน้า `/admin/api-destination-profiles` เพื่อให้ผู้มีสิทธิ์สร้าง ตรวจสอบ activate, disable และดูประวัติ API destination profile เมื่อมี partner ใหม่ โดยไม่ต้องแก้ `appsettings.Development.json` ซ้ำใน API/Worker หรือ restart runtime ทุกครั้ง Phase นี้ไม่สร้าง physical table แยกต่อ partner แต่ใช้ versioned catalog กลางและเพิ่ม row/profile version ใหม่แทน
+
+> **Design addendum:** [API Destination Profile Administration Design](../spec/spec-design-api-destination-profile-administration.md) เป็น authoritative source ของ identity, lifecycle, authorization, profile-version pinning, cache, cutover และ rollback ใน Phase 26; ต้องบันทึก owner approval ของ Step 26.0 ก่อนเริ่ม implementation
+
+กติกาหลัก:
+
+- API destination profile เป็น server-owned configuration; หน้า Admin ห้ามรับหรือแสดง credential จริง และเก็บได้เฉพาะ logical `AuthSecretReference`
+- Profile Version ที่ activate แล้วเป็น immutable; การแก้ endpoint, method, auth, timeout, contracts, headers หรือ payload bindings ต้องสร้าง draft version ใหม่
+- Mapping Config Version และ Delivery Job ต้อง pin profile version/contract snapshot เดิม; disable profile ห้ามงานใหม่ แต่ retry งานเก่าต้องยัง resolve snapshot ที่ถูก pin ได้
+- API และ Worker ต้องอ่าน Postgres catalog เดียวกัน; application config ใช้ได้เฉพาะ bootstrap/local fallback ที่ระบุชัดและห้ามเกิดสอง authoritative sources
+- Endpoint validation ต้องคง HTTPS-only, non-loopback/non-IP host, safe path template, method allowlist และ SSRF/DNS policy ตาม design ที่อนุมัติ
+- Admin mutation ทุกครั้งต้องมี authorization, operator, reason, optimistic concurrency และ append-only audit; response/log/browser ห้ามเปิด credential, secret value หรือข้อมูล partner payload
+- Phase 26 v1 ครอบเฉพาะ `ApiDestinationProfiles`; `FileDestinationProfiles` ยังเป็น server-managed config จนกว่าจะมี design และ authorization model แยก
+
+- [x] **26.0 ล็อก Profile Administration design และ Gate F contract**
+  - ทำ: เพิ่ม design addendum ระบุ lifecycle `Draft → Active → Disabled`, ownership, schema, authorization roles, endpoint/secret policy, version pinning, cache consistency, migration/cutover, rollback และ acceptance IDs; ตัดสินว่า profile ID เปลี่ยนชื่อได้หรือไม่และ version identity ใช้ค่าใด
+  - เข้าใจ: หน้า Admin เป็น control plane ที่เปลี่ยนปลายทางส่งข้อมูลจริง จึงต้องออกแบบ fail-closed และแยกจาก Mapping Config workbench ซึ่งเป็น consumer ของ safe catalog
+  - ตรวจ: Contract, Platform/Operations และ Security owner ยืนยัน schema/lifecycle/permissions; unresolved decision ไม่มี default แบบเปิดกว้าง; trace requirement ไป Phase 26 steps ครบ
+  - ผล: เพิ่ม `spec/spec-design-api-destination-profile-administration.md` กำหนด `profileKey` immutable, `versionNo` แบบ monotonic, Draft/Active/Disabled และ audited rollback, PostgreSQL aggregate/API/safe projection, authorization roles, HTTPS/SSRF/DNS/secret policy, exact `profileVersionId` pinning, cache fail-closed, Configuration→Compare→Postgres cutover, rollback และ AC trace 26.1–26.6 ครบ; design ไม่มี unresolved default และวันที่ 2026-10-29 ผู้ใช้อนุมัติในนาม Contract/Business, Platform/Operations และ Security จึง Accepted สำหรับ Phase 26 implementation
+
+- [x] **26.1 เพิ่ม versioned Postgres profile catalog และ migration**
+  - ทำ: เพิ่มตารางกลางอย่างน้อย `api_destination_profiles`, `api_destination_profile_versions`, `api_destination_profile_contracts`, `api_destination_profile_bindings` และ append-only `api_destination_profile_audit`; ใช้ row ต่อ partner/profile version ไม่สร้าง table ใหม่ต่อ partner
+  - เข้าใจ: identity/lifecycle อยู่ที่ profile ส่วน endpoint/auth/contracts/bindings อยู่ใน immutable version; credential จริงอยู่นอก DB และ DB เก็บเพียง secret reference
+  - ตรวจ: PK/FK/unique/check constraints, concurrent draft creation, single-active-version policy, disabled behavior และ rollback migration ผ่าน PostgreSQL integration tests; migration ไม่ rewrite Mapping Config/File Job เดิม
+  - ผล: เพิ่ม migration `0014_api_destination_profile_catalog.sql` พร้อม versioned profile aggregate, nullable pinning FK สำหรับ Mapping Config Version/Delivery Job, partial unique indexes สำหรับ Draft/Active, deferred active-pointer consistency, immutable profile/version/children guards และ append-only audit guard; ไม่มี seed/backfill หรือ data rewrite ใน Step นี้ โดย PostgreSQL integration tests ยืนยัน legacy row `xmin` ไม่เปลี่ยน, old writer ยังใช้ expanded schema ได้, lifecycle/disable/rollback/immutability/audit constraints ทำงาน และ concurrent Draft มีผู้ชนะหนึ่งรายการ ครบ 4/4
+
+- [x] **26.2 ทำ Profile Catalog Module และ Postgres Adapter**
+  - ทำ: วาง seam เล็กสำหรับ list safe profiles, resolve active version และ resolve pinned version; เพิ่ม Postgres adapter ให้ API/Worker ใช้ร่วมกันและคง configuration adapter เฉพาะ bootstrap/local test; กำหนด cache TTL/invalidation และ unavailable behavior แบบ fail-closed
+  - เข้าใจ: caller ไม่ควรรู้ schema/cache/source ของ profile; Module เดียวต้องซ่อน validation, version resolution และ safe projection เพื่อให้ behavior ของ API/Worker ไม่ drift
+  - ตรวจ: contract tests ชุดเดียวผ่านทั้ง Postgres และ configuration adapters; API/Worker เห็น version เดียวกันหลัง activate; DB/cache outage ไม่ fallback ไป profile คนละรุ่นและไม่ส่ง payloadผิด endpoint
+  - ผล: เพิ่ม `ApiDestinationProfileCatalogModule` ครอบ source adapter ด้วย safe-list cache 15 วินาที, exact pinned-version cache 5 นาทีและ local invalidation โดย `ResolveActive` ไม่ใช้ cache และทุก cache miss/expired outage คืน `ProfileCatalogUnavailable` แบบ fail-closed; Postgres/configuration adapters ใช้ contract/validation เดียวกัน, ปฏิเสธ Draft หรือ substituted pinned version และ API/Worker เลือก source ผ่าน explicit `Configuration|Postgres` mode โดย default ยังเป็น `Configuration` จน Step 26.5; targeted contract/cache/PostgreSQL tests ผ่าน 18/18 รวม two-adapter parity, activation visibility, historical disabled pin และ outage/no-fallback ส่วน full backend regression ผ่าน 425/425
+
+- [x] **26.3 เพิ่ม Admin API พร้อม authorization และ audit**
+  - ทำ: เพิ่ม endpoint สำหรับ list/get/version history, create draft, validate, activate และ disable; ใช้ allowlisted typed request, concurrency token, operator/reason และ authorization policy แยก read/write/activate; ห้าม endpoint delete profile/version ที่เคยถูกอ้างอิง
+  - เข้าใจ: validate ไม่มี side effect, activate เป็น audited state transition และ disable ไม่ลบ historical resolution; secret provider ตรวจได้เฉพาะ existence/shape โดยไม่คืน secret value
+  - ตรวจ: unauthorized/forbidden, invalid URL/template/header/auth, stale update, duplicate ID/version, missing secret reference, activate/disable race และ audit completeness tests ผ่าน; OpenAPI ไม่เปิด field ต้องห้าม
+  - ผล: เพิ่ม Admin API list/get/permissions, create/update draft, validate, activate/rollback และ disable พร้อม policy projection, claim-derived actor, production activation policy, `If-Match`, safe endpoint redaction, append-only audit และ cache invalidation; secret validator อ่านเฉพาะ environment-backed logical reference เพื่อตรวจ existence/shape และไม่คืนค่า secret. PostgreSQL integration tests กลุ่ม `ApiDestinationProfile` ผ่าน 27/27 รวม stale token, missing secret แบบไม่มี side effect, audit completeness และ activate/disable race
+
+- [x] **26.4 สร้างหน้า `/admin/api-destination-profiles`**
+  - ทำ: เพิ่ม list/search/filter ตาม status/environment, create/edit draft form, supported contracts, allowed headers, payload bindings, safe endpoint preview, validation diagnostics, version diff/history และ explicit activate/disable confirmation; Mapping Config selector ใช้เฉพาะ Active profiles
+  - เข้าใจ: หน้า Admin จัดการ profile catalog ไม่แก้ Mapping Config Version; endpoint host แสดงได้เฉพาะ role ที่ design อนุญาต ส่วน credential แสดงเพียง logical reference/redacted status
+  - ตรวจ: keyboard/screen reader, responsive layout, loading/error/empty state, unsaved-change guard, stale concurrency, authorization visibility และ Playwright create→validate→activate→select flow ผ่าน; browser state/log ไม่มี secret value
+  - ผล: หน้า Admin รองรับ search/filter, typed create/edit draft, contracts/headers/bindings, safe endpoint preview, diagnostics, version compare/history, policy-based action visibility, confirmations, unsaved guard และ stale-edit recovery; Playwright targeted ผ่าน 2/2, ESLint/TypeScript และ Next.js production build ผ่าน โดยไม่มี credential field/value ใน browser flow
+
+- [x] **26.5 Migrate profile เดิมและ cut over API/Worker**
+  - ทำ: seed `pa-mtls`, `pa-mtls-inform` และ `claims-envelope` จากค่าที่อนุมัติแบบ idempotent, เปรียบเทียบ canonical profile snapshots ก่อน cutover, สลับ API/Worker ไป Postgres catalog ด้วย rollout flag และเอา duplicated runtime definitions ออกจาก application config หลังพิสูจน์ parity
+  - เข้าใจ: seed เป็น bootstrap ไม่ใช่ source of truth ถาวร; cutover ต้องรักษา profile ID, contract reference, payload binding, auth scheme และ pinned delivery behavior เดิมทุก byte
+  - ตรวจ: pre/post-cutover parity, restart, rolling mixed-version deployment, cache refresh, retry งานเดิมและ rollback rehearsal ผ่าน; config drift detector ยืนยันเหลือ authoritative source เดียว
+  - ผล: เพิ่ม migration `0015` seed `pa-mtls`, `pa-mtls-inform` และ `claims-envelope` แบบ idempotent พร้อม canonical content hash/audit และ backfill exact Profile Version ให้ Mapping Config Version/Delivery Job โดย block key ที่ missing, ambiguous หรือ pin ไม่ตรง; เพิ่ม `Compare` mode ที่เทียบ canonical snapshot, freeze mutation และเลือก authoritative side แบบ explicit เพื่อรองรับ mixed deployment/rollback ก่อน DB-only use, เปลี่ยน default API/Worker เป็น `Postgres`, ตรวจ catalog ตอน startup แบบ fail-closed และลบ duplicated profile definitions จาก application config. PostgreSQL cutover/idempotence/hash tests, catalog/Compare/rollback tests, Admin hash/mutation-freeze regression และเดิม migration/catalog contract ผ่าน 27/27; API และ Worker restart จาก Postgres สำเร็จ. Full regression เป็นงาน Step 26.6 และรอบ diagnostic ปัจจุบันผ่าน 431/439 โดย 8 failure นอก cutover path แยกบันทึกใน [Phase 26.5 handoff](phase-26.5-cutover-handoff.md)
+
+- [x] **26.6 Full regression, security review, operations และ Gate F sign-off**
+  - ทำ: รัน backend/PostgreSQL/web E2E ครบ, เพิ่ม metrics/alerts สำหรับ profile validation/activation/cache failures, เขียน runbook onboarding partner, secret rotation, disable/rollback และ incident response; บันทึก evidence/acceptance matrix
+  - เข้าใจ: profile activation อาจเปลี่ยนปลายทางข้อมูลจริงแม้ Mapping Config ไม่เปลี่ยน จึงต้องมี operational gate, audit และ rollback ที่ทดสอบได้
+  - ตรวจ: LegacyTable/ApiContract/JsonFile regression ผ่าน, ไม่มี cross-partner routing, secret/PII leak หรือ SSRF bypass, rollback คืน active version เดิมโดยไม่แก้ pinned jobs และ Contract/Platform/Security owner ลงนาม Gate F ก่อนเปิด production Admin
+  - ผล: บังคับ PostgreSQL full backend regression ผ่าน 471/471, format/lint/TypeScript/Next production build ผ่าน, Playwright full E2E ผ่าน 16/16 แบบ deterministic one worker และ npm/NuGet scan พบ 0 vulnerabilities; เพิ่ม HTTPS:443/DNS rebinding/private-range/redirect/header/template controls, bounded list `limit/offset` 1–100 แบบ fixed-query, active resolve one roundtrip พร้อม Gate threshold 32 concurrent/p95 ≤250 ms, safe metrics/alerts และ [operations runbook](phase-26-api-destination-profile-operations-runbook.md). [Acceptance matrix](phase-26-acceptance-matrix.md) และ [Gate F evidence](phase-26-gate-f-evidence.md) ครบ; วันที่ 2026-11-02 ผู้ใช้อนุมัติในนาม Contract/Business, Platform/Operations และ Security จึงปิด Gate F และอนุญาต controlled Shadow→Canary→Expanded rollout โดยไม่เปิด Production profile/runtime controls อัตโนมัติ
+
+### Definition of Done ของ Phase 26
+
+- ผู้มีสิทธิ์ onboard partner ใหม่ผ่านหน้า Admin โดยไม่แก้ application config หรือสร้าง table ใหม่ต่อ partner
+- Profile Version ที่ activate แล้ว immutable และทุก mutation มี operator/reason/audit/concurrency control
+- API และ Worker resolve จาก Postgres catalog เดียวกัน; ไม่มี duplicated authoritative profile definitions
+- Mapping Config Version/Delivery Job เดิมยัง resolve pinned snapshot และ retry ได้หลัง profile version ใหม่หรือ disable
+- Credential ไม่เข้า DB/API/browser/log; มีเพียง logical secret reference และ redacted validation status
+- Admin E2E, PostgreSQL integration, security/SSRF, mixed-deployment, rollback และ full destination regression ผ่าน
+- Gate F owner sign-off เสร็จก่อนเปิด profile administration ใน production
+
+---
+
+## Phase 27 — Admin สำหรับ Versioned Contract Registry
+
+### เป้าหมายและขอบเขต
+
+เพิ่มหน้า `/admin/contracts` เพื่อให้ผู้มีสิทธิ์สร้าง ตรวจสอบ clone, publish, retire และดูประวัติ Contract schema โดยไม่ต้องแก้ `ContractFixtures`, `BundledContractSchemaFetcher` หรือ restart runtime ทุกครั้ง Contract Registry เป็น catalog กลางที่ทั้ง `ApiContract` และ `JsonFile` ใช้ร่วมกัน ส่วน Mapping Config Workbench เป็น consumer ที่เลือกได้เฉพาะ Contract Version ที่ Publish แล้ว
+
+Lifecycle ที่ต้องรองรับ:
+
+```text
+Draft → Validate → Published → Retired
+             └──── Clone published version → new Draft
+```
+
+กติกาหลัก:
+
+- Contract identity แยก `contractId`, `version` และ immutable `reference` เช่น `proposal`, `2`, `proposal/2`; ห้ามเปลี่ยนชื่อหรือแก้ schema ของ Version ที่ Publish แล้ว
+- การเปลี่ยน `proposal/1` ต้องใช้ `Clone as new version` เพื่อสร้าง `proposal/2`; Mapping Config Version และ Delivery Job เดิมยังใช้ schema snapshot/hash ที่ pin ไว้
+- Draft แก้ได้ด้วย optimistic concurrency; Publish ต้อง canonicalize JSON Schema, คำนวณ SHA-256 ฝั่ง server, validate supported subset และบันทึก operator/reason/audit ใน transaction เดียวกัน
+- Retire ป้องกันการเลือกสร้าง Mapping Version ใหม่ แต่ห้ามลบ Contract Version หรือทำให้ historical snapshot/pinned delivery resolve ไม่ได้
+- Browser ห้ามส่ง schema hash หรือ path catalog เป็น authoritative input; server ต้อง derive canonical schema, hash, typed paths, required/nullability/constraints และ compatibility diagnostics เอง
+- v1 รองรับ JSON Schema subset เดิมเท่านั้น: local `$ref`, nested object, scalar, fixed index/wildcard array และ constraints ที่ compiler รองรับ; external/recursive `$ref`, ambiguous `oneOf`/`anyOf`, executable code และ remote URL ต้อง fail closed
+- Schema, description และ examples ต้องผ่าน size/content policy และห้ามมี credential, secret หรือข้อมูลลูกค้าจริง; Admin preview ใช้ synthetic sample เท่านั้น
+- Contract publish/retire เป็น control-plane mutation ต้องมี authorization แยก read/write/publish, explicit confirmation, operator, reason, concurrency token และ append-only audit
+
+- [x] **27.0 ล็อก Contract Registry design และ Gate G contract**
+  - ทำ: เพิ่ม design addendum ระบุ lifecycle/identity, immutable publish, clone semantics, ownership/roles, supported JSON Schema subset, canonicalization/hash, compatibility policy, profile linkage, cache consistency, migration/cutover, rollback และ acceptance IDs
+  - เข้าใจ: Contract Version คือข้อตกลงข้อมูลที่ Mapping Config และ delivery pin อยู่ การแก้ published schema in place ทำให้ payload เดิมเปลี่ยนความหมายและทำลาย replay/audit
+  - ตรวจ: Contract, Platform/Operations และ Security owner ยืนยัน lifecycle/permissions/compatibility; ตัดสิน policy ของ breaking/non-breaking change และ version naming โดยไม่มี default แบบเปิดกว้าง
+  - ผล: เพิ่ม [Versioned Contract Registry design](../spec/spec-design-versioned-contract-registry.md) ล็อก identity `contractKey/version`, Draft→Published→Retired, published immutability, breaking-change acknowledgement, exact historical resolution, authorization/audit และ fail-closed cache; คำสั่งให้ทำถึง 27.2 อนุมัติ design เพื่อ implementation แต่ไม่ใช่ Gate G production sign-off
+
+- [x] **27.1 เพิ่ม versioned Postgres Contract catalog และ migration**
+  - ทำ: เพิ่มตารางอย่างน้อย `contracts`, `contract_versions` และ append-only `contract_audit`; เก็บ draft schema, canonical published schema, SHA-256, lifecycle, concurrency token, timestamps/operator/reason และเชื่อม profile-contract allowlist ด้วย FK/reference ที่ตรวจได้
+  - เข้าใจ: Draft และ Published ใช้ identity เดียวกันแต่ Published payload เป็น immutable artifact; schema hash เป็นผลลัพธ์ของ server canonicalization ไม่ใช่ค่าที่ Admin ป้อน
+  - ตรวจ: PK/FK/unique/check constraints, duplicate version, concurrent edit/publish, immutable published row, retire behavior และ rollback migration ผ่าน PostgreSQL integration tests; migration ไม่ rewrite snapshots เดิม
+  - ผล: เพิ่ม migration `0016_versioned_contract_registry.sql` พร้อม DB constraints/triggers สำหรับ lifecycle, immutable identity/content, one Draft, append-only audit และ exact nullable FK จาก profile allowlist; PostgreSQL migration tests ผ่าน 4/4 โดยไม่ rewrite Mapping snapshot เดิม
+
+- [x] **27.2 ทำ Contract Registry Module และ Postgres Adapter**
+  - ทำ: วาง seam สำหรับ list published contracts, get/version history, create/update draft, validate, clone, publish, retire และ resolve exact published reference; reuse compiler/path catalog/canonical hash เดิมและเพิ่ม cache invalidation แบบ fail-closed
+  - เข้าใจ: Mapping/Delivery caller ไม่ควรรู้ว่า schema มาจาก fixture หรือ DB; Module เดียวต้องรักษา resolve result และ diagnostics ให้เท่ากันทั้ง Admin preview, Create Version และ runtime snapshot verification
+  - ตรวจ: contract tests ชุดเดียวผ่าน bundled fixture และ Postgres adapters; API/Worker เห็น published version/hash เดียวกัน; DB/cache outage ไม่ fallback ไป schema คนละ version
+  - ผล: เพิ่ม shared `VersionedContractRegistryModule`, compatibility analyzer, read-only bundled adapter และ PostgreSQL adapter; exact/list cache มี bounded TTL, mutation invalidation และ outage fail closed โดยไม่ fallback. Contract/adapter tests รวมกับ migration tests ผ่าน 10/10 ครอบคลุม bundled/Postgres parity, API/Worker-equivalent resolution, compatibility, concurrency, audit, cache invalidation และ outage; forced-PostgreSQL backend regression ผ่าน 481/481, format ผ่าน และ API startup ใช้ migration `0016` ได้โดยยังไม่สลับ runtime source
+
+- [x] **27.3 เพิ่ม Contract Admin API พร้อม authorization และ audit**
+  - ทำ: เพิ่ม endpoint สำหรับ list/get/history, create/update draft, validate, clone published version, publish และ retire; ใช้ typed request, request-size limit, concurrency token, operator/reason และ policy แยก read/write/publish; ไม่มี hard delete สำหรับ Contract ที่ Publish หรือถูกอ้างอิงแล้ว
+  - เข้าใจ: Validate ไม่มี side effect; Publish และ Retire เป็น audited state transition; response คืน safe schema/path/diagnostics/hash แต่ไม่คืน server filesystem path หรือข้อมูล configuration ภายใน
+  - ตรวจ: unauthorized/forbidden, malformed/oversized schema, unsupported keyword/reference, stale update, duplicate reference, publish race, retire-in-use และ audit completeness tests ผ่าน; OpenAPI ไม่เปิด field ต้องห้าม
+  - ผล: เพิ่ม typed `/admin/contracts` list/get/history/create/update/validate/clone/publish/retire, request limit, `If-Match`, safe diagnostics, policy `ContractAdmin.Read|WriteDraft|Publish`, production publish flag, credential/private-key content policy และ retire-in-use guard; controller/OpenAPI/PostgreSQL tests ผ่าน
+
+- [x] **27.4 สร้างหน้า `/admin/contracts`**
+  - ทำ: เพิ่ม list/search/filter ตาม lifecycle, create draft, JSON editor/file upload, schema diagnostics, derived Contract paths, required/type/constraint summary, version diff/history, compatibility warning และ explicit Validate/Clone/Publish/Retire actions; profile editor เลือกได้เฉพาะ Published versions
+  - เข้าใจ: Admin แก้ได้เฉพาะ Draft; หน้า Published แสดง read-only พร้อม `Clone as new version` เช่น `proposal/1 → proposal/2`; Mapping Workbench ไม่ใช่ schema editor
+  - ตรวจ: keyboard/screen reader, responsive layout, malformed JSON feedback, unsaved-change guard, stale concurrency, authorization visibility และ Playwright create draft→validate→publish→attach profile→select in Mapping Workbench flow ผ่าน
+  - ผล: หน้า Contract Admin รองรับ search/lifecycle filter, JSON editor/upload, live malformed feedback, derived path/type/required/nullability/constraints, compatibility acknowledgement, history/diff, clone/publish/retire, unsaved/stale guard และ permission visibility; Profile Admin เลือกได้เฉพาะ Published Contract. Targeted และ full Playwright ผ่าน
+
+- [x] **27.5 Migrate bundled contracts และ cut over resolver**
+  - ทำ: seed `proposal/1` จาก `pa-proposal-v1.json` และ `claims/2` จาก `claims-envelope-v2.json` แบบ idempotent; เปรียบเทียบ canonical schema/hash/path catalog ก่อน cutover; สลับ resolver ไป Postgres ด้วย rollout flag แล้วลด `ContractFixtures`/`BundledContractSchemaFetcher` เป็น bootstrap/local-test fallback ที่ไม่เป็น authoritative source
+  - เข้าใจ: migration ต้องรักษา reference, canonical bytes/hash, payload bindings และ snapshot behavior เดิม; fixture fallback ห้ามซ่อน DB outage หรือสร้าง split-brain schema
+  - ตรวจ: pre/post-cutover parity, restart, rolling mixed-version deployment, cache refresh, historical Mapping Version/retry และ rollback rehearsal ผ่าน; drift detector ยืนยัน production มี authoritative source เดียว
+  - ผล: เพิ่ม migration `0017`, explicit `Bundled|Postgres` source flag, idempotent startup bootstrap/parity verifier และ registry-backed schema fetcher; `proposal/1`/`claims/2` ตรงกันทั้ง canonical bytes/hash/path catalog, profile FK backfill/auto-link exact Published Version, API startup Postgres mode ผ่าน และ outage ไม่ fallback
+
+- [x] **27.6 Full regression, security review, operations และ Gate G sign-off**
+  - ทำ: รัน backend/PostgreSQL/web E2E ครบ, เพิ่ม metrics/alerts สำหรับ validate/publish/resolve/cache failure, เขียน runbook create/clone/publish/retire/rollback และบันทึก acceptance matrix/evidence
+  - เข้าใจ: การ Publish Contract อาจเปิดให้สร้าง payload รูปแบบใหม่ แม้ endpoint/profile ไม่เปลี่ยน จึงต้องมี approval, observability และ rollback ที่ไม่แก้ published artifact เดิม
+  - ตรวจ: LegacyTable/ApiContract/JsonFile regression ผ่าน, ไม่มี schema substitution, hash drift, secret/PII leak หรือ unauthorized publish; rollback ปิด version ใหม่และคืน allowlist เดิมโดยไม่กระทบ pinned jobs; Contract/Platform/Security owner ลงนาม Gate G
+  - ผล: technical gate ผ่าน—forced-PostgreSQL backend 494/494, format/lint/TypeScript/Next build, Playwright 18/18, npm production และ NuGet vulnerabilities 0; metrics/alerts, [runbook](phase-27-contract-registry-operations-runbook.md), [acceptance matrix](phase-27-acceptance-matrix.md) และ [Gate G evidence](phase-27-gate-g-evidence.md) ครบ. npm all-dependency scan มี 16 moderate ใน dev-only ESLint/minimatch chain และยังไม่มี compatible upstream fix; วันที่ 2026-11-03 ผู้ใช้ยืนยันในนาม Contract/Business, Platform/Operations และ Security พร้อมยอมรับข้อยกเว้นนี้ จึงปิด Gate G และอนุญาต controlled publishing rollout โดย production `PublishingEnabled` ยังคงเป็น `false` จนกว่าจะมี rollout change แยกต่างหาก
+
+### Definition of Done ของ Phase 27
+
+- ผู้มีสิทธิ์สร้างและ Publish Contract Version ใหม่ผ่าน Admin โดยไม่แก้ application config, fixture mapping หรือ restart runtime
+- Published Contract Version immutable; การเปลี่ยน schema ใช้ Clone เป็น version ใหม่ และทุก mutation มี operator/reason/audit/concurrency control
+- Mapping Workbench และ profile editor เห็นเฉพาะ Published/non-retired Contract Version ที่ได้รับอนุญาต ส่วน historical snapshot/retry ยังทำงานหลัง Retire
+- API และ Worker resolve exact reference จาก Postgres Contract Registry เดียวกัน; ไม่มี duplicated authoritative schema definitions
+- Canonical schema/hash/path catalog มาจาก server และผ่าน supported-subset/size/security validation; browser ไม่เป็น authoritative source
+- Bundled `proposal/1` และ `claims/2` migrate ด้วย canonical parity และมี rollback/cutover evidence
+- Admin E2E, PostgreSQL integration, compatibility/security, mixed-deployment, rollback และ full destination regression ผ่าน
+- Gate G owner sign-off เสร็จก่อนเปิด Contract publishing ผ่าน Admin ใน production
+
+---
+
+## Phase 28 — Admin สำหรับ Table Catalog และ Schema Verification
+
+### เป้าหมายและขอบเขต
+
+เพิ่มหน้า `/admin/tables` เพื่อให้ผู้มีสิทธิ์สร้าง Source/Normalized table, ดูตารางที่สร้างแล้ว, เพิ่มคอลัมน์แบบ additive และตรวจว่า metadata ตรงกับ physical PostgreSQL schema โดยไม่ต้องใช้ `requests/tables.http` หรือเปิด database client หลังสร้างสำเร็จ UI ต้อง redirect ไปหน้ารายละเอียดของ table ใหม่และแสดงผล verification ล่าสุดทันที
+
+สถานะ verification ที่ต้องรองรับ:
+
+```text
+Unknown → Verifying → Healthy
+                    ├→ Drifted
+                    ├→ Missing
+                    └→ VerificationFailed
+```
+
+กติกาหลัก:
+
+- `table_definitions` และ `table_columns` เป็น authoritative metadata; browser ส่งได้เฉพาะ typed table/column definition และ table ID ห้ามส่ง raw SQL, schema name หรือ connection information
+- Server ตรวจ physical schema ผ่าน PostgreSQL catalog ด้วย table identity ที่ resolve จาก metadata เท่านั้น แล้วเปรียบเทียบ business columns, generated system columns, data type, length/precision/scale, nullability, primary key และ unique constraints ที่ `DdlBuilder` คาดหวัง
+- ผล verification ต้องแยก `Healthy`, `Drifted`, `Missing` และ `VerificationFailed`; response คืน safe structural diagnostics แต่ไม่คืน connection string, server path, raw catalog query หรือ business row values
+- การสร้าง table และเพิ่ม column ยังคงใช้ transaction เดิม; UI ห้ามประกอบหรือ execute DDL เอง และต้องแสดง `400`, `404`, `409` กับ server error แบบแก้ไขได้
+- Source column ต้องเป็น `Text` และ `isRequired = false`; Normalized column ใช้กฎ type metadata เดิมจาก `TableDefinitionValidator`
+- v1 เป็น expand-only: สร้าง table และเพิ่ม column ได้ แต่ไม่มี drop, rename, alter type/length, truncate หรือ hard delete; drift detection เป็น read-only และไม่ auto-repair
+- หน้า detail ต้องแสดง Mapping Config/Config Version ที่อ้าง table เพื่อให้เห็น impact ก่อนเพิ่ม column; historical version และ pinned job ห้ามถูกแก้ย้อนหลัง
+- หน้า Admin ตรวจโครงสร้าง ไม่ใช่ data browser; v1 ห้าม query, preview, export หรือค้น business rows เพื่อไม่เปิด PII ผ่าน control plane
+- Admin mutation ต้องมี authorization แยก read/create/add-column, operator/reason, audit และ correlation ID; verify เป็น read-only แต่ต้อง rate-limit และบันทึกผล/เวลาโดยไม่ log sensitive values
+
+- [x] **28.0 ล็อก Table Administration และ Schema Verification contract พร้อม Gate H**
+  - ทำ: เพิ่ม design addendum ระบุ ownership/roles, authoritative metadata, expected physical schema ต่อ `Source`/`Normalized`, comparison rules, verification statuses, safe diagnostics, usage/impact projection, audit, rate limit, rollout และ rollback; ตัดสิน policy เมื่อพบ drift โดยห้าม default เป็น auto-repair
+  - เข้าใจ: `GET /tables/{id}` ปัจจุบันยืนยัน metadata เท่านั้น ไม่พิสูจน์ว่า physical table, columns และ constraints ยังตรงกัน การให้ Admin เห็นคำว่า “สร้างแล้ว” จึงต้องแยก persistence success จาก schema verification
+  - ตรวจ: Platform/Operations, Security และ Mapping owner ยืนยัน comparison/permissions; acceptance IDs ครอบคลุม healthy, extra/missing/changed column, missing table, catalog failure และ concurrent create/add-column
+  - ผล: เพิ่ม [Table Administration and Schema Verification design](../spec/spec-design-table-administration-schema-verification.md) ล็อก authoritative metadata, expected Source/Normalized physical schema, status/diagnostic contract, expand-only mutation, impact projection, rate/audit/rollout และ no-auto-repair policy; คำสั่งให้ทำ Phase 28 อนุมัติ design สำหรับ implementation แต่ไม่ใช่ Gate H production sign-off
+
+- [x] **28.1 สร้าง Table Schema Inspector Module และ PostgreSQL Adapter**
+  - ทำ: เพิ่ม Interface ที่รับ table ID/typed expected definition แล้วอ่าน `pg_catalog`/`information_schema` ผ่าน parameterized query; canonicalize PostgreSQL types และเปรียบเทียบ expected/actual columns, nullability, identity, primary key และ unique constraints; คืน typed verification result กับ diagnostics ราย field
+  - เข้าใจ: Controller/UI ไม่ควรรู้ catalog query หรือกฎ system columns; Inspector Module เป็นจุดเดียวที่ `DdlBuilder` tests และ Admin verification ใช้ expected-schema vocabulary ร่วมกันเพื่อลด drift ของกฎ
+  - ตรวจ: unit tests ครอบคลุม type aliases และ ordering; PostgreSQL integration tests ครอบคลุม Source/Normalized ที่ healthy, extra column, missing column/table, type/nullability/constraint drift และ permission/timeout failure; ไม่มี query จากชื่อที่ browser ส่งตรง
+  - ผล: เพิ่ม `ITableSchemaInspector`, shared expected-schema vocabulary, PostgreSQL type canonicalizer และ parameterized `pg_catalog` adapter; forced integration พิสูจน์ Healthy, extra/missing/type/constraint drift, Missing, safe outage และ malicious identifier ไม่ execute SQL
+
+- [x] **28.2 เพิ่ม Admin Tables API, usage projection, authorization และ audit**
+  - ทำ: reuse `GET/POST /tables`, `GET /tables/{id}` และ `POST /tables/{id}/columns` หลังวาง policy/audit ที่เหมาะสม; เพิ่ม endpoint read-only สำหรับ verification และ references/impact โดย response มี metadata, expected/actual safe summary, status, diagnostics, checkedAt และ config usage; รองรับ list search/filter ตาม name/kind/status แบบ bounded pagination
+  - เข้าใจ: create response ต้องคืน ID ที่ UI ใช้ redirect ไป detail; verification ต้อง resolve table จาก ID ฝั่ง serverและไม่เปลี่ยน schema; list ไม่ควรยิง catalog query N+1 จึงใช้ persisted latest status หรือ bounded batch inspection ตาม contract ที่ Step 28.0 อนุมัติ
+  - ตรวจ: unauthorized/forbidden, invalid definition, duplicate name/column, missing ID, stale/concurrent add-column, rate limit, audit completeness และ safe ProblemDetails tests ผ่าน; OpenAPI ไม่มี raw SQL/catalog/connection/data-row fields
+  - ผล: ขยาย typed `/tables` ด้วย bounded search/kind/status, permissions, latest/fresh verification และ Config/Version/pinned-job references; migrations `0018`/`0019` เพิ่ม latest status, verification history/audit และ database append-only guards; create/add-column commit success audit ใน transaction เดิมและ concurrent add-column serialize ด้วย metadata row lock
+
+- [x] **28.3 สร้างหน้า `/admin/tables` และ Create Table flow**
+  - ทำ: เพิ่ม list/search/filter/status badge, empty/loading/error state และ create form สำหรับ name, kind และ ordered columns; form เปลี่ยน controls ตาม Source/Normalized rules, validate client เพื่อ feedback แต่ถือ server validation เป็น authoritative; เมื่อ `201 Created` ให้ redirect `/admin/tables/{id}` แล้ว trigger verification
+  - เข้าใจ: ผู้ใช้ต้องยืนยันได้จากหน้าเดียวว่าคำสั่งสร้าง metadata/DDL สำเร็จและ physical schema healthy ไม่ใช่อาศัย toast อย่างเดียว; duplicate/conflict ต้องเก็บค่าฟอร์มไว้แก้ได้
+  - ตรวจ: keyboard/screen reader, responsive layout, add/remove/reorder column form, Source type lock, Decimal/Text metadata controls, unsaved-change guard และ Playwright create Source/Normalized→redirect→Healthy ผ่าน
+  - ผล: เพิ่ม list/search/filter/status, empty/loading/error, responsive typed create form, ordered add/remove/reorder controls, Source lock, Decimal/Text metadata, before-unload guard และ create→dynamic detail→auto-verify flow; Next 16 detail routeใช้ Suspense/Partial Prerender ตาม local framework docs
+
+- [x] **28.4 สร้าง Table Detail, Verify และ Add Column flow**
+  - ทำ: แสดง table ID/name/kind, business/system columns, type metadata, constraints, references, created/checked timestamps และ verification diagnostics; เพิ่ม `Verify now` และ add-column dialog ที่บังคับ reason แล้ว refresh metadata/verification หลัง `204 No Content`; แสดง expected-vs-actual diff แบบ field-level เมื่อ Drifted
+  - เข้าใจ: extra/missing/changed physical object ต้องมองเห็นได้ แต่ v1 ให้ Operatorแก้ผ่าน runbook ไม่ auto-repair; เพิ่ม column เป็น additive operation เดียวที่ UI อนุญาต
+  - ตรวจ: Playwright add column→Healthy, duplicate conflict, missing table, type/constraint drift, verify failure/retry, authorization visibility และ concurrent Admin flows ผ่าน; UI ไม่มี drop/rename/type-change/data-preview control
+  - ผล: detail แสดง table identity, business/system columns, types/nullability/identity, PK/unique, checked time, field diff และ Config impact; Verify now เป็น read-only, add-column บังคับ operator/reason แล้ว reset/refresh/verify; kill switch ซ่อน mutation โดยยังตรวจ schema ได้และไม่มี destructive/data-browser control
+
+- [x] **28.5 เพิ่ม observability, drift runbook และ rollout controls**
+  - ทำ: เพิ่ม metrics/alerts สำหรับ create/add-column/verification outcome และ duration โดยไม่ใช้ table name เป็น unbounded metric label; เขียน runbook สำหรับ Healthy, Drifted, Missing, catalog permission failure, metadata/DDL rollback และ restore; เพิ่ม feature flag แยก Admin mutations จาก read/verify เพื่อ rollback UI write path ได้โดยไม่ปิดการตรวจสอบ
+  - เข้าใจ: verification ไม่ควรทำให้ API หรือ PostgreSQL หนักจาก polling และ drift ห้ามถูกซ่อมอัตโนมัติโดยไม่มี impact analysis/backup; read-only inspection ยังมีประโยชน์เมื่อ mutation ถูก pause
+  - ตรวจ: alert thresholds/load test/rate limit ผ่าน, logs มี correlation ID แต่ไม่มี PII/SQL/connection data, mutation kill switch ปิด create/add-column และยัง list/detail/verify ได้, runbook rehearsal บันทึก evidence ครบ
+  - ผล: เพิ่ม bounded-label metrics สำหรับ mutation/verification/duration/rate-limit/unauthorized พร้อม drift, repeated failure และ unauthorized alerts; verify จำกัด 12 ครั้ง/table/minute และ catalog timeout 5 วินาที; [operations runbook](phase-28-table-administration-operations-runbook.md) ครอบคลุม backup/restore/incident/no-auto-repair และ production `MutationsEnabled=false`
+
+- [x] **28.6 Full regression, security review, E2E และ Gate H sign-off**
+  - ทำ: รัน backend/PostgreSQL/web regression ครบ; ทดสอบ create/list/detail/add-column/verify/reference impact, catalog tampering fixture, concurrent requests, authorization/audit, accessibility และ rollback; อัปเดต README, API examples และ `table-creation-old-vs-new.md` ให้ชี้หน้า Admin แทนข้อความว่าใช้ `.http` เท่านั้นเมื่อ rollout สำเร็จ
+  - เข้าใจ: Phase นี้ห้ามเปลี่ยน runtime mapping semantics, immutable Config Version หรือ pinned Job; Admin เป็น control plane เหนือ Table Module เดิม
+  - ตรวจ: existing Mapping Config และ LegacyTable/ApiContract/JsonFile regression ผ่าน; ไม่มี arbitrary SQL, identifier injection, data-row disclosure หรือ auto-repair; Platform/Operations, Security และ Mapping owner ลงนาม Gate H ก่อนเปิด mutation ใน production
+  - ผล: technical gate ผ่าน—forced-PostgreSQL backend 514/514, format/TypeScript/ESLint/Next build, Playwright 20/20, API migration/startup และ npm production/NuGet vulnerabilities 0; [acceptance matrix](phase-28-acceptance-matrix.md), [runbook](phase-28-table-administration-operations-runbook.md) และ [Gate H evidence](phase-28-gate-h-evidence.md) ครบ. วันที่ 2026-11-03 ผู้ใช้อนุมัติในนาม Platform/Operations, Security และ Mapping พร้อมยอมรับ 16 moderate ใน dev-only ESLint/minimatch chain เดิม; production `MutationsEnabled` ยังเป็น `false` จนกว่าจะมี controlled rollout change แยกต่างหาก
+
+### Definition of Done ของ Phase 28
+
+- ผู้มีสิทธิ์สร้าง Source/Normalized table ผ่าน `/admin/tables` และถูกพาไป detail ของ table ใหม่ทันที
+- หน้า detail แสดง metadata, expected system/business columns, constraints, references และผล physical schema verification พร้อม `checkedAt`
+- Healthy/Drifted/Missing/VerificationFailed แยกชัดและมี field-level safe diagnostics; verification ไม่แก้ DB และไม่อ่าน business rows
+- เพิ่ม column ผ่าน UI/API แบบ transaction เดิมแล้ว refresh เป็น Healthy; duplicate/concurrency/error แสดงแบบแก้ไขได้
+- ไม่มี drop, rename, alter type/length, truncate, hard delete, raw SQL หรือ data browser ใน v1
+- Authorization, operator/reason, audit, rate limit, metrics/alerts, kill switch และ drift runbook ผ่านการทดสอบ
+- Backend/PostgreSQL integration, web E2E/accessibility, security และ full mapping regression ผ่าน
+- Gate H owner sign-off เสร็จก่อนเปิด Table Admin mutation ใน production

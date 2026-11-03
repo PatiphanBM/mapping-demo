@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using MappingDemo.Api.Contracts.MappingConfigs;
 using MappingDemo.Api.Controllers;
 using MappingDemo.Api.Services;
@@ -116,6 +117,87 @@ public sealed class MappingDraftServiceTests
         Assert.Equal(
             new DateOnly(2026, 10, expectedDay),
             output.Values["effective_date"]);
+    }
+
+    [Fact]
+    public async Task Preview_returns_typed_add_and_concat_results()
+    {
+        var program = new TransformationProgram
+        {
+            SemanticsProfile =
+                TransformationCapabilities.SqlServerLegacyProfile,
+            Outputs =
+            [
+                new TransformationOutput
+                {
+                    OutputKey = "default",
+                    Fields =
+                    [
+                        new FieldAssignment
+                        {
+                            NormalizedColumn = "amount",
+                            Value = new AddExpression
+                            {
+                                Values =
+                                [
+                                    Literal(ExpressionValueType.Integer, 1),
+                                    Literal(ExpressionValueType.Decimal, 2.5m)
+                                ]
+                            }
+                        },
+                        new FieldAssignment
+                        {
+                            NormalizedColumn = "label",
+                            Value = new ConcatExpression
+                            {
+                                Values =
+                                [
+                                    Literal(ExpressionValueType.Text, "ไทย"),
+                                    Literal(ExpressionValueType.Text, "文")
+                                ],
+                                Separator = " / "
+                            }
+                        }
+                    ]
+                }
+            ]
+        };
+        var schema = TransformationSchema.FromLegacyTable(
+            new TableDefinition(
+                "src_preview",
+                TableKind.Source,
+                [new ColumnDefinition("raw", ColumnDataType.Text, false, 1)]),
+            new TableDefinition(
+                "norm_preview",
+                TableKind.Normalized,
+                [
+                    new ColumnDefinition("amount", ColumnDataType.Decimal, false, 1),
+                    new ColumnDefinition("label", ColumnDataType.Text, false, 2)
+                ]));
+        var request = Request(
+            "2026-10-08T10:00:00Z",
+            new SourceRowsPreviewSample
+            {
+                Rows =
+                [
+                    new PreviewSourceRow
+                    {
+                        Values = new Dictionary<string, string?>
+                        {
+                            ["raw"] = "unused"
+                        }
+                    }
+                ]
+            },
+            program);
+
+        var result = await CreateService().PreviewAsync(request, schema);
+
+        Assert.True(result.IsSuccess);
+        var output = Assert.Single(
+            Assert.Single(result.Response!.Records).Transformation!.Outputs);
+        Assert.Equal(3.5m, Assert.IsType<decimal>(output.Values["amount"]));
+        Assert.Equal("ไทย / 文", output.Values["label"]);
     }
 
     [Fact]
@@ -510,9 +592,18 @@ public sealed class MappingDraftServiceTests
         };
     }
 
+    private static LiteralExpression Literal(
+        ExpressionValueType type,
+        object value) =>
+        new()
+        {
+            Type = type,
+            Value = JsonSerializer.SerializeToElement(value, value.GetType())
+        };
+
     private static TransformationSchema Schema()
     {
-        return new TransformationSchema(
+        return TransformationSchema.FromLegacyTable(
             new TableDefinition(
                 "src_preview",
                 TableKind.Source,
@@ -536,7 +627,7 @@ public sealed class MappingDraftServiceTests
 
     private static TransformationSchema LookupSchema()
     {
-        return new TransformationSchema(
+        return TransformationSchema.FromLegacyTable(
             new TableDefinition(
                 "src_preview",
                 TableKind.Source,

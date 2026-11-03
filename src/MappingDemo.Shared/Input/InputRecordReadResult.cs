@@ -4,10 +4,12 @@ public sealed class InputRecordReadResult
 {
     private InputRecordReadResult(
         IReadOnlyList<InputRecord> records,
-        InputRecordReadError? error)
+        InputRecordReadError? error,
+        WorkbookReadMetadata? workbook = null)
     {
         Records = records;
         Error = error;
+        Workbook = workbook;
     }
 
     public bool IsSuccess => Error is null;
@@ -16,10 +18,13 @@ public sealed class InputRecordReadResult
 
     public InputRecordReadError? Error { get; }
 
+    public WorkbookReadMetadata? Workbook { get; }
+
     internal static InputRecordReadResult Success(
-        IReadOnlyList<InputRecord> records)
+        IReadOnlyList<InputRecord> records,
+        WorkbookReadMetadata? workbook = null)
     {
-        return new InputRecordReadResult(records, null);
+        return new InputRecordReadResult(records, null, workbook);
     }
 
     internal static InputRecordReadResult Failure(InputRecordReadError error)
@@ -34,7 +39,23 @@ public sealed record InputRecord(
     InputRecordAction Action,
     string? RecordRule,
     IReadOnlyDictionary<string, string> Values,
-    string RawRecord);
+    string RawRecord,
+    int? WorksheetRowNumber = null);
+
+public sealed record WorkbookReadMetadata(
+    IReadOnlyList<string> Sheets,
+    string SelectedSheet,
+    IReadOnlyList<string> Headers);
+
+public sealed record InputReadLimits(
+    long MaxBytes = 10 * 1024 * 1024,
+    int MaxRows = 10_000,
+    int MaxColumns = 256,
+    int MaxCellCharacters = 32_768,
+    TimeSpan? MaxElapsed = null)
+{
+    public static InputReadLimits Default { get; } = new();
+}
 
 public sealed record InputRecordReadError(
     string Code,

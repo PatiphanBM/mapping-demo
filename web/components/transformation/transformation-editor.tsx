@@ -123,7 +123,7 @@ export function TransformationEditor({
   ) {
     const existingIndex = output.fields.findIndex(
       (field) =>
-        field.normalizedColumn.toLowerCase() === normalizedColumn.toLowerCase(),
+        field.normalizedColumn?.toLowerCase() === normalizedColumn.toLowerCase(),
     );
 
     changeOutput((current) => {
@@ -159,7 +159,7 @@ export function TransformationEditor({
     changeOutput((current) => ({
       ...current,
       fields: current.fields.map((field) =>
-        field.normalizedColumn.toLowerCase() === normalizedColumn.toLowerCase()
+        field.normalizedColumn?.toLowerCase() === normalizedColumn.toLowerCase()
           ? { ...field, inputFormat: inputFormat || undefined }
           : field,
       ),
@@ -380,7 +380,7 @@ export function TransformationEditor({
             {normalizedTable.columns.map((column) => {
               const assignment = output.fields.find(
                 (field) =>
-                  field.normalizedColumn.toLowerCase() ===
+                  field.normalizedColumn?.toLowerCase() ===
                   column.name.toLowerCase(),
               );
               const assignmentPath = pathByColumn.get(column.name.toLowerCase());

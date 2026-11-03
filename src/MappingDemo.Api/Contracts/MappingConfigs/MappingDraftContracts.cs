@@ -1,6 +1,8 @@
 using System.Text.Json.Serialization;
 using MappingDemo.Shared.Input;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.Contracts;
 
 namespace MappingDemo.Api.Contracts.MappingConfigs;
 
@@ -18,6 +20,10 @@ public sealed record PreviewMappingConfigVersionRequest
 
     [JsonRequired]
     public required TransformationProgram TransformationProgram { get; init; }
+
+    public DestinationDefinition? Destination { get; init; }
+
+    public IReadOnlyList<string>? AcceptedExtensions { get; init; }
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
@@ -77,7 +83,65 @@ public enum MappingDraftDiagnosticSeverity
 
 public sealed record PreviewMappingConfigVersionResponse(
     DateTimeOffset EvaluationAt,
-    IReadOnlyList<MappingPreviewRecordResponse> Records);
+    IReadOnlyList<MappingPreviewRecordResponse> Records,
+    WorkbookPreviewResponse? Workbook = null,
+    ContractDeliveryPreviewResponse? Contract = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    JsonFilePreviewResponse? JsonFile = null);
+
+public sealed record JsonFilePreviewResponse(
+    string ProfileId,
+    string ContractReference,
+    string SchemaHash,
+    string Formatting,
+    string RelativeDisplayPath,
+    string FinalJson,
+    int ObjectCount,
+    long EstimatedUtf8Bytes,
+    IReadOnlyList<JsonFilePreviewDiagnosticResponse> Diagnostics);
+
+public sealed record JsonFilePreviewDiagnosticResponse(
+    string RowKey,
+    string? OutputKey,
+    string Path,
+    string Code,
+    string Message);
+
+public sealed record ContractDeliveryPreviewResponse(
+    string ProfileId,
+    string ContractReference,
+    string SchemaHash,
+    string Method,
+    string PathTemplate,
+    IReadOnlyList<string> AllowedHeaderNames,
+    string IdempotencyKeyExample,
+    bool SendsRequest,
+    IReadOnlyList<DeliveryPreviewOutputResponse> Outputs);
+
+public sealed record DeliveryPreviewOutputResponse(
+    string RowKey,
+    string OutputKey,
+    string? PayloadJson,
+    string? PayloadHash,
+    IReadOnlyList<ContractDiagnostic> Diagnostics);
+
+public sealed record WorkbookPreviewResponse(
+    IReadOnlyList<string> Sheets,
+    string SelectedSheet,
+    IReadOnlyList<string> Headers);
+
+public sealed class PreviewMappingConfigFileForm
+{
+    public required IFormFile File { get; init; }
+
+    public required string EvaluationAt { get; init; }
+
+    public required string InputLayoutJson { get; init; }
+
+    public required string TransformationProgramJson { get; init; }
+
+    public string? DestinationJson { get; init; }
+}
 
 public sealed record MappingPreviewRecordResponse(
     string RowKey,

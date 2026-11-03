@@ -28,6 +28,39 @@ public static class ConfigVersionValidator
         return errors;
     }
 
+    public static IReadOnlyList<ConfigVersionValidationError> Validate(
+        InputLayoutDefinition inputLayout,
+        TransformationProgram transformationProgram,
+        TableDefinition sourceTable,
+        TargetSchema targetSchema)
+    {
+        return Validate(
+            inputLayout,
+            transformationProgram,
+            new TransformationSchema(sourceTable, targetSchema));
+    }
+
+    public static IReadOnlyList<ConfigVersionValidationError> Validate(
+        InputLayoutDefinition inputLayout,
+        TransformationProgram transformationProgram,
+        TransformationSchema schema)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+        var errors = new List<ConfigVersionValidationError>();
+        ValidateInputLayout(inputLayout, schema.SourceTable, errors);
+        var result = new TransformationModule().Compile(
+            transformationProgram,
+            schema);
+        foreach (var diagnostic in result.Diagnostics.Where(diagnostic =>
+                     diagnostic.Severity == TransformationDiagnosticSeverity.Error))
+        {
+            errors.Add(new ConfigVersionValidationError(
+                $"transformationProgram.{diagnostic.Path}",
+                diagnostic.Message));
+        }
+        return errors;
+    }
+
     private static void ValidateInputLayout(
         InputLayoutDefinition inputLayout,
         TableDefinition sourceTable,
@@ -54,7 +87,7 @@ public static class ConfigVersionValidator
     {
         var result = new TransformationModule().Compile(
             program,
-            new TransformationSchema(sourceTable, normalizedTable));
+            TransformationSchema.FromLegacyTable(sourceTable, normalizedTable));
         foreach (var diagnostic in result.Diagnostics.Where(diagnostic =>
                      diagnostic.Severity ==
                      TransformationDiagnosticSeverity.Error))

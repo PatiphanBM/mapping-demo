@@ -4,8 +4,7 @@ import { useState } from "react";
 import { ErrorPanel } from "@/components/page-state";
 import { TransformationEditor } from "@/components/transformation/transformation-editor";
 import type {
-  DelimitedInputLayout,
-  FixedWidthInputLayout,
+  DestinationDefinition,
   InputLayout,
   MappingCapabilities,
   MappingConfigVersion,
@@ -16,9 +15,16 @@ import type {
 } from "@/lib/api/contracts";
 import {
   createMappingConfigVersion,
+  previewMappingConfigFile,
   previewMappingConfigVersion,
   validateMappingConfigVersion,
 } from "@/lib/api/mapping-configs";
+import {
+  acceptedExtensionsForLayout,
+  defaultDelimitedLayout,
+  defaultExcelLayout,
+  defaultFixedWidthLayout,
+} from "@/lib/input-layout-draft";
 import {
   MAX_SAMPLE_BYTES,
   readUtf8SampleFile,
@@ -28,6 +34,7 @@ import {
 import { createBasicTransformationProgram } from "@/lib/transformation-draft";
 import { DelimitedLayoutForm } from "./delimited-layout-form";
 import { FixedWidthLayoutForm } from "./fixed-width-layout-form";
+import { ExcelLayoutForm } from "./excel-layout-form";
 import { PreviewPanel } from "./preview-panel";
 
 interface InputLayoutEditorProps {
@@ -36,63 +43,10 @@ interface InputLayoutEditorProps {
   transformationProgram?: TransformationProgram;
   sourceTable: TableDefinition;
   normalizedTable: TableDefinition;
+  destination: DestinationDefinition;
   capabilities: MappingCapabilities;
   versionNo?: number;
   onVersionCreated?: (version: MappingConfigVersion) => void;
-}
-
-function firstOrFallback(values: string[], fallback: string) {
-  return values[0] ?? fallback;
-}
-
-function defaultDelimitedLayout(
-  sourceTable: TableDefinition,
-  capabilities: MappingCapabilities,
-): DelimitedInputLayout {
-  return {
-    kind: "delimited",
-    encoding: firstOrFallback(capabilities.input.encodings, "utf-8"),
-    delimiter: ",",
-    preambleLines: 0,
-    headerPolicy: "SingleRow",
-    fields: sourceTable.columns.map((column) => ({
-      inputHeader: column.name,
-      sourceColumn: column.name,
-    })),
-  };
-}
-
-function defaultFixedWidthLayout(
-  sourceTable: TableDefinition,
-  capabilities: MappingCapabilities,
-): FixedWidthInputLayout {
-  const fields = sourceTable.columns.map((column, index) => ({
-    sourceColumn: column.name,
-    start: index * 10 + 2,
-    length: 10,
-  }));
-
-  return {
-    kind: "fixedWidth",
-    encoding: firstOrFallback(capabilities.input.encodings, "utf-8"),
-    positionUnit: firstOrFallback(
-      capabilities.input.positionUnits,
-      "utf16CodeUnit",
-    ),
-    unmatchedRecordPolicy: "Error",
-    recordRules: [
-      {
-        key: "detail",
-        discriminator: { start: 1, length: 1, value: "D" },
-        action: "Import",
-        expectedLength: Math.max(1, fields.length * 10 + 1),
-        fields,
-      },
-    ],
-    recordSequence: [
-      { recordRule: "detail", minOccurs: 1, maxOccurs: null },
-    ],
-  };
 }
 
 export function InputLayoutEditor({
@@ -101,6 +55,7 @@ export function InputLayoutEditor({
   transformationProgram,
   sourceTable,
   normalizedTable,
+  destination,
   capabilities,
   versionNo,
   onVersionCreated,
@@ -120,6 +75,7 @@ export function InputLayoutEditor({
   const [validating, setValidating] = useState(false);
   const [sampleText, setSampleText] = useState("");
   const [fileName, setFileName] = useState("sample.txt");
+  const [sampleFile, setSampleFile] = useState<File | null>(null);
   const [sampleError, setSampleError] = useState<SampleInputError | null>(null);
   const [previewError, setPreviewError] = useState<unknown>(null);
   const [preview, setPreview] =
@@ -153,6 +109,8 @@ export function InputLayoutEditor({
     const response = await validateMappingConfigVersion(configId, {
       inputLayout: layout,
       transformationProgram: program,
+      destination,
+      acceptedExtensions: acceptedExtensionsForLayout(layout),
     });
     setDiagnostics(response.diagnostics);
     return response.isValid;
@@ -184,6 +142,8 @@ export function InputLayoutEditor({
       const created = await createMappingConfigVersion(configId, {
         inputLayout: layout,
         transformationProgram: program,
+        destination,
+        acceptedExtensions: acceptedExtensionsForLayout(layout),
       });
       onVersionCreated?.(created);
     } catch (error) {
@@ -198,11 +158,13 @@ export function InputLayoutEditor({
       return;
     }
 
-    changeLayout(
-      kind === "delimited"
-        ? defaultDelimitedLayout(sourceTable, capabilities)
-        : defaultFixedWidthLayout(sourceTable, capabilities),
-    );
+    changeLayout(kind === "delimited"
+      ? defaultDelimitedLayout(sourceTable, capabilities)
+      : kind === "fixedWidth"
+        ? defaultFixedWidthLayout(sourceTable, capabilities)
+        : defaultExcelLayout(sourceTable));
+    setSampleText("");
+    setSampleFile(null);
   }
 
   async function chooseFile(file: File | undefined) {
@@ -213,7 +175,15 @@ export function InputLayoutEditor({
     setPreview(null);
     setPreviewError(null);
     try {
+      if (layout.kind === "excel") {
+        setSampleFile(file);
+        setSampleText("");
+        setFileName(file.name);
+        setSampleError(null);
+        return;
+      }
       const content = await readUtf8SampleFile(file, layout);
+      setSampleFile(null);
       setSampleText(content);
       setFileName(file.name);
       setSampleError(null);
@@ -238,17 +208,30 @@ export function InputLayoutEditor({
     setSampleError(null);
 
     try {
-      validateSampleText(sampleText, layout);
+      if (layout.kind !== "excel") {
+        validateSampleText(sampleText, layout);
+      }
       const isValid = await requestValidation();
       if (!isValid) {
         return;
       }
-      const response = await previewMappingConfigVersion(configId, {
-        evaluationAt: new Date().toISOString(),
-        sample: { kind: "textFile", fileName, content: sampleText },
-        inputLayout: layout,
-        transformationProgram: program,
-      });
+      const evaluationAt = new Date().toISOString();
+      const response = layout.kind === "excel" && sampleFile
+        ? await previewMappingConfigFile(configId, sampleFile, {
+            evaluationAt,
+            inputLayout: layout,
+            transformationProgram: program,
+            destination,
+            acceptedExtensions: acceptedExtensionsForLayout(layout),
+          })
+        : await previewMappingConfigVersion(configId, {
+            evaluationAt,
+            sample: { kind: "textFile", fileName, content: sampleText },
+            inputLayout: layout,
+            transformationProgram: program,
+            destination,
+            acceptedExtensions: acceptedExtensionsForLayout(layout),
+          });
       setPreview(response);
       const runtimeDiagnostics = response.records.flatMap((record) =>
         (record.transformation?.errors ?? []).map((error) => ({
@@ -301,7 +284,7 @@ export function InputLayoutEditor({
                 onClick={() => selectFormat(kind)}
                 type="button"
               >
-                {kind === "fixedWidth" ? "Fixed width" : "Delimited"}
+                {kind === "fixedWidth" ? "Fixed width" : kind === "excel" ? "Excel" : "Delimited"}
               </button>
             ))}
           </div>
@@ -322,6 +305,15 @@ export function InputLayoutEditor({
         </div>
       ) : null}
 
+      <div className="mt-5 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">
+        <span className="font-semibold">Destination · </span>
+        {destination.kind === "legacyTable"
+          ? `Legacy Table #${destination.normalizedTableId}`
+          : destination.kind === "apiContract"
+            ? `API Contract · ${destination.contract.reference}`
+            : `JSON File · ${destination.contract.reference}`}
+      </div>
+
       <div className="mt-6 border-t border-slate-100 pt-6">
         {layout.kind === "delimited" ? (
           <DelimitedLayoutForm
@@ -330,9 +322,15 @@ export function InputLayoutEditor({
             onChange={changeLayout}
             sourceColumns={sourceColumns}
           />
-        ) : (
+        ) : layout.kind === "fixedWidth" ? (
           <FixedWidthLayoutForm
             capabilities={capabilities}
+            layout={layout}
+            onChange={changeLayout}
+            sourceColumns={sourceColumns}
+          />
+        ) : (
+          <ExcelLayoutForm
             layout={layout}
             onChange={changeLayout}
             sourceColumns={sourceColumns}
@@ -380,15 +378,15 @@ export function InputLayoutEditor({
       <div className="mt-8 border-t border-slate-200 pt-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-slate-900">Raw-record sample</h3>
+            <h3 className="font-semibold text-slate-900">{layout.kind === "excel" ? "Workbook sample" : "Raw-record sample"}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              UTF-8 only · up to 1 MiB · up to 50 parsed records
+              {layout.kind === "excel" ? ".xlsx or .xls · up to 10 MiB · parsed only by the API" : "UTF-8 only · up to 1 MiB · up to 50 parsed records"}
             </p>
           </div>
           <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-            Choose UTF-8 file
+            {layout.kind === "excel" ? "Choose workbook" : "Choose UTF-8 file"}
             <input
-              accept="text/plain,.txt,.csv"
+              accept={layout.kind === "excel" ? ".xlsx,.xls" : "text/plain,.txt,.csv"}
               className="sr-only"
               onChange={(event) => {
                 void chooseFile(event.target.files?.[0]);
@@ -398,7 +396,7 @@ export function InputLayoutEditor({
             />
           </label>
         </div>
-        <textarea
+        {layout.kind !== "excel" ? <textarea
           className="mt-3 min-h-44 w-full rounded-xl border border-slate-300 bg-slate-950 px-4 py-3 font-mono text-sm text-slate-100 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
           onChange={(event) => {
             setSampleText(event.target.value);
@@ -410,11 +408,11 @@ export function InputLayoutEditor({
           placeholder="Paste raw file content here…"
           spellCheck={false}
           value={sampleText}
-        />
+        /> : null}
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
           <span>{fileName}</span>
           <span className={byteCount > MAX_SAMPLE_BYTES ? "text-rose-700" : ""}>
-            {byteCount.toLocaleString()} / {MAX_SAMPLE_BYTES.toLocaleString()} UTF-8 bytes
+            {layout.kind === "excel" ? (sampleFile ? `${sampleFile.size.toLocaleString()} bytes` : "No workbook selected") : `${byteCount.toLocaleString()} / ${MAX_SAMPLE_BYTES.toLocaleString()} UTF-8 bytes`}
           </span>
         </div>
 
@@ -435,7 +433,7 @@ export function InputLayoutEditor({
 
         <button
           className="mt-4 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
-          disabled={previewing || sampleText.length === 0}
+          disabled={previewing || (layout.kind === "excel" ? !sampleFile : sampleText.length === 0)}
           onClick={() => void runPreview()}
           type="button"
         >

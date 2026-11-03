@@ -1,13 +1,15 @@
 using Dapper;
+using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Jobs;
 using MappingDemo.Shared.Tables;
 using MappingDemo.Shared.Transformation;
-using MappingDemo.Worker;
+using MappingDemo.Tests.Destinations;
+using MappingDemo.Worker.Destinations;
 using Npgsql;
 
 namespace MappingDemo.Tests.Worker;
 
-public sealed class NormalizedRowWriterIntegrationTests
+public sealed class LegacyTableDestinationAdapterIntegrationTests
 {
     [Fact]
     [Trait("Category", "PostgreSqlIntegration")]
@@ -37,6 +39,13 @@ public sealed class NormalizedRowWriterIntegrationTests
             await using var dataSource = NpgsqlDataSource.Create(
                 testConnectionString);
             await using var connection = await dataSource.OpenConnectionAsync();
+            var router = DestinationRouterTestFactory.Create(
+                new LegacyTableDestinationAdapter());
+            var compilation = router.Compile(
+                new LegacyTableDestination(301),
+                new DestinationCompilationContext(TargetSchema(), []));
+            Assert.True(compilation.IsSuccess);
+            var destination = compilation.CompiledDestination!;
             await connection.ExecuteAsync("""
                 CREATE TABLE row_jobs (
                     id bigint PRIMARY KEY,
@@ -63,7 +72,9 @@ public sealed class NormalizedRowWriterIntegrationTests
                 """);
 
             await ReconcileAsync(
+                router,
                 connection,
+                destination,
                 rowJobId: 1,
                 Output("pmx", 10),
                 Output("ctp", 20));
@@ -71,53 +82,57 @@ public sealed class NormalizedRowWriterIntegrationTests
             await AssertStatusAsync(connection, 1, RowJobStatus.Done);
 
             await ReconcileAsync(
+                router,
                 connection,
+                destination,
                 rowJobId: 2,
                 Output("pmx", 11));
             await AssertOutputsAsync(connection, ("pmx", 11));
 
             await ReconcileAsync(
+                router,
                 connection,
+                destination,
                 rowJobId: 3,
                 Output("ctp", 21));
             await AssertOutputsAsync(connection, ("ctp", 21));
 
-            await ReconcileAsync(connection, rowJobId: 4);
-            await AssertOutputsAsync(connection);
-            await AssertStatusAsync(connection, 4, RowJobStatus.Filtered);
-
-            await ReconcileAsync(connection, rowJobId: 4);
+            await ReconcileAsync(
+                router,
+                connection,
+                destination,
+                rowJobId: 4);
             await AssertOutputsAsync(connection);
             await AssertStatusAsync(connection, 4, RowJobStatus.Filtered);
 
             await ReconcileAsync(
+                router,
                 connection,
+                destination,
+                rowJobId: 4);
+            await AssertOutputsAsync(connection);
+            await AssertStatusAsync(connection, 4, RowJobStatus.Filtered);
+
+            await ReconcileAsync(
+                router,
+                connection,
+                destination,
                 rowJobId: 5,
                 Output("pmx", 30),
                 Output("ctp", 40));
 
-            await using (var transaction =
-                         await connection.BeginTransactionAsync())
-            {
-                await Assert.ThrowsAsync<PostgresException>(async () =>
-                    await NormalizedRowWriter.ReconcileAndCompleteAsync(
-                        connection,
-                        transaction,
-                        "normalized_rows",
-                        sourceRowId: 101,
-                        fileJobId: 201,
-                        rowNumber: 1,
+            await using var failedTransaction =
+                await connection.BeginTransactionAsync();
+            await Assert.ThrowsAsync<PostgresException>(async () =>
+                await router.DeliverAsync(
+                    destination,
+                    Envelope(
                         rowJobId: 6,
-                        configVersionId: 301,
-                        normalizedColumnNames: ["value"],
-                        outputs:
-                        [
-                            Output("pmx", 31),
-                            Output("ctp", "not-an-integer")
-                        ],
-                        attempts: 1));
-                await transaction.RollbackAsync();
-            }
+                        Output("pmx", 31),
+                        Output("ctp", "not-an-integer")),
+                    connection,
+                    failedTransaction));
+            await failedTransaction.RollbackAsync();
 
             await AssertOutputsAsync(connection, ("ctp", 40), ("pmx", 30));
             await AssertStatusAsync(connection, 6, RowJobStatus.Pending);
@@ -136,24 +151,45 @@ public sealed class NormalizedRowWriterIntegrationTests
     }
 
     private static async Task ReconcileAsync(
+        IDestinationRouter router,
         NpgsqlConnection connection,
+        CompiledDestination destination,
         long rowJobId,
         params TransformationOutputResult[] outputs)
     {
         await using var transaction = await connection.BeginTransactionAsync();
-        await NormalizedRowWriter.ReconcileAndCompleteAsync(
+        var result = await router.DeliverAsync(
+            destination,
+            Envelope(rowJobId, outputs),
             connection,
-            transaction,
-            "normalized_rows",
-            sourceRowId: 101,
-            fileJobId: 201,
-            rowNumber: 1,
-            rowJobId,
-            configVersionId: 301,
-            normalizedColumnNames: ["value"],
-            outputs,
-            attempts: 1);
+            transaction);
         await transaction.CommitAsync();
+        Assert.Equal(
+            outputs.Length == 0 ? RowJobStatus.Filtered : RowJobStatus.Done,
+            result.CompletionStatus);
+    }
+
+    private static DeliveryEnvelope Envelope(
+        long rowJobId,
+        params TransformationOutputResult[] outputs)
+    {
+        return new DeliveryEnvelope(
+            SourceRowId: 101,
+            FileJobId: 201,
+            RowNumber: 1,
+            RowJobId: rowJobId,
+            ConfigVersionId: 301,
+            Outputs: outputs,
+            Attempts: 1);
+    }
+
+    private static TargetSchema TargetSchema()
+    {
+        return new LegacyTableTargetSchemaAdapter().Adapt(
+            new TableDefinition(
+                "normalized_rows",
+                TableKind.Normalized,
+                [new ColumnDefinition("value", ColumnDataType.Integer, false, 1)]));
     }
 
     private static TransformationOutputResult Output(

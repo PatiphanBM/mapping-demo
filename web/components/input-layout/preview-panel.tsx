@@ -78,6 +78,14 @@ export function PreviewPanel({ preview }: PreviewPanelProps) {
         </p>
       </div>
 
+      {preview.workbook ? (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">
+          <strong>Worksheet: {preview.workbook.selectedSheet}</strong>
+          <p className="mt-1">Workbook sheets: {preview.workbook.sheets.join(", ")}</p>
+          <p className="mt-1 font-mono text-xs">Headers: {preview.workbook.headers.join(" | ")}</p>
+        </div>
+      ) : null}
+
       {preview.records.map((record) => (
         <article
           className="overflow-hidden rounded-xl border border-slate-200 bg-white"

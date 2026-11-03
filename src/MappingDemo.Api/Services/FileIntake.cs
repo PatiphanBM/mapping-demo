@@ -19,7 +19,7 @@ public sealed class FileIntake
             archive_status)
         SELECT
             mapping_configs.id,
-            mapping_configs.active_version_id,
+            @ConfigVersionId,
             @OriginalPath,
             @FileName,
             @IntakeKey,
@@ -28,6 +28,9 @@ public sealed class FileIntake
         FROM mapping_configs
         WHERE mapping_configs.id = @ConfigId
           AND mapping_configs.active_version_id IS NOT NULL
+          AND @ConfigVersionId IN (
+              SELECT id FROM mapping_config_versions
+              WHERE config_id = mapping_configs.id)
           AND NOT EXISTS (
               SELECT 1
               FROM file_jobs
@@ -67,6 +70,7 @@ public sealed class FileIntake
 
     public async Task<long?> CreateJobAsync(
         long configId,
+        long configVersionId,
         FileIntakeDetails intake,
         CancellationToken cancellationToken = default)
     {
@@ -77,6 +81,7 @@ public sealed class FileIntake
         var parameters = new
         {
             ConfigId = configId,
+            ConfigVersionId = configVersionId,
             OriginalPath = intake.Path,
             intake.FileName,
             intake.IntakeKey,
