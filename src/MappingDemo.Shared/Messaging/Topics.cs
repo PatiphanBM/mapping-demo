@@ -10,4 +10,6 @@ public static class Topics
 
     public const string JsonExportFinalize =
         "mapping.json-export-finalize";
+
+    public const string DatabaseDelivery = "mapping.database-delivery";
 }

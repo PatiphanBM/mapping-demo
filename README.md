@@ -7,7 +7,8 @@ input/ → API (File Watcher) → outbox → Worker → Kafka
           Source rows ← File Import ←┘       └→ Row Transform
                                                     ├→ LegacyTable → Normalized rows
                                                     ├→ ApiContract → Delivery Job → Partner API
-                                                    └→ JsonFile → staged objects → one JSON array
+                                                    ├→ JsonFile → staged objects → one JSON array
+                                                    └→ DatabaseTable → encrypted job → parameterized INSERT
 ```
 
 Source เก็บค่าดิบจาก Input Layout เป็นข้อความก่อน จากนั้นแต่ละแถวถูกส่งผ่าน transactional outbox ไปประเมิน Transformation Program โดยไม่ต้องรอให้ทั้งไฟล์ import เสร็จ รองรับหลาย output branches, named transform/lookup, duplicate detection, retry และ reprocess ด้วย config version ที่เลือก
@@ -80,9 +81,11 @@ Source เก็บค่าดิบจาก Input Layout เป็นข้�
 
 Kafka UI อยู่ที่ <http://localhost:8080> ค่า delay อ่านจาก `Import:DelaySeconds` (Development config ของ repo ตั้งไว้ 1 วินาทีเพื่อทดสอบเร็ว; baseline ทางธุรกิจคือ 30 วินาที) และ override ตอนรันได้ เช่น `dotnet run --project src/MappingDemo.Worker -- Import:DelaySeconds=30`
 
-## Delivery และ JSON export operations
+## Delivery, JSON export และ DatabaseTable operations
 
 หน้า <http://localhost:3000/delivery> แสดง File/Delivery Job และ JSON Export status/history, attempts, relative path, count, size, SHA-256, timestamps และ redacted error โดยไม่แสดง payload body, absolute Output Root หรือ credential ปุ่ม retry ปรากฏเฉพาะ `RetryableFailed` ที่ policy อนุญาต; retry, reprocess และ authorized business resend เป็นคนละ action
+
+หน้าเดียวกันแสดง Database Delivery status, latest schema compatibility และ authorized resolve actions โดยคืนเฉพาะ logical target, hashes และ redacted diagnostics ไม่คืน connection string, raw SQL หรือ mapped payload การตั้งค่า DatabaseTable รองรับ PostgreSQL/SQL Server ผ่าน `DestinationDatabases:Profiles` และ named `ConnectionStrings`; feature/profile/runtime gates ปิดโดย default จน Gate I ผ่าน ดู rollout, duplicate/unknown-outcome และ incident steps ที่ [Phase 29 DatabaseTable delivery runbook](docs/phase-29-database-table-delivery-runbook.md)
 
 ก่อน activate ApiContract version ต้องเปิด rollout ให้ Mapping Config นั้นก่อน:
 
@@ -147,6 +150,8 @@ Endpoint สำหรับหน้าเว็บมีดังนี้:
 - `POST /mapping-configs/{id}/versions/{version}/activate` — ตรวจ dependency แล้ว activate
 - `GET /json-exports?fileJobId={id}` และ `POST /json-exports/{id}/retry` — metadata/history และ policy-aware retry
 - `GET /delivery-operations` และ `PUT /delivery-operations/control` — metrics/alerts และ audited kill switches
+- `GET /database-destinations/profiles` และ `GET /database-destinations/profiles/{profileId}/schemas/{schema}/tables/{table}` — safe external table catalog/inspection
+- `GET /database-delivery-operations` และ `POST /database-delivery-operations/{id}/{action}` — safe schema/job status และ audited retry/resolve
 - `GET /admin/api-destination-profile-operations` — safe profile validation/mutation/cache/resolution metrics และ alerts สำหรับผู้มีสิทธิ์ `ProfileAdmin.Read`
 - `GET /tables`, `GET /tables/{id}` และ `GET /tables/{id}/references` — bounded Table metadata/search และ Config Version/pinned-job impact
 - `POST /tables`, `POST /tables/{id}/columns` — typed expand-only mutation พร้อม permission/operator/reason/audit และ production kill switch
@@ -157,7 +162,7 @@ Preview file รับ UTF-8 text ไม่เกิน 1 MiB/50 parsed records 
 
 ## เอกสาร
 
-- [Current Mapping Demo Workflow](docs/current-mapping-demo-workflow.md) — ภาพการทำงานปัจจุบันตั้งแต่ control plane, รับไฟล์, transform จนถึงทั้ง 3 destinations
+- [Current Mapping Demo Workflow](docs/current-mapping-demo-workflow.md) — ภาพการทำงานปัจจุบันตั้งแต่ control plane, รับไฟล์, transform จนถึงทั้ง 4 destinations
 - [Learning plan](docs/learning-plan.md) — ขั้นตอนลงมือและเกณฑ์ตรวจรับ
 - [Web config plan](docs/web-config-plan.md) — แผน backend Phase 19 และหน้าเว็บ Phase 20
 - [Backend config handoff](docs/backend-config-handoff.md) — contract, invariants และหลักฐานตรวจรับ Phase 19
@@ -184,5 +189,8 @@ Preview file รับ UTF-8 text ไม่เกิน 1 MiB/50 parsed records 
 - [Phase 28 Table Administration operations runbook](docs/phase-28-table-administration-operations-runbook.md) — create/add-column, drift, backup/restore, kill switch และ rollout
 - [Phase 28 acceptance matrix](docs/phase-28-acceptance-matrix.md) — Gate H traceability ไปยัง migration/Inspector/API/UI tests
 - [Phase 28 Gate H evidence](docs/phase-28-gate-h-evidence.md) — full regression/security evidence และ owner sign-off status
+- [Phase 29 DatabaseTable delivery runbook](docs/phase-29-database-table-delivery-runbook.md) — profile, gates, schema drift, duplicate/unknown outcome, incident และ rollback
+- [Phase 29 acceptance matrix](docs/phase-29-acceptance-matrix.md) — traceability ของ requirements ไปยัง implementation/tests
+- [Phase 29 Gate I evidence](docs/phase-29-gate-i-evidence.md) — verification record, missing live-provider evidence และ owner sign-off status
 
 ภาพการทำงานของ demo ปัจจุบันแบบต้นจนจบให้ยึด [Current Mapping Demo Workflow](docs/current-mapping-demo-workflow.md) ส่วน learning/demo plan ใช้ดูขั้นตอนและการตัดสินใจย้อนหลัง เอกสารบริบทระบบเดิมคือ [Current Program Workflow](current-program-workflow.md) และ [Mapping API Modernization Proposal](plan-mapping-api-modernization.md)

@@ -123,6 +123,49 @@ public sealed class JsonExportPayloadProtector(
     }
 }
 
+public sealed class DatabaseDeliveryPayloadProtector(
+    IDeliverySecretProvider secrets,
+    IConfiguration configuration)
+{
+    private readonly AesGcmPayloadProtector _protector = new(secrets);
+
+    private readonly string _keyReference = configuration[
+        "DatabaseDelivery:PayloadEncryptionKeyReference"] ??
+        "database-delivery-payload-v1";
+
+    public ValueTask<ProtectedDeliveryPayload> ProtectAsync(
+        ReadOnlyMemory<byte> plaintext,
+        CancellationToken cancellationToken) =>
+        _protector.ProtectAsync(
+            plaintext,
+            _keyReference,
+            cancellationToken);
+
+    public ValueTask<byte[]> UnprotectAsync(
+        ReadOnlyMemory<byte> ciphertext,
+        ReadOnlyMemory<byte> nonce,
+        ReadOnlyMemory<byte> tag,
+        string keyReference,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(
+                keyReference,
+                _keyReference,
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Payload key reference '{keyReference}' is not configured.");
+        }
+
+        return _protector.UnprotectAsync(
+            ciphertext,
+            nonce,
+            tag,
+            keyReference,
+            cancellationToken);
+    }
+}
+
 internal sealed class AesGcmPayloadProtector(IDeliverySecretProvider secrets)
 {
     public async ValueTask<ProtectedDeliveryPayload> ProtectAsync(

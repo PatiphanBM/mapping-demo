@@ -9,6 +9,7 @@ using MappingDemo.Shared.Messaging;
 using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Tables;
 using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.DatabaseDestinations;
 using Npgsql;
 
 namespace MappingDemo.Worker;
@@ -493,6 +494,38 @@ public sealed class RowNormalizeHandler
             }
 
             targetSchema = schemaCompilation.TargetSchema!;
+            normalizedColumns = [];
+        }
+        else if (destination is DatabaseTableDestination database)
+        {
+            var snapshot = database.SchemaSnapshot;
+            var recomputed = TargetTableSchema.Create(
+                snapshot.ProfileId,
+                snapshot.Provider,
+                snapshot.Schema,
+                snapshot.Table,
+                snapshot.Columns,
+                snapshot.UniqueConstraints);
+            if (!string.Equals(
+                    database.SchemaHash,
+                    snapshot.SchemaHash,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    database.SchemaHash,
+                    recomputed.SchemaHash,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "The pinned database target schema hash is invalid.");
+            }
+
+            var keyColumns = database.DuplicatePolicy is
+                ExistingUniqueKeyDuplicatePolicy key
+                    ? key.Columns.ToHashSet(StringComparer.Ordinal)
+                    : new HashSet<string>(StringComparer.Ordinal);
+            targetSchema = DatabaseTargetSchemaAdapter.Adapt(
+                snapshot,
+                keyColumns);
             normalizedColumns = [];
         }
         else

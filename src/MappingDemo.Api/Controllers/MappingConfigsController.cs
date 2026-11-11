@@ -11,6 +11,7 @@ using Npgsql;
 using System.Text.Json;
 using MappingDemo.Shared.Serialization;
 using MappingDemo.Shared.Contracts;
+using MappingDemo.Shared.DatabaseDestinations;
 
 namespace MappingDemo.Api.Controllers;
 
@@ -31,6 +32,10 @@ public sealed class MappingConfigsController : ControllerBase
     private readonly PayloadBindingModule _payloadBindings;
     private readonly JsonFilePreviewModule _jsonFilePreviewModule;
     private readonly DeliveryOperationsService _deliveryOperations;
+    private readonly IDatabaseDestinationProfileCatalog _databaseProfiles;
+    private readonly IDatabaseTargetSchemaInspector _databaseSchemaInspector;
+    private readonly bool _databaseTableDestinationCreationEnabled;
+    private readonly bool _databaseTableDestinationActivationEnabled;
 
     public MappingConfigsController(
         MappingConfigService mappingConfigService,
@@ -43,6 +48,8 @@ public sealed class MappingConfigsController : ControllerBase
         PayloadBindingModule payloadBindings,
         JsonFilePreviewModule jsonFilePreviewModule,
         DeliveryOperationsService deliveryOperations,
+        IDatabaseDestinationProfileCatalog databaseProfiles,
+        IDatabaseTargetSchemaInspector databaseSchemaInspector,
         IConfiguration configuration)
     {
         _mappingConfigService = mappingConfigService;
@@ -55,8 +62,16 @@ public sealed class MappingConfigsController : ControllerBase
         _payloadBindings = payloadBindings;
         _jsonFilePreviewModule = jsonFilePreviewModule;
         _deliveryOperations = deliveryOperations;
+        _databaseProfiles = databaseProfiles;
+        _databaseSchemaInspector = databaseSchemaInspector;
         _apiContractDestinationCreationEnabled = configuration.GetValue(
             "Features:ApiContractDestinationCreation",
+            false);
+        _databaseTableDestinationCreationEnabled = configuration.GetValue(
+            "Features:DatabaseTableDestinationCreation",
+            false);
+        _databaseTableDestinationActivationEnabled = configuration.GetValue(
+            "Features:DatabaseTableDestinationActivation",
             false);
     }
 
@@ -144,6 +159,13 @@ public sealed class MappingConfigsController : ControllerBase
                     $"destination.{diagnostic.Path}",
                     diagnostic.Message);
             }
+        }
+        else if (destination is DatabaseTableDestination databaseDestination)
+        {
+            await ValidateDatabaseDestinationAsync(
+                databaseDestination,
+                requireCreationGate: true,
+                cancellationToken);
         }
 
         if (sourceTable is null)
@@ -246,6 +268,17 @@ public sealed class MappingConfigsController : ControllerBase
                 "destination.kind",
                 "ApiContract destination creation is disabled until Phase 23.");
             return ValidationProblem(ModelState);
+        }
+        if (destination is DatabaseTableDestination databaseDestination)
+        {
+            await ValidateDatabaseDestinationAsync(
+                databaseDestination,
+                requireCreationGate: true,
+                cancellationToken);
+            if (!ModelState.IsValid)
+            {
+                return ValidationProblem(ModelState);
+            }
         }
 
         var sourceTable = await _tableService.GetByIdAsync(
@@ -545,6 +578,93 @@ public sealed class MappingConfigsController : ControllerBase
                 });
             }
         }
+        else if (configVersion.Destination is DatabaseTableDestination database)
+        {
+            if (!_databaseTableDestinationActivationEnabled)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "DatabaseTable activation is blocked by rollout policy."
+                });
+            }
+
+            var activationGate = await _deliveryOperations
+                .CanActivateDatabaseTableAsync(id, cancellationToken);
+            if (!activationGate.Allowed)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "DatabaseTable activation is blocked by the runtime kill switch.",
+                    Detail = activationGate.Reason
+                });
+            }
+
+            DatabaseDestinationProfile profile;
+            try
+            {
+                profile = _databaseProfiles.GetRequired(database.ProfileId);
+            }
+            catch (KeyNotFoundException)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "The database destination profile is unavailable."
+                });
+            }
+
+            if (!profile.WriteEnabled)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "DatabaseTable writes are disabled for this profile."
+                });
+            }
+
+            try
+            {
+                var current = await _databaseSchemaInspector.InspectAsync(
+                    new TargetTableReference(
+                        database.ProfileId,
+                        database.Schema,
+                        database.Table),
+                    refresh: true,
+                    cancellationToken);
+                var mappedColumns = MappedDatabaseColumns(
+                    configVersion.TransformationProgram);
+                var selectedKey = database.DuplicatePolicy is
+                    ExistingUniqueKeyDuplicatePolicy key
+                        ? key.Columns
+                        : [];
+                var compatibility = TargetSchemaCompatibilityAnalyzer.Compare(
+                    database.SchemaSnapshot,
+                    current,
+                    mappedColumns,
+                    selectedKey);
+                if (compatibility.BlocksDelivery)
+                {
+                    return Conflict(new ProblemDetails
+                    {
+                        Status = StatusCodes.Status409Conflict,
+                        Title = "DatabaseTable activation is blocked by schema drift.",
+                        Detail = string.Join(
+                            "; ",
+                            compatibility.Changes.Select(change => change.Message))
+                    });
+                }
+            }
+            catch (DatabaseSchemaInspectionException)
+            {
+                return Conflict(new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "The database target schema is unavailable."
+                });
+            }
+        }
 
         var sourceTable = await _tableService.GetByIdAsync(
             config.SourceTableId,
@@ -573,6 +693,12 @@ public sealed class MappingConfigsController : ControllerBase
             targetSchema = new ContractSchemaModule()
                 .Compile(configVersion.ContractSnapshot.CanonicalSchema)
                 .TargetSchema;
+        }
+        else if (configVersion.Destination is DatabaseTableDestination database)
+        {
+            targetSchema = DatabaseTargetSchemaAdapter.Adapt(
+                database.SchemaSnapshot,
+                SelectedDatabaseKey(database));
         }
         if (targetSchema is null)
         {
@@ -805,6 +931,52 @@ public sealed class MappingConfigsController : ControllerBase
             return new SchemaResult(true, legacySchema, []);
         }
 
+        if (destination is DatabaseTableDestination database)
+        {
+            try
+            {
+                var current = await _databaseSchemaInspector.InspectAsync(
+                    new TargetTableReference(
+                        database.ProfileId,
+                        database.Schema,
+                        database.Table),
+                    refresh: true,
+                    cancellationToken);
+                if (!string.Equals(
+                        current.SchemaHash,
+                        database.SchemaHash,
+                        StringComparison.Ordinal))
+                {
+                    return new SchemaResult(
+                        true,
+                        null,
+                        [new ContractDiagnostic(
+                            "schemaHash",
+                            "StaleTargetSchema",
+                            "Target schema changed. Refresh it before creating this Config Version.")]);
+                }
+
+                return new SchemaResult(
+                    true,
+                    new TransformationSchema(
+                        ToDefinition(sourceTable),
+                        DatabaseTargetSchemaAdapter.Adapt(
+                            database.SchemaSnapshot,
+                            SelectedDatabaseKey(database))),
+                    []);
+            }
+            catch (DatabaseSchemaInspectionException exception)
+            {
+                return new SchemaResult(
+                    true,
+                    null,
+                    [new ContractDiagnostic(
+                        "schema",
+                        exception.Code,
+                        exception.Message)]);
+            }
+        }
+
         var snapshot = await _contractRegistry.ResolveAsync(
             destination,
             cancellationToken);
@@ -832,6 +1004,67 @@ public sealed class MappingConfigsController : ControllerBase
                 cancellationToken)
             : null;
     }
+
+    private async Task ValidateDatabaseDestinationAsync(
+        DatabaseTableDestination destination,
+        bool requireCreationGate,
+        CancellationToken cancellationToken)
+    {
+        if (requireCreationGate && !_databaseTableDestinationCreationEnabled)
+        {
+            ModelState.AddModelError(
+                "destination.kind",
+                "DatabaseTable destination creation is disabled by rollout policy.");
+            return;
+        }
+
+        try
+        {
+            var current = await _databaseSchemaInspector.InspectAsync(
+                new TargetTableReference(
+                    destination.ProfileId,
+                    destination.Schema,
+                    destination.Table),
+                refresh: true,
+                cancellationToken);
+            if (!string.Equals(
+                    current.SchemaHash,
+                    destination.SchemaHash,
+                    StringComparison.Ordinal))
+            {
+                ModelState.AddModelError(
+                    "destination.schemaHash",
+                    "Target schema changed. Refresh it before continuing.");
+            }
+        }
+        catch (KeyNotFoundException)
+        {
+            ModelState.AddModelError(
+                "destination.profileId",
+                "Database destination profile was not found.");
+        }
+        catch (DatabaseSchemaInspectionException exception)
+        {
+            ModelState.AddModelError(
+                "destination.schema",
+                $"{exception.Code}: {exception.Message}");
+        }
+    }
+
+    private static IReadOnlySet<string> MappedDatabaseColumns(
+        TransformationProgram program) =>
+        program.Outputs
+            .SelectMany(output => output.Fields)
+            .Select(field => field.NormalizedColumn ?? field.TargetPath)
+            .Where(column => !string.IsNullOrWhiteSpace(column))
+            .Select(column => column!)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static IReadOnlySet<string> SelectedDatabaseKey(
+        DatabaseTableDestination destination) =>
+        destination.DuplicatePolicy is ExistingUniqueKeyDuplicatePolicy key
+            ? key.Columns.ToHashSet(StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
 
     private DestinationDefinition? NormalizeDestination(
         DestinationDefinition? destination,

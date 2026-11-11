@@ -14,6 +14,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
             api_contract_activation_enabled AS "ApiContractActivationEnabled",
             json_file_activation_enabled AS "JsonFileActivationEnabled",
             json_file_finalizer_paused AS "JsonFileFinalizerPaused",
+            database_table_activation_enabled AS "DatabaseTableActivationEnabled",
+            database_delivery_paused AS "DatabaseDeliveryPaused",
             updated_at AS "UpdatedAt",
             updated_by AS "UpdatedBy",
             reason AS "Reason"
@@ -226,6 +228,26 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
             activationEnabled,
             jsonFileActivationEnabled: false,
             jsonFileFinalizerPaused: true,
+            databaseTableActivationEnabled: false,
+            databaseDeliveryPaused: true,
+            changedBy,
+            reason,
+            cancellationToken);
+
+    public Task<DeliveryControlResponse> UpdateControlAsync(
+        bool deliveryPaused,
+        bool apiActivationEnabled,
+        bool? jsonFileActivationEnabled,
+        bool? jsonFileFinalizerPaused,
+        string changedBy,
+        string reason,
+        CancellationToken cancellationToken) => UpdateControlAsync(
+            deliveryPaused,
+            apiActivationEnabled,
+            jsonFileActivationEnabled,
+            jsonFileFinalizerPaused,
+            databaseTableActivationEnabled: null,
+            databaseDeliveryPaused: null,
             changedBy,
             reason,
             cancellationToken);
@@ -235,6 +257,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
         bool apiActivationEnabled,
         bool? jsonFileActivationEnabled,
         bool? jsonFileFinalizerPaused,
+        bool? databaseTableActivationEnabled,
+        bool? databaseDeliveryPaused,
         string changedBy,
         string reason,
         CancellationToken cancellationToken)
@@ -250,6 +274,12 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
                 json_file_finalizer_paused = COALESCE(
                     @JsonFileFinalizerPaused,
                     json_file_finalizer_paused),
+                database_table_activation_enabled = COALESCE(
+                    @DatabaseTableActivationEnabled,
+                    database_table_activation_enabled),
+                database_delivery_paused = COALESCE(
+                    @DatabaseDeliveryPaused,
+                    database_delivery_paused),
                 updated_at = now(),
                 updated_by = @ChangedBy,
                 reason = @Reason
@@ -260,6 +290,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
                 api_contract_activation_enabled,
                 json_file_activation_enabled,
                 json_file_finalizer_paused,
+                database_table_activation_enabled,
+                database_delivery_paused,
                 changed_by,
                 reason)
             SELECT
@@ -267,6 +299,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
                 api_contract_activation_enabled,
                 json_file_activation_enabled,
                 json_file_finalizer_paused,
+                database_table_activation_enabled,
+                database_delivery_paused,
                 @ChangedBy,
                 @Reason
             FROM delivery_runtime_control
@@ -284,6 +318,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
                 ActivationEnabled = apiActivationEnabled,
                 JsonFileActivationEnabled = jsonFileActivationEnabled,
                 JsonFileFinalizerPaused = jsonFileFinalizerPaused,
+                DatabaseTableActivationEnabled = databaseTableActivationEnabled,
+                DatabaseDeliveryPaused = databaseDeliveryPaused,
                 ChangedBy = changedBy,
                 Reason = reason
             },
@@ -362,6 +398,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
             row.ApiContractActivationEnabled,
         row.JsonFileActivationEnabled,
         row.JsonFileFinalizerPaused,
+        row.DatabaseTableActivationEnabled,
+        row.DatabaseDeliveryPaused,
             AsUtcOffset(row.UpdatedAt),
             row.UpdatedBy,
             row.Reason);
@@ -384,6 +422,8 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
         bool ApiContractActivationEnabled,
         bool JsonFileActivationEnabled,
         bool JsonFileFinalizerPaused,
+        bool DatabaseTableActivationEnabled,
+        bool DatabaseDeliveryPaused,
         DateTime UpdatedAt,
         string UpdatedBy,
         string Reason);
@@ -454,6 +494,25 @@ public sealed class DeliveryOperationsService(NpgsqlDataSource dataSource)
             ? new(true, null)
             : new(false,
                 $"New JsonFile activation is disabled by the global kill switch for config {configId}.");
+    }
+
+    public async Task<ApiContractActivationGate> CanActivateDatabaseTableAsync(
+        long configId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT database_table_activation_enabled
+            FROM delivery_runtime_control
+            WHERE singleton = true;
+            """;
+        await using var connection =
+            await dataSource.OpenConnectionAsync(cancellationToken);
+        var enabled = await connection.ExecuteScalarAsync<bool>(
+            new CommandDefinition(sql, cancellationToken: cancellationToken));
+        return enabled
+            ? new(true, null)
+            : new(false,
+                $"New DatabaseTable activation is disabled by the global kill switch for config {configId}.");
     }
 
     private static double Ratio(int numerator, int denominator) =>

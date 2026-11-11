@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MappingDemo.Shared.Destinations;
+using MappingDemo.Shared.DatabaseDestinations;
 
 namespace MappingDemo.Shared.MappingConfigs;
 
@@ -63,10 +64,120 @@ public static class DestinationDefinitionValidator
             "legacyTable" => ValidateLegacyTable(destination),
             "apiContract" => ValidateApiContract(destination),
             "jsonFile" => ValidateJsonFile(destination),
+            "databaseTable" => ValidateDatabaseTable(destination),
             _ => Error(
                 "destination.kind",
                 "Unknown destination kind.")
         };
+    }
+
+    private static IReadOnlyList<ConfigVersionValidationError>
+        ValidateDatabaseTable(JsonElement destination)
+    {
+        var errors = new List<ConfigVersionValidationError>();
+        errors.AddRange(ValidateAllowedProperties(
+            destination,
+            "databaseTable",
+            "kind",
+            "profileId",
+            "schema",
+            "table",
+            "writeMode",
+            "duplicatePolicy",
+            "schemaHash",
+            "schemaSnapshot"));
+        if (errors.Count > 0)
+        {
+            return errors;
+        }
+
+        foreach (var name in new[] { "profileId", "schema", "table", "schemaHash" })
+        {
+            if (!TryGetRequiredString(destination, name, out _))
+            {
+                errors.Add(new ConfigVersionValidationError(
+                    $"destination.{name}",
+                    $"{name} is required."));
+            }
+        }
+        if (!TryGetRequiredString(destination, "writeMode", out var writeMode) ||
+            writeMode != "insert")
+        {
+            errors.Add(new ConfigVersionValidationError(
+                "destination.writeMode",
+                "Write mode must be insert."));
+        }
+
+        DatabaseTableDestination? typed = null;
+        try
+        {
+            typed = JsonSerializer.Deserialize<DestinationDefinition>(
+                destination,
+                JsonOptions) as DatabaseTableDestination;
+        }
+        catch (JsonException)
+        {
+            errors.Add(new ConfigVersionValidationError(
+                "destination",
+                "Database table destination is invalid."));
+        }
+
+        if (typed is null)
+        {
+            return errors;
+        }
+
+        var snapshot = typed.SchemaSnapshot;
+        var computed = TargetTableSchema.Create(
+            snapshot.ProfileId,
+            snapshot.Provider,
+            snapshot.Schema,
+            snapshot.Table,
+            snapshot.Columns,
+            snapshot.UniqueConstraints);
+        if (!string.Equals(typed.SchemaHash, snapshot.SchemaHash, StringComparison.Ordinal) ||
+            !string.Equals(typed.SchemaHash, computed.SchemaHash, StringComparison.Ordinal) ||
+            !string.Equals(typed.ProfileId, snapshot.ProfileId, StringComparison.Ordinal) ||
+            !string.Equals(typed.Schema, snapshot.Schema, StringComparison.Ordinal) ||
+            !string.Equals(typed.Table, snapshot.Table, StringComparison.Ordinal))
+        {
+            errors.Add(new ConfigVersionValidationError(
+                "destination.schemaHash",
+                "Schema snapshot identity or hash is invalid."));
+        }
+
+        if (typed.DuplicatePolicy is ExistingUniqueKeyDuplicatePolicy key)
+        {
+            var keyExists = snapshot.UniqueConstraints.Any(constraint =>
+                constraint.Columns.SequenceEqual(key.Columns, StringComparer.Ordinal));
+            var columns = snapshot.Columns.ToDictionary(
+                column => column.Name,
+                StringComparer.Ordinal);
+            var keyWritable = key.Columns.Count > 0 && key.Columns.All(column =>
+                columns.TryGetValue(column, out var definition) &&
+                definition.IsWritable &&
+                !definition.IsIdentity &&
+                !definition.IsGenerated &&
+                !definition.IsComputed);
+            if (!keyExists || !keyWritable)
+            {
+                errors.Add(new ConfigVersionValidationError(
+                    "destination.duplicatePolicy.columns",
+                    "Selected columns must be an existing writable non-generated unique key."));
+            }
+        }
+
+        if (snapshot.Columns.Any(column =>
+                column.IsRequired &&
+                column.ScalarType is DatabaseScalarType.Binary or
+                    DatabaseScalarType.Unsupported))
+        {
+            errors.Add(new ConfigVersionValidationError(
+                "destination.schemaSnapshot.columns",
+                "A required target column has an unsupported scalar type."));
+        }
+
+        return errors;
     }
 
     private static IReadOnlyList<ConfigVersionValidationError>

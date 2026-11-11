@@ -29,6 +29,8 @@ public sealed class DeliveryOperationsController(
             request.ApiContractActivationEnabled,
             request.JsonFileActivationEnabled,
             request.JsonFileFinalizerPaused,
+            request.DatabaseTableActivationEnabled,
+            request.DatabaseDeliveryPaused,
             operatorId!,
             request.Reason.Trim(),
             cancellationToken));

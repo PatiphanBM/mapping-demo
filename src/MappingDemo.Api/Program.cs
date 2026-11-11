@@ -2,6 +2,7 @@ using MappingDemo.Api;
 using MappingDemo.Api.Options;
 using MappingDemo.Api.Services;
 using MappingDemo.Shared.Database;
+using MappingDemo.Shared.DatabaseDestinations;
 using MappingDemo.Shared.Contracts;
 using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Tables;
@@ -94,6 +95,7 @@ builder.Services
     }, "One or more File destination profiles are invalid.")
     .ValidateOnStart();
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddDatabaseDestinations(builder.Configuration);
 builder.Services.AddSingleton<ApiDestinationProfileObservability>();
 builder.Services.AddSingleton<ApiDestinationProfileCatalog>(serviceProvider =>
     serviceProvider.GetRequiredService<IOptions<ApiDestinationProfilesOptions>>()
@@ -181,6 +183,7 @@ builder.Services.AddScoped<RowJobService>();
 builder.Services.AddScoped<DeliveryJobService>();
 builder.Services.AddScoped<JsonExportOperationsService>();
 builder.Services.AddScoped<DeliveryOperationsService>();
+builder.Services.AddScoped<DatabaseDeliveryOperationsService>();
 builder.Services.AddScoped<ApiDestinationProfileAdministrationService>();
 builder.Services.AddSingleton<IProfileSecretReferenceValidator,
     EnvironmentProfileSecretReferenceValidator>();

@@ -3,14 +3,16 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ErrorPanel, LoadingPanel } from "@/components/page-state";
 import { ApiError } from "@/lib/api/client";
-import type { DeliveryJob, DeliveryOperations, FileJob, JsonExportHistory } from "@/lib/api/contracts";
+import type { DatabaseDeliveryOperations, DeliveryJob, DeliveryOperations, FileJob, JsonExportHistory } from "@/lib/api/contracts";
 import {
+  getDatabaseDeliveryOperations,
   getDeliveryOperations,
   listDeliveryJobs,
   listFileJobs,
   listJsonExports,
   retryDeliveryJob,
   retryJsonExport,
+  resolveDatabaseDelivery,
   updateDeliveryControl,
 } from "@/lib/api/delivery-jobs";
 
@@ -20,11 +22,13 @@ export default function DeliveryPage() {
   const [deliveries, setDeliveries] = useState<DeliveryJob[]>([]);
   const [exports, setExports] = useState<JsonExportHistory[]>([]);
   const [operations, setOperations] = useState<DeliveryOperations | null>(null);
+  const [databaseOperations, setDatabaseOperations] = useState<DatabaseDeliveryOperations | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionId, setActionId] = useState<number | null>(null);
   const [exportActionId, setExportActionId] = useState<number | null>(null);
+  const [databaseActionId, setDatabaseActionId] = useState<number | null>(null);
   const [controlBusy, setControlBusy] = useState(false);
   const [operatorId, setOperatorId] = useState("");
   const [reason, setReason] = useState("");
@@ -35,6 +39,7 @@ export default function DeliveryPage() {
       const result = await fetchDashboard(preferredId ?? selectedFileJobId);
       setFileJobs(result.jobs);
       setOperations(result.snapshot);
+      setDatabaseOperations(result.databaseSnapshot);
       setSelectedFileJobId(result.selectedId);
       setDeliveries(result.rows);
       setExports(result.exports);
@@ -54,6 +59,7 @@ export default function DeliveryPage() {
         if (!cancelled) {
           setFileJobs(result.jobs);
           setOperations(result.snapshot);
+          setDatabaseOperations(result.databaseSnapshot);
           setSelectedFileJobId(result.selectedId);
           setDeliveries(result.rows);
           setExports(result.exports);
@@ -128,6 +134,8 @@ export default function DeliveryPage() {
         apiContractActivationEnabled: form.get("apiContractActivationEnabled") === "on",
         jsonFileActivationEnabled: form.get("jsonFileActivationEnabled") === "on",
         jsonFileFinalizerPaused: form.get("jsonFileFinalizerPaused") === "on",
+        databaseTableActivationEnabled: form.get("databaseTableActivationEnabled") === "on",
+        databaseDeliveryPaused: form.get("databaseDeliveryPaused") === "on",
       }, operatorId.trim(), reason.trim());
       setNotice("Runtime delivery controls were updated and audited.");
       await load();
@@ -156,6 +164,41 @@ export default function DeliveryPage() {
     } finally {
       setActionId(null);
       await load(job.fileJobId);
+    }
+  }
+
+  async function resolveDatabase(
+    job: DatabaseDeliveryOperations["jobs"][number],
+    action: "retry" | "mark-delivered" | "mark-failed",
+  ) {
+    if (!operatorId.trim() || !reason.trim()) {
+      setNotice("Operator ID and reason are required for database delivery resolution.");
+      return;
+    }
+    const riskAccepted = action === "retry" && job.retryRequiresDuplicateRiskAcceptance
+      ? window.confirm("The target has no usable unique key. Retrying can insert a duplicate. Accept this risk and continue?")
+      : window.confirm(`Apply ${action} to database delivery #${job.id}?`);
+    if (!riskAccepted) return;
+    setDatabaseActionId(job.id);
+    setNotice(null);
+    try {
+      await resolveDatabaseDelivery(
+        job.id,
+        action,
+        operatorId.trim(),
+        reason.trim(),
+        job.retryRequiresDuplicateRiskAcceptance,
+      );
+      setNotice(`Database delivery #${job.id} was resolved and audited.`);
+    } catch (actionError) {
+      if (actionError instanceof ApiError && actionError.status === 409) {
+        setNotice(`Database delivery #${job.id} changed state or requires additional confirmation.`);
+      } else {
+        setError(actionError);
+      }
+    } finally {
+      setDatabaseActionId(null);
+      await load();
     }
   }
 
@@ -188,6 +231,7 @@ export default function DeliveryPage() {
           <section className={`mt-4 rounded-2xl border p-4 ${operations.control.deliveryPaused ? "border-amber-300 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`} aria-label="Delivery control status">
             <p className="font-semibold text-slate-950">Delivery {operations.control.deliveryPaused ? "paused" : "running"} · new API activation {operations.control.apiContractActivationEnabled ? "enabled" : "disabled"}</p>
             <p className="mt-1 font-semibold text-slate-950">New JSON activation {operations.control.jsonFileActivationEnabled ? "enabled" : "disabled"} · finalizer {operations.control.jsonFileFinalizerPaused ? "paused" : "running"}</p>
+            <p className="mt-1 font-semibold text-slate-950">New database-table activation {operations.control.databaseTableActivationEnabled ? "enabled" : "disabled"} · database delivery {operations.control.databaseDeliveryPaused ? "paused" : "running"}</p>
             <p className="mt-1 text-sm text-slate-700">Last changed by {operations.control.updatedBy}: {operations.control.reason}</p>
           </section>
           <form className="mt-4 rounded-2xl border border-slate-200 bg-white p-5" key={operations.control.updatedAt} onSubmit={(event) => void saveControl(event)}>
@@ -198,6 +242,8 @@ export default function DeliveryPage() {
               <ControlToggle defaultChecked={operations.control.apiContractActivationEnabled} label="Allow new API activation" name="apiContractActivationEnabled" />
               <ControlToggle defaultChecked={operations.control.jsonFileActivationEnabled} label="Allow new JSON activation" name="jsonFileActivationEnabled" />
               <ControlToggle defaultChecked={operations.control.jsonFileFinalizerPaused} label="Pause JSON finalizer" name="jsonFileFinalizerPaused" />
+              <ControlToggle defaultChecked={operations.control.databaseTableActivationEnabled} label="Allow new database-table activation" name="databaseTableActivationEnabled" />
+              <ControlToggle defaultChecked={operations.control.databaseDeliveryPaused} label="Pause database delivery" name="databaseDeliveryPaused" />
             </div>
             <button className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50" disabled={controlBusy} type="submit">{controlBusy ? "Applying…" : "Apply controls"}</button>
           </form>
@@ -247,10 +293,30 @@ export default function DeliveryPage() {
         </>
       ) : null}
 
+      {databaseOperations ? (
+        <section className="mt-6 space-y-4" aria-label="Database delivery operations">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Database delivered / existing" value={`${databaseOperations.metrics.delivered} / ${databaseOperations.metrics.alreadyDelivered}`} />
+            <Metric label="Database pending / retryable" value={`${databaseOperations.metrics.pending} / ${databaseOperations.metrics.retryableFailed}`} />
+            <Metric label="Schema blocked / conflict" value={`${databaseOperations.metrics.blockedSchemaDrift} / ${databaseOperations.metrics.deliveryConflict}`} />
+            <Metric label="Unknown outcome" value={String(databaseOperations.metrics.unknownOutcome)} />
+          </div>
+          {databaseOperations.alerts.length > 0 ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4" role="alert"><h2 className="font-semibold text-rose-950">Database delivery alerts</h2><ul className="mt-2 space-y-1 text-sm text-rose-800">{databaseOperations.alerts.map((alert) => <li key={alert.code}><strong>{alert.severity}:</strong> {alert.message}</li>)}</ul></div> : null}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-slate-950">Target schema health</h2><p className="mt-1 text-xs text-slate-500">Latest bounded inspection only; no connection strings, SQL or row payloads are returned.</p></div>
+            {databaseOperations.schemaChecks.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">No schema checks yet.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Target</th><th className="px-4 py-3">Profile</th><th className="px-4 py-3">Compatibility</th><th className="px-4 py-3">Checked</th></tr></thead><tbody className="divide-y divide-slate-100">{databaseOperations.schemaChecks.map((check) => <tr key={`${check.destinationProfileId}:${check.targetSchema}:${check.targetTable}:${check.configuredSchemaHash}`}><td className="px-4 py-3 font-mono text-xs">{check.targetSchema}.{check.targetTable}</td><td className="px-4 py-3 font-mono text-xs">{check.destinationProfileId}</td><td className="px-4 py-3"><DatabaseStatus value={check.compatibility} /></td><td className="px-4 py-3 text-xs">{formatDate(check.checkedAt)}</td></tr>)}</tbody></table></div>}
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-5 py-4"><h2 className="font-semibold text-slate-950">Database delivery jobs</h2></div>
+            {databaseOperations.jobs.length === 0 ? <p className="px-5 py-6 text-sm text-slate-500">No database deliveries yet.</p> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Job / target</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Attempts / key</th><th className="px-4 py-3">Safe diagnostics</th><th className="px-4 py-3 text-right">Resolution</th></tr></thead><tbody className="divide-y divide-slate-100">{databaseOperations.jobs.map((job) => <tr key={job.id}><td className="px-4 py-4">#{job.id}<p className="font-mono text-xs text-slate-500">{job.targetSchema}.{job.targetTable} · {job.provider}</p></td><td className="px-4 py-4"><DatabaseStatus value={job.status} /></td><td className="px-4 py-4">{job.attempts}<p className="text-xs text-slate-500">{job.hasExistingUniqueKey ? "existing unique key" : "no reconciliation key"}</p></td><td className="px-4 py-4"><p className="max-w-72 text-xs text-rose-700">{job.lastErrorRedacted ?? "No error"}</p><p className="mt-1 max-w-72 truncate font-mono text-xs text-slate-500">{job.mappedValuesHash}</p></td><td className="px-4 py-4 text-right"><div className="flex justify-end gap-2">{job.canRetry ? <button className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={databaseActionId === job.id} onClick={() => void resolveDatabase(job, "retry")} type="button">Retry{job.retryRequiresDuplicateRiskAcceptance ? " (duplicate risk)" : ""}</button> : null}{job.canMarkDelivered ? <button className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={databaseActionId === job.id} onClick={() => void resolveDatabase(job, "mark-delivered")} type="button">Mark delivered</button> : null}{job.canMarkFailed ? <button className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50" disabled={databaseActionId === job.id} onClick={() => void resolveDatabase(job, "mark-failed")} type="button">Mark failed</button> : null}</div></td></tr>)}</tbody></table></div>}
+          </div>
+        </section>
+      ) : null}
+
       <section className="mt-6 grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:grid-cols-2" aria-label="Operator audit context">
         <label className="text-sm font-semibold text-slate-800">Operator ID<input autoComplete="username" className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" onChange={(event) => setOperatorId(event.target.value)} value={operatorId} /></label>
         <label className="text-sm font-semibold text-slate-800">Action reason<input className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" maxLength={500} onChange={(event) => setReason(event.target.value)} value={reason} /></label>
-        <p className="text-xs text-slate-500 sm:col-span-2">Required for runtime control changes and JSON export retry. Both are server-authorized and written to audit history.</p>
+        <p className="text-xs text-slate-500 sm:col-span-2">Required for runtime controls, JSON retry and database delivery resolution. Every action is server-authorized and written to audit history.</p>
       </section>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -300,6 +366,13 @@ function Status({ value }: { value: DeliveryJob["status"] | JsonExportHistory["s
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}</span>;
 }
 
+function DatabaseStatus({ value }: { value: string }) {
+  const healthy = value === "Delivered" || value === "AlreadyDelivered" || value === "Healthy";
+  const critical = value === "UnknownOutcome" || value === "DeliveryConflict" || value === "BlockedSchemaDrift" || value === "BreakingChange" || value === "Unavailable";
+  const tone = healthy ? "bg-emerald-100 text-emerald-800" : critical ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-800";
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>{value}</span>;
+}
+
 function ControlToggle({ defaultChecked, label, name }: { defaultChecked: boolean; label: string; name: string }) {
   return <label className="flex items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800"><input defaultChecked={defaultChecked} name={name} type="checkbox" />{label}</label>;
 }
@@ -308,13 +381,14 @@ function percent(value: number) { return `${(value * 100).toFixed(1)}%`; }
 function formatDate(value: string) { return new Date(value).toLocaleString(); }
 
 async function fetchDashboard(preferredId: number | null) {
-  const [jobs, snapshot] = await Promise.all([
+  const [jobs, snapshot, databaseSnapshot] = await Promise.all([
     listFileJobs(),
     getDeliveryOperations(),
+    getDatabaseDeliveryOperations(),
   ]);
   const selectedId = preferredId ?? jobs[0]?.id ?? null;
   const [rows, exports] = selectedId === null
     ? [[], []] as [DeliveryJob[], JsonExportHistory[]]
     : await Promise.all([listDeliveryJobs(selectedId), listJsonExports(selectedId)]);
-  return { jobs, snapshot, selectedId, rows, exports };
+  return { jobs, snapshot, databaseSnapshot, selectedId, rows, exports };
 }

@@ -151,13 +151,17 @@ function destinationLabel(version: MappingConfigVersionDetails) {
     ? `Legacy Table #${version.destination.normalizedTableId}`
     : version.destination.kind === "apiContract"
       ? `API Contract · ${version.destination.apiDestinationProfileId}`
-      : `JSON File · ${version.destination.fileDestinationProfileId}`;
+      : version.destination.kind === "jsonFile"
+        ? `JSON File · ${version.destination.fileDestinationProfileId}`
+        : `Database Table · ${version.destination.profileId}/${version.destination.schema}.${version.destination.table}`;
 }
 
 function contractReference(version: MappingConfigVersionDetails) {
   return version.destination.kind === "legacyTable"
     ? "—"
-    : version.destination.contract.reference;
+    : version.destination.kind === "databaseTable"
+      ? version.destination.schemaHash
+      : version.destination.contract.reference;
 }
 
 function targetPaths(version: MappingConfigVersionDetails) {

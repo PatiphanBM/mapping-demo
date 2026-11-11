@@ -6,7 +6,7 @@ test("mixed delivery states render without payloads and stale retry refreshes", 
   await page.goto("/delivery");
 
   await expect(page.getByRole("heading", { name: "Delivery & JSON export" })).toBeVisible();
-  await expect(page.getByText("Delivery running", { exact: false })).toBeVisible();
+  await expect(page.getByText(/^Delivery running/)).toBeVisible();
   await expect(page.getByText("RetryableFailed", { exact: true })).toBeVisible();
   await expect(page.getByText("Delivered", { exact: true })).toBeVisible();
   await expect(page.getByRole("row").filter({ hasText: "proposal/1" })).toHaveCount(2);
@@ -53,6 +53,31 @@ test("JSON export history, retry and kill switches expose only safe metadata", a
       jsonFileActivationEnabled: true,
       jsonFileFinalizerPaused: false,
       reason: "Storage recovered",
+    },
+  });
+});
+
+test("database drift and unknown outcome require audited duplicate-risk resolution", async ({ page }) => {
+  let resolution: { operator: string | null; body: unknown } | null = null;
+  await mockDatabaseOperationsApi(page, (value) => { resolution = value; });
+  await page.goto("/delivery");
+
+  await expect(page.getByRole("heading", { name: "Database delivery jobs" })).toBeVisible();
+  await expect(page.getByText("UnknownOutcome", { exact: true })).toBeVisible();
+  await expect(page.getByText("public.customer", { exact: true })).toBeVisible();
+  await expect(page.getByText("BreakingChange", { exact: true })).toBeVisible();
+  await expect(page.getByText(/password=|server-secret|insert into|mapped payload/i)).toHaveCount(0);
+
+  await page.getByLabel("Operator ID").fill("operator-db");
+  await page.getByLabel("Action reason").fill("Target owner approved duplicate risk");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Retry (duplicate risk)" }).click();
+  await expect.poll(() => resolution).not.toBeNull();
+  expect(resolution).toMatchObject({
+    operator: "operator-db",
+    body: {
+      reason: "Target owner approved duplicate risk",
+      acceptDuplicateRisk: true,
     },
   });
 });
@@ -112,6 +137,9 @@ async function mockDeliveryApi(
         alerts: [{ severity: "Warning", code: "RetryableFailureRate", message: "Retryable delivery failure rate is above 5%; pause delivery." }],
         jsonExports: { groups: [], alerts: [] },
       });
+    }
+    if (path === "/database-delivery-operations") {
+      return json(route, emptyDatabaseOperations());
     }
     if (path === "/delivery-jobs" && url.searchParams.get("fileJobId") === "91") {
       return json(route, deliveryRows(!isStale()));
@@ -175,6 +203,9 @@ async function mockJsonExportApi(
         },
       });
     }
+    if (path === "/database-delivery-operations" && request.method() === "GET") {
+      return json(route, emptyDatabaseOperations());
+    }
     if (path === "/json-exports/801/retry" && request.method() === "POST") {
       onRetry({ operator: request.headers()["x-operator-id"] ?? null, body: request.postDataJSON() });
       return json(route, { jsonExportJobId: 801 });
@@ -182,6 +213,37 @@ async function mockJsonExportApi(
     if (path === "/delivery-operations/control" && request.method() === "PUT") {
       onControl({ operator: request.headers()["x-operator-id"] ?? null, body: request.postDataJSON() });
       return json(route, {});
+    }
+    return route.fulfill({ status: 404, body: "not mocked" });
+  });
+}
+
+async function mockDatabaseOperationsApi(
+  page: Page,
+  onResolution: (value: { operator: string | null; body: unknown }) => void,
+) {
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/^\/api/, "");
+    if (path === "/file-jobs") return json(route, []);
+    if (path === "/delivery-operations") return json(route, {
+      control: { deliveryPaused: false, apiContractActivationEnabled: false, jsonFileActivationEnabled: false, jsonFileFinalizerPaused: true, databaseTableActivationEnabled: false, databaseDeliveryPaused: true, updatedAt: "2026-11-09T00:00:00Z", updatedBy: "operator", reason: "Gate I pending" },
+      rollouts: [], groups: [], successRate: 0, retryableFailureRate: 0,
+      permanentFailureRate: 0, p50LatencyMilliseconds: 0,
+      p95LatencyMilliseconds: 0, p99LatencyMilliseconds: 0,
+      oldestQueueAgeSeconds: 0, retryCount: 0, duplicateConflictCount: 0,
+      schemaValidationFailureCount: 0, p95SourceToDeliveredSeconds: null,
+      alerts: [], jsonExports: { groups: [], alerts: [] },
+    });
+    if (path === "/database-delivery-operations" && request.method() === "GET") return json(route, {
+      metrics: { total: 1, pending: 0, delivering: 0, delivered: 0, alreadyDelivered: 0, retryableFailed: 0, permanentFailed: 0, deliveryConflict: 0, blockedSchemaDrift: 0, unknownOutcome: 1, oldestQueueAgeSeconds: 0 },
+      jobs: [{ id: 901, fileJobId: 91, configVersionId: 12, sourceRowNumber: 1, outputKey: "main", destinationProfileId: "target-pg", provider: "PostgreSql", targetSchema: "public", targetTable: "customer", targetSchemaHash: "sha256:schema", mappedValuesHash: "sha256:values", status: "UnknownOutcome", attempts: 1, correlationId: null, lastErrorRedacted: "Delivery outcome cannot be proven without a usable unique key.", createdAt: "2026-11-09T00:00:00Z", updatedAt: "2026-11-09T00:00:01Z", hasExistingUniqueKey: false, canRetry: true, canMarkDelivered: true, canMarkFailed: true, retryRequiresDuplicateRiskAcceptance: true }],
+      schemaChecks: [{ destinationProfileId: "target-pg", targetSchema: "public", targetTable: "customer", configuredSchemaHash: "sha256:schema", currentSchemaHash: "sha256:changed", compatibility: "BreakingChange", diagnosticsJson: "[]", checkedAt: "2026-11-09T00:00:02Z" }],
+      alerts: [{ severity: "Critical", code: "DatabaseUnknownOutcome", message: "Automatic retry is disabled." }],
+    });
+    if (path === "/database-delivery-operations/901/retry" && request.method() === "POST") {
+      onResolution({ operator: request.headers()["x-operator-id"] ?? null, body: request.postDataJSON() });
+      return route.fulfill({ status: 204 });
     }
     return route.fulfill({ status: 404, body: "not mocked" });
   });
@@ -228,6 +290,20 @@ function deliveryRows(canRetry: boolean) {
       canRetry: false,
     },
   ];
+}
+
+function emptyDatabaseOperations() {
+  return {
+    metrics: {
+      total: 0, pending: 0, delivering: 0, delivered: 0,
+      alreadyDelivered: 0, retryableFailed: 0, permanentFailed: 0,
+      deliveryConflict: 0, blockedSchemaDrift: 0, unknownOutcome: 0,
+      oldestQueueAgeSeconds: 0,
+    },
+    jobs: [],
+    schemaChecks: [],
+    alerts: [],
+  };
 }
 
 function json(route: Route, body: unknown) {

@@ -14,7 +14,38 @@ import type {
   PreviewMappingConfigVersionResponse,
   TableDefinition,
   ValidateMappingConfigVersionResponse,
+  DatabaseDestinationProfile,
+  DatabaseTargetTableSummary,
+  DatabaseTargetSchema,
 } from "./contracts";
+
+export function listDatabaseDestinationProfiles(): Promise<DatabaseDestinationProfile[]> {
+  return apiRequest<DatabaseDestinationProfile[]>("/database-destinations/profiles", {
+    cache: "no-store",
+  });
+}
+
+export function listDatabaseTargetTables(
+  profileId: string,
+  schema: string,
+): Promise<DatabaseTargetTableSummary[]> {
+  return apiRequest<DatabaseTargetTableSummary[]>(
+    `/database-destinations/profiles/${encodeURIComponent(profileId)}/schemas/${encodeURIComponent(schema)}/tables`,
+    { cache: "no-store" },
+  );
+}
+
+export function inspectDatabaseTargetTable(
+  profileId: string,
+  schema: string,
+  table: string,
+  refresh = false,
+): Promise<DatabaseTargetSchema> {
+  return apiRequest<DatabaseTargetSchema>(
+    `/database-destinations/profiles/${encodeURIComponent(profileId)}/schemas/${encodeURIComponent(schema)}/tables/${encodeURIComponent(table)}?refresh=${refresh}`,
+    { cache: "no-store" },
+  );
+}
 
 export function getMappingCapabilities(): Promise<MappingCapabilities> {
   return apiRequest<MappingCapabilities>("/mapping-capabilities", {

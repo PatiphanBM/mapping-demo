@@ -50,7 +50,7 @@ public sealed class MappingCapabilitiesController(
                     TransformationCapabilities.MaxExpressionDepth,
                     TransformationCapabilities.MaxExpressionNodes)),
             new DestinationCapabilitiesResponse(
-                ["legacyTable", "apiContract", "jsonFile"],
+                ["legacyTable", "apiContract", "jsonFile", "databaseTable"],
                 new JsonFileCapabilitiesResponse(
                     ["compact", "indented"],
                     [

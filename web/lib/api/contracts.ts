@@ -512,7 +512,82 @@ export type DestinationDefinition =
       relativeFolder: string;
       fileNameTemplate: string;
       formatting: "compact" | "indented";
+    }
+  | {
+      kind: "databaseTable";
+      profileId: string;
+      schema: string;
+      table: string;
+      writeMode: "insert";
+      duplicatePolicy: DatabaseDuplicatePolicy;
+      schemaHash: string;
+      schemaSnapshot: DatabaseTargetSchemaSnapshot;
     };
+
+export type DatabaseProvider = "PostgreSql" | "SqlServer";
+export type DatabaseScalarType =
+  | "Text"
+  | "Integer"
+  | "Decimal"
+  | "Boolean"
+  | "Date"
+  | "Time"
+  | "DateTime"
+  | "Guid"
+  | "Binary"
+  | "Unsupported";
+
+export interface DatabaseDestinationProfile {
+  id: string;
+  provider: DatabaseProvider;
+  allowedSchemas: string[];
+  writeEnabled: boolean;
+}
+
+export interface DatabaseTargetTableSummary {
+  profileId: string;
+  provider: DatabaseProvider;
+  schema: string;
+  table: string;
+}
+
+export interface DatabaseTargetColumn {
+  name: string;
+  providerType: string;
+  scalarType: DatabaseScalarType;
+  ordinal: number;
+  isNullable: boolean;
+  hasDefault: boolean;
+  isIdentity: boolean;
+  isGenerated: boolean;
+  isComputed: boolean;
+  isWritable: boolean;
+  length: number | null;
+  precision: number | null;
+  scale: number | null;
+  isRequired: boolean;
+}
+
+export interface DatabaseTargetUniqueConstraint {
+  name: string;
+  columns: string[];
+}
+
+export interface DatabaseTargetSchemaSnapshot {
+  profileId: string;
+  provider: DatabaseProvider;
+  schema: string;
+  table: string;
+  columns: DatabaseTargetColumn[];
+  uniqueConstraints: DatabaseTargetUniqueConstraint[];
+  schemaHash: string;
+}
+
+export type DatabaseTargetSchema = DatabaseTargetSchemaSnapshot;
+
+export type DatabaseDuplicatePolicy =
+  | { kind: "existingUniqueKey"; columns: string[] }
+  | { kind: "manualUnknownOutcome" };
 
 export interface MappingConfig {
   id: number;
@@ -816,6 +891,8 @@ export interface DeliveryOperations {
     apiContractActivationEnabled: boolean;
     jsonFileActivationEnabled: boolean;
     jsonFileFinalizerPaused: boolean;
+    databaseTableActivationEnabled: boolean;
+    databaseDeliveryPaused: boolean;
     updatedAt: string;
     updatedBy: string;
     reason: string;
@@ -872,4 +949,55 @@ export interface DeliveryOperations {
     }>;
     alerts: Array<{ severity: "Critical" | "Warning"; code: string; message: string }>;
   };
+}
+
+export interface DatabaseDeliveryOperations {
+  metrics: {
+    total: number;
+    pending: number;
+    delivering: number;
+    delivered: number;
+    alreadyDelivered: number;
+    retryableFailed: number;
+    permanentFailed: number;
+    deliveryConflict: number;
+    blockedSchemaDrift: number;
+    unknownOutcome: number;
+    oldestQueueAgeSeconds: number;
+  };
+  jobs: Array<{
+    id: number;
+    fileJobId: number;
+    configVersionId: number;
+    sourceRowNumber: number;
+    outputKey: string;
+    destinationProfileId: string;
+    provider: "PostgreSql" | "SqlServer";
+    targetSchema: string;
+    targetTable: string;
+    targetSchemaHash: string;
+    mappedValuesHash: string;
+    status: "Pending" | "Delivering" | "Delivered" | "AlreadyDelivered" | "RetryableFailed" | "PermanentFailed" | "DeliveryConflict" | "BlockedSchemaDrift" | "UnknownOutcome";
+    attempts: number;
+    correlationId: string | null;
+    lastErrorRedacted: string | null;
+    createdAt: string;
+    updatedAt: string;
+    hasExistingUniqueKey: boolean;
+    canRetry: boolean;
+    canMarkDelivered: boolean;
+    canMarkFailed: boolean;
+    retryRequiresDuplicateRiskAcceptance: boolean;
+  }>;
+  schemaChecks: Array<{
+    destinationProfileId: string;
+    targetSchema: string;
+    targetTable: string;
+    configuredSchemaHash: string;
+    currentSchemaHash: string | null;
+    compatibility: "Healthy" | "CompatibleChange" | "BreakingChange" | "Unavailable";
+    diagnosticsJson: string;
+    checkedAt: string;
+  }>;
+  alerts: Array<{ severity: "Critical" | "Warning"; code: string; message: string }>;
 }

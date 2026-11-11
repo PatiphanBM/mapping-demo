@@ -8,7 +8,7 @@ namespace MappingDemo.Tests.Destinations;
 public sealed class DestinationOpenApiTests
 {
     [Fact]
-    public void Destination_schema_exposes_all_three_derived_types()
+    public void Destination_schema_exposes_all_derived_types()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -22,9 +22,10 @@ public sealed class DestinationOpenApiTests
             repository);
 
         Assert.NotNull(schema.OneOf);
-        Assert.Equal(3, schema.OneOf!.Count);
+        Assert.Equal(4, schema.OneOf!.Count);
         Assert.Contains("LegacyTableDestination", repository.Schemas.Keys);
         Assert.Contains("ApiContractDestination", repository.Schemas.Keys);
         Assert.Contains("JsonFileDestination", repository.Schemas.Keys);
+        Assert.Contains("DatabaseTableDestination", repository.Schemas.Keys);
     }
 }

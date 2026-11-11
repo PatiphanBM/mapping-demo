@@ -73,7 +73,22 @@ _Avoid_: Reprocess
 _Avoid_: Retry
 
 **Destination Definition**:
-ส่วน immutable ของ Config Version ที่เลือกอย่างใดอย่างหนึ่งระหว่าง `LegacyTable`, `ApiContract` และ `JsonFile`; งานที่ pin แล้วห้ามเปลี่ยน destination กลางทางและห้ามส่ง output เดียวไปหลาย destination
+ส่วน immutable ของ Config Version ที่เลือกอย่างใดอย่างหนึ่งระหว่าง `LegacyTable`, `ApiContract`, `JsonFile` และ `DatabaseTable`; งานที่ pin แล้วห้ามเปลี่ยน destination กลางทางและห้ามส่ง output เดียวไปหลาย destination
+
+**DatabaseTable Destination**:
+ปลายทาง external PostgreSQL หรือ SQL Server ที่เลือกด้วย server-owned logical profile แล้วตรึง provider/schema/table/schema snapshot/hash และ duplicate policy ใน Config Version; runtime สร้าง parameterized `INSERT` จาก mapped fields โดยไม่สร้าง Entity, ไม่รับ raw SQL และไม่ทำ DDL ที่ target
+
+**Target Schema Snapshot**:
+canonical columns, writability, required/default/generated/type และ unique constraints ที่อ่านจาก `information_schema` ร่วมกับ provider catalog แล้วตรึงไว้ใน Config Version เพื่อเปรียบเทียบ fresh target schema ก่อน activate/write; ไม่ใช้ `table_definitions`/`table_columns` เป็น authority ของ external target
+
+**Database Delivery Job**:
+durable intent ต่อ mapped output หนึ่งรายการที่เก็บ encrypted deterministic mapped values/hash, pinned target/profile/schema/key metadata และ lifecycle แยกจาก Row Job โดย intent กับ outbox commit ใน Mapping DB transaction เดียว
+
+**Unknown Outcome**:
+สถานะ terminal เมื่อระบบพิสูจน์ไม่ได้ว่า target commit สำเร็จหรือไม่และไม่มี reconciliation ที่เชื่อถือได้; ห้าม automatic retry โดยเฉพาะ no-key เพราะอาจ insert duplicate ต้องให้ authorized operator ตรวจ target และบันทึก reason/correlation ก่อน resolve
+
+**Existing Unique Key Reconciliation**:
+การใช้ unique/primary constraint ที่ target มีอยู่จริงค้น row ด้วย full composite key หลัง unique violation หรือ ambiguous commit แล้วเทียบ mapped values แบบ canonical; ค่าตรงคือ `AlreadyDelivered`, ต่างคือ `DeliveryConflict`, พิสูจน์ไม่ได้คือ `UnknownOutcome`
 
 **JsonFile Destination**:
 ปลายทางระดับ File Job ที่รวม Mapped Documents ตามลำดับ `rowNumber/outputOrdinal` เป็น JSON array หนึ่ง artifact ผ่าน server-owned File Destination Profile; ไม่เขียน Normalized Table และไม่สร้าง API Delivery Job

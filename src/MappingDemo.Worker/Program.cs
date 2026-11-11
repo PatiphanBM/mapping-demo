@@ -1,5 +1,6 @@
 using Confluent.Kafka;
 using MappingDemo.Shared.Database;
+using MappingDemo.Shared.DatabaseDestinations;
 using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Input;
 using MappingDemo.Shared.Contracts;
@@ -8,6 +9,7 @@ using MappingDemo.Shared.Transformation.Adapters;
 using MappingDemo.Worker;
 using MappingDemo.Worker.Destinations;
 using MappingDemo.Worker.Delivery;
+using MappingDemo.Worker.DatabaseDelivery;
 
 var builder = Host.CreateApplicationBuilder(args);
 var apiProfileCatalogSourceMode =
@@ -28,6 +30,7 @@ if (apiProfileCompareAuthority == ApiDestinationProfileCatalogSourceMode.Compare
         "CompareAuthoritativeSource must be Configuration or Postgres.");
 }
 builder.Services.AddMappingDatabase(builder.Configuration);
+builder.Services.AddDatabaseDestinations(builder.Configuration);
 builder.Services.AddSingleton<ApiDestinationProfileObservability>();
 builder.Services.AddSingleton<ITransformationLookupResolver,
     PostgreSqlTransformationLookupResolver>();
@@ -44,6 +47,7 @@ builder.Services.AddSingleton<IDeliverySecretProvider,
     EnvironmentDeliverySecretProvider>();
 builder.Services.AddSingleton<DeliveryPayloadProtector>();
 builder.Services.AddSingleton<JsonExportPayloadProtector>();
+builder.Services.AddSingleton<DatabaseDeliveryPayloadProtector>();
 builder.Services.AddSingleton<JsonExportReadiness>();
 builder.Services.AddSingleton<JsonExportControlReader>();
 var jsonExportProfiles = builder.Configuration
@@ -61,12 +65,29 @@ builder.Services.AddSingleton<JsonExportCleanupService>();
 builder.Services.AddSingleton<LegacyTableDestinationAdapter>();
 builder.Services.AddSingleton<ApiContractDestinationAdapter>();
 builder.Services.AddSingleton<JsonFileDestinationAdapter>();
+builder.Services.AddSingleton<DatabaseDeliveryIntentModule>();
+builder.Services.AddSingleton<DatabaseTableDestinationAdapter>();
+builder.Services.AddSingleton<DatabaseDeliveryJobRepository>();
+builder.Services.AddSingleton<DatabaseDeliveryControlReader>();
+builder.Services.AddSingleton<DatabaseDeliveryObservability>();
+builder.Services.AddSingleton<PostgreSqlDatabaseWriteAdapter>();
+builder.Services.AddSingleton<SqlServerDatabaseWriteAdapter>();
+builder.Services.AddSingleton<IDatabaseWriteAdapter>(provider =>
+    provider.GetRequiredService<PostgreSqlDatabaseWriteAdapter>());
+builder.Services.AddSingleton<IDatabaseWriteAdapter>(provider =>
+    provider.GetRequiredService<SqlServerDatabaseWriteAdapter>());
+builder.Services.AddSingleton<DatabaseWriteModule>();
+builder.Services.AddSingleton<DatabaseDeliveryJobHandler>();
+builder.Services.AddSingleton<DatabaseDeliveryScheduler>();
+builder.Services.AddSingleton<DatabaseTargetSchemaMonitor>();
 builder.Services.AddSingleton<IDestinationAdapter>(provider =>
     provider.GetRequiredService<LegacyTableDestinationAdapter>());
 builder.Services.AddSingleton<IDestinationAdapter>(provider =>
     provider.GetRequiredService<ApiContractDestinationAdapter>());
 builder.Services.AddSingleton<IDestinationAdapter>(provider =>
     provider.GetRequiredService<JsonFileDestinationAdapter>());
+builder.Services.AddSingleton<IDestinationAdapter>(provider =>
+    provider.GetRequiredService<DatabaseTableDestinationAdapter>());
 builder.Services.AddSingleton<IDestinationRouter, DestinationRouter>();
 var deliveryProfiles = builder.Configuration
     .GetSection("ApiDestinationProfiles")
@@ -160,6 +181,11 @@ builder.Services.AddHostedService<DeliveryRetryScheduler>();
 builder.Services.AddHostedService<DeliveryConsumer>();
 builder.Services.AddHostedService<DeliveryRetentionService>();
 builder.Services.AddHostedService<JsonExportConsumer>();
+builder.Services.AddHostedService<DatabaseDeliveryConsumer>();
+builder.Services.AddHostedService(provider =>
+    provider.GetRequiredService<DatabaseTargetSchemaMonitor>());
+builder.Services.AddHostedService(provider =>
+    provider.GetRequiredService<DatabaseDeliveryScheduler>());
 builder.Services.AddHostedService(provider =>
     provider.GetRequiredService<JsonExportRecoveryScheduler>());
 builder.Services.AddHostedService(provider =>

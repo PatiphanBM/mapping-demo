@@ -211,6 +211,8 @@ export default function ConfigsPage() {
                                 ? `API · ${config.destination.contract.reference}`
                                 : config.destination?.kind === "jsonFile"
                                   ? `JSON File · ${config.destination.contract.reference}`
+                                : config.destination?.kind === "databaseTable"
+                                  ? `Database · ${config.destination.schema}.${config.destination.table}`
                                 : config.normalizedTableId === null
                                   ? "Legacy destination not selected"
                                   : (tableNames.get(config.normalizedTableId) ??

@@ -382,7 +382,7 @@ export default function TablesAdminPage() {
   );
 }
 
-export function StatusBadge({ status }: { status: TableVerificationStatus }) {
+function StatusBadge({ status }: { status: TableVerificationStatus }) {
   const colors = status === "Healthy"
     ? "bg-emerald-100 text-emerald-800"
     : status === "Drifted" || status === "Missing"

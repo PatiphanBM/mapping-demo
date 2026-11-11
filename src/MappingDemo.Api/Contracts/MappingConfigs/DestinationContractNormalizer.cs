@@ -20,6 +20,7 @@ public static class DestinationContractNormalizer
         }
 
         if (destination is ApiContractDestination or JsonFileDestination
+                or DatabaseTableDestination
             && legacyNormalizedTableId.HasValue)
         {
             return DestinationNormalizationResult.Failure(

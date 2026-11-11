@@ -5,6 +5,7 @@ $topics = @(
     "mapping.row-normalize"
     "mapping.api-delivery"
     "mapping.json-export-finalize"
+    "mapping.database-delivery"
 )
 
 $projectRoot = Split-Path -Parent $PSScriptRoot

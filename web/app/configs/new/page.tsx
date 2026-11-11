@@ -8,11 +8,17 @@ import {
   FieldMessages,
   LoadingPanel,
 } from "@/components/page-state";
+import {
+  DatabaseTargetSelector,
+  EMPTY_DATABASE_TARGET_SELECTION,
+  type DatabaseTargetSelection,
+} from "@/components/mapping/database-target-selector";
 import { ApiError } from "@/lib/api/client";
 import type {
   ApiDestinationProfile,
   MappingCapabilities,
   TableDefinition,
+  DatabaseDestinationProfile,
 } from "@/lib/api/contracts";
 import {
   createMappingConfig,
@@ -21,6 +27,7 @@ import {
   listTables,
   resolveApiContract,
   resolveFileContract,
+  listDatabaseDestinationProfiles,
 } from "@/lib/api/mapping-configs";
 
 type FormField =
@@ -43,6 +50,7 @@ export default function NewConfigPage() {
   const router = useRouter();
   const [tables, setTables] = useState<TableDefinition[]>([]);
   const [profiles, setProfiles] = useState<ApiDestinationProfile[]>([]);
+  const [databaseProfiles, setDatabaseProfiles] = useState<DatabaseDestinationProfile[]>([]);
   const [capabilities, setCapabilities] =
     useState<MappingCapabilities | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -56,7 +64,7 @@ export default function NewConfigPage() {
   const [sourceTableId, setSourceTableId] = useState("");
   const [normalizedTableId, setNormalizedTableId] = useState("");
   const [destinationKind, setDestinationKind] = useState<
-    "legacyTable" | "apiContract" | "jsonFile"
+    "legacyTable" | "apiContract" | "jsonFile" | "databaseTable"
   >("legacyTable");
   const [profileId, setProfileId] = useState("");
   const [fileProfileId, setFileProfileId] = useState("");
@@ -68,6 +76,9 @@ export default function NewConfigPage() {
   const [formatting, setFormatting] = useState<"compact" | "indented">(
     "compact",
   );
+  const [databaseTarget, setDatabaseTarget] = useState<DatabaseTargetSelection>(
+    EMPTY_DATABASE_TARGET_SELECTION,
+  );
   const showApiContractDestination =
     process.env.NEXT_PUBLIC_API_CONTRACT_DESTINATION_VISIBLE !== "false";
 
@@ -78,12 +89,14 @@ export default function NewConfigPage() {
       listTables(),
       listApiDestinationProfiles(),
       getMappingCapabilities(),
+      listDatabaseDestinationProfiles(),
     ])
-      .then(([rows, profileRows, capabilityRows]) => {
+      .then(([rows, profileRows, capabilityRows, databaseProfileRows]) => {
         if (!cancelled) {
           setTables(rows);
           setProfiles(profileRows);
           setCapabilities(capabilityRows);
+          setDatabaseProfiles(databaseProfileRows);
           setLoadError(null);
         }
       })
@@ -124,7 +137,7 @@ export default function NewConfigPage() {
   );
 
   function selectDestination(
-    kind: "legacyTable" | "apiContract" | "jsonFile",
+    kind: "legacyTable" | "apiContract" | "jsonFile" | "databaseTable",
   ) {
     setDestinationKind(kind);
     setFieldErrors({});
@@ -135,6 +148,7 @@ export default function NewConfigPage() {
     setRelativeFolder("exports");
     setFileNameTemplate("{sourceBaseName}.{artifactRevision}.json");
     setFormatting("compact");
+    setDatabaseTarget(EMPTY_DATABASE_TARGET_SELECTION);
   }
 
   function retry() {
@@ -172,6 +186,9 @@ export default function NewConfigPage() {
     }
     if (destinationKind === "jsonFile" && relativeFolder.trim().length === 0) {
       clientErrors.relativeFolder = ["Relative folder is required."];
+    }
+    if (destinationKind === "databaseTable" && !databaseTarget.schemaSnapshot) {
+      clientErrors.destination = ["Choose a database profile, schema and table."];
     }
     if (
       destinationKind === "jsonFile" &&
@@ -213,13 +230,24 @@ export default function NewConfigPage() {
             apiDestinationProfileId: profileId,
             contract: resolvedContract!,
           }
-          : {
+          : destinationKind === "jsonFile" ? {
               kind: "jsonFile" as const,
               fileDestinationProfileId: fileProfileId,
               contract: resolvedContract!,
               relativeFolder: relativeFolder.trim(),
               fileNameTemplate: fileNameTemplate.trim(),
               formatting,
+            } : {
+              kind: "databaseTable" as const,
+              profileId: databaseTarget.schemaSnapshot!.profileId,
+              schema: databaseTarget.schemaSnapshot!.schema,
+              table: databaseTarget.schemaSnapshot!.table,
+              writeMode: "insert" as const,
+              duplicatePolicy: databaseTarget.duplicateKeyColumns.length > 0
+                ? { kind: "existingUniqueKey" as const, columns: databaseTarget.duplicateKeyColumns }
+                : { kind: "manualUnknownOutcome" as const },
+              schemaHash: databaseTarget.schemaSnapshot!.schemaHash,
+              schemaSnapshot: databaseTarget.schemaSnapshot!,
             };
       const config = await createMappingConfig({
         name: name.trim(),
@@ -321,6 +349,11 @@ export default function NewConfigPage() {
                   <span className="mt-1 block text-xs">
                     Assemble all valid mapped objects into one JSON array.
                   </span>
+                </label>
+                <label className={`rounded-xl border p-4 text-sm ${destinationKind === "databaseTable" ? "border-indigo-300 bg-indigo-50" : "border-slate-200 bg-white"}`}>
+                  <input checked={destinationKind === "databaseTable"} name="destination-kind" onChange={() => selectDestination("databaseTable")} type="radio" />
+                  <span className="ml-2 font-semibold">External database table</span>
+                  <span className="mt-1 block text-xs">Inspect PostgreSQL or SQL Server fields dynamically.</span>
                 </label>
               </div>
               <FieldMessages messages={fieldErrors.destination ?? []} />
@@ -432,6 +465,13 @@ export default function NewConfigPage() {
                   <div><dt className="text-slate-500">Visible root</dt><dd className="mt-1 break-all font-mono text-slate-900">{relativeFolder || "—"}</dd></div>
                 </dl>
               </div>
+            ) : null}
+            {destinationKind === "databaseTable" ? (
+              <DatabaseTargetSelector
+                onChange={setDatabaseTarget}
+                profiles={databaseProfiles}
+                value={databaseTarget}
+              />
             ) : null}
             <label className="block text-sm font-semibold text-slate-800">
               Source table

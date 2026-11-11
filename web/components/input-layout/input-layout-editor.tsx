@@ -311,7 +311,9 @@ export function InputLayoutEditor({
           ? `Legacy Table #${destination.normalizedTableId}`
           : destination.kind === "apiContract"
             ? `API Contract · ${destination.contract.reference}`
-            : `JSON File · ${destination.contract.reference}`}
+            : destination.kind === "jsonFile"
+              ? `JSON File · ${destination.contract.reference}`
+              : `Database Table · ${destination.schema}.${destination.table}`}
       </div>
 
       <div className="mt-6 border-t border-slate-100 pt-6">

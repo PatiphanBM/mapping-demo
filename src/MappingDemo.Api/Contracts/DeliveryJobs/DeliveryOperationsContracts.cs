@@ -5,7 +5,9 @@ public sealed record UpdateDeliveryControlRequest(
     bool ApiContractActivationEnabled,
     string Reason,
     bool? JsonFileActivationEnabled = null,
-    bool? JsonFileFinalizerPaused = null);
+    bool? JsonFileFinalizerPaused = null,
+    bool? DatabaseTableActivationEnabled = null,
+    bool? DatabaseDeliveryPaused = null);
 
 public sealed record UpdateDeliveryRolloutRequest(
     string Stage,
@@ -19,6 +21,8 @@ public sealed record DeliveryControlResponse(
     bool ApiContractActivationEnabled,
     bool JsonFileActivationEnabled,
     bool JsonFileFinalizerPaused,
+    bool DatabaseTableActivationEnabled,
+    bool DatabaseDeliveryPaused,
     DateTimeOffset UpdatedAt,
     string UpdatedBy,
     string Reason);

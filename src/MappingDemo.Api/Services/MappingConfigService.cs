@@ -25,9 +25,11 @@ public sealed class MappingConfigService
             source_table_id AS "SourceTableId",
             normalized_table_id AS "NormalizedTableId",
             active_version_id AS "ActiveVersionId",
-            (SELECT destination_definition::text
-             FROM mapping_config_versions
-             WHERE id = mapping_configs.active_version_id)
+            COALESCE(
+                (SELECT destination_definition::text
+                 FROM mapping_config_versions
+                 WHERE id = mapping_configs.active_version_id),
+                mapping_configs.draft_destination_definition::text)
                 AS "DestinationDefinitionJson"
         FROM mapping_configs
         WHERE id = @Id;
@@ -41,6 +43,8 @@ public sealed class MappingConfigService
             mapping_configs.source_table_id AS "SourceTableId",
             mapping_configs.normalized_table_id AS "NormalizedTableId",
             mapping_configs.active_version_id AS "ActiveVersionId",
+            mapping_configs.draft_destination_definition::text
+                AS "DraftDestinationDefinitionJson",
             mapping_config_versions.id AS "VersionId",
             mapping_config_versions.version_no AS "VersionNo",
             mapping_config_versions.input_layout::text
@@ -73,6 +77,8 @@ public sealed class MappingConfigService
             mapping_configs.source_table_id AS "SourceTableId",
             mapping_configs.normalized_table_id AS "NormalizedTableId",
             mapping_configs.active_version_id AS "ActiveVersionId",
+            mapping_configs.draft_destination_definition::text
+                AS "DraftDestinationDefinitionJson",
             mapping_config_versions.id AS "VersionId",
             mapping_config_versions.version_no AS "VersionNo",
             mapping_config_versions.input_layout::text
@@ -103,12 +109,14 @@ public sealed class MappingConfigService
             name,
             input_folder,
             source_table_id,
-            normalized_table_id)
+            normalized_table_id,
+            draft_destination_definition)
         VALUES (
             @Name,
             @InputFolder,
             @SourceTableId,
-            @NormalizedTableId)
+            @NormalizedTableId,
+            CAST(@DraftDestinationDefinitionJson AS jsonb))
         RETURNING id;
         """;
 
@@ -217,7 +225,16 @@ public sealed class MappingConfigService
 
         var command = new CommandDefinition(
             InsertMappingConfigSql,
-            request,
+            new
+            {
+                request.Name,
+                request.InputFolder,
+                request.SourceTableId,
+                request.NormalizedTableId,
+                DraftDestinationDefinitionJson = request.Destination is null
+                    ? null
+                    : JsonSerializer.Serialize(request.Destination, JsonOptions)
+            },
             transaction,
             cancellationToken: cancellationToken);
         var configId = await connection.ExecuteScalarAsync<long>(command);
@@ -539,7 +556,7 @@ public sealed class MappingConfigService
                         .SingleOrDefault(version => version.IsActive)
                         ?.Destination
                         ?? DeserializeDestination(
-                            json: null,
+                            config.DraftDestinationDefinitionJson,
                             config.NormalizedTableId),
                     versions);
             })
@@ -559,6 +576,8 @@ public sealed class MappingConfigService
         public long? NormalizedTableId { get; init; }
 
         public long? ActiveVersionId { get; init; }
+
+        public string? DraftDestinationDefinitionJson { get; init; }
 
         public long? VersionId { get; init; }
 

@@ -30,6 +30,8 @@
           CopyToOutputDirectory="PreserveNewest" />
     <None Include="Fixtures\Phase25\compatibility-baseline.golden.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Phase29\compatibility-baseline.golden.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

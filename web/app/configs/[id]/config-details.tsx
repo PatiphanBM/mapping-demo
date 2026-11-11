@@ -374,7 +374,9 @@ export function ConfigDetails() {
                         ? `Legacy Table #${version.destination.normalizedTableId}`
                         : version.destination.kind === "apiContract"
                           ? `API Contract · ${version.destination.contract.reference}`
-                          : `JSON File · ${version.destination.contract.reference}`}
+                          : version.destination.kind === "jsonFile"
+                            ? `JSON File · ${version.destination.contract.reference}`
+                            : `Database Table · ${version.destination.schema}.${version.destination.table}`}
                       {" · "}
                       {version.inputLayout.kind === "fixedWidth"
                         ? "Fixed width"

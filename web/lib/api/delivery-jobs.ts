@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { DeliveryJob, DeliveryOperations, FileJob, JsonExportHistory } from "./contracts";
+import type { DatabaseDeliveryOperations, DeliveryJob, DeliveryOperations, FileJob, JsonExportHistory } from "./contracts";
 
 export function listFileJobs(): Promise<FileJob[]> {
   return apiRequest<FileJob[]>("/file-jobs", { cache: "no-store" });
@@ -20,6 +20,30 @@ export function retryDeliveryJob(deliveryJobId: number): Promise<void> {
 export function getDeliveryOperations(): Promise<DeliveryOperations> {
   return apiRequest<DeliveryOperations>("/delivery-operations", {
     cache: "no-store",
+  });
+}
+
+export function getDatabaseDeliveryOperations(): Promise<DatabaseDeliveryOperations> {
+  return apiRequest<DatabaseDeliveryOperations>("/database-delivery-operations", {
+    cache: "no-store",
+  });
+}
+
+export function resolveDatabaseDelivery(
+  jobId: number,
+  action: "retry" | "mark-delivered" | "mark-failed",
+  operatorId: string,
+  reason: string,
+  acceptDuplicateRisk = false,
+): Promise<void> {
+  return apiRequest<void>(`/database-delivery-operations/${jobId}/${action}`, {
+    method: "POST",
+    headers: { "X-Operator-Id": operatorId },
+    body: {
+      reason,
+      correlationId: `ui-${Date.now()}`,
+      acceptDuplicateRisk,
+    },
   });
 }
 
@@ -46,7 +70,9 @@ export function updateDeliveryControl(
     | "deliveryPaused"
     | "apiContractActivationEnabled"
     | "jsonFileActivationEnabled"
-    | "jsonFileFinalizerPaused">,
+    | "jsonFileFinalizerPaused"
+    | "databaseTableActivationEnabled"
+    | "databaseDeliveryPaused">,
   operatorId: string,
   reason: string,
 ): Promise<DeliveryOperations["control"]> {

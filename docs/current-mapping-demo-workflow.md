@@ -2,8 +2,8 @@
 
 เอกสารนี้อธิบายการทำงานของ Mapping Demo ปัจจุบันตั้งแต่ผู้ดูแลเตรียม configuration จนไฟล์ถูกแปลงและส่งไปยังปลายทาง รวม control plane, runtime data plane, สถานะงาน, retry/reprocess, security และขอบเขต rollout ไว้ในที่เดียว
 
-> Baseline: Phase 28 เสร็จสมบูรณ์; Gate F, Gate G และ Gate H approved ณ 2026-11-03  
-> ข้อจำกัดสำคัญ: PostgreSQL เป็น authoritative runtime source ของ API Destination Profile, Contract Registry และ Table metadata; production Contract publishing และ Table Admin mutations ยังคงปิด (`PublishingEnabled=false`, `MutationsEnabled=false`) จนกว่าจะมี controlled rollout configuration แยกต่างหาก
+> Baseline: Phase 29.0–29.8 implemented; Gate F, Gate G และ Gate H approved ณ 2026-11-03 แต่ Gate I ยังไม่ approved ณ 2026-11-09
+> ข้อจำกัดสำคัญ: DatabaseTable production write/activation/schema monitor ยังคงปิดจนกว่า forced PostgreSQL+SQL Server E2E, canary observation และ owner sign-off ของ Gate I จะครบ
 
 ## 1. ภาพรวมตั้งแต่ต้นจนจบ
 
@@ -54,6 +54,12 @@ flowchart TD
     Temp --> Atomic[Atomic create-no-overwrite publish]
     Atomic --> JsonArtifact[UTF-8 JSON array artifact]
 
+    Decision -->|DatabaseTable| DbIntent[(Encrypted Database Delivery Job และ outbox)]
+    DbIntent --> KafkaDb[Kafka: mapping.database-delivery]
+    KafkaDb --> DbWorker[Database Delivery Worker]
+    DbWorker --> Inspect[Fresh information_schema/provider catalog check]
+    Inspect --> TargetDb[(External PostgreSQL หรือ SQL Server)]
+
     ImportWorker --> Archive[Archive original file หลัง import และ hash ตรง]
     ConfigApi --> Ops[Delivery, export, retry, reprocess, audit และ controls]
     Web --> Ops
@@ -63,7 +69,7 @@ flowchart TD
 
 1. File Job pin `Config Version` ก่อน parse จึงไม่เปลี่ยนกฎหรือปลายทางกลางงาน
 2. Source row เก็บค่าดิบเป็นข้อความ แล้ว Transformation Program สร้างผล `0..N` รายการ
-3. Config Version เลือกปลายทางเดียว: `LegacyTable`, `ApiContract` หรือ `JsonFile`
+3. Config Version เลือกปลายทางเดียว: `LegacyTable`, `ApiContract`, `JsonFile` หรือ `DatabaseTable`
 4. การเปลี่ยน active version หรือ rollback มีผลกับไฟล์ใหม่เท่านั้น งานเดิมใช้ identity ที่ pin ไว้
 
 ## 2. ส่วนประกอบและเจ้าของหน้าที่
@@ -73,8 +79,8 @@ flowchart TD
 | Next.js Web | สร้าง/ดู Mapping Config, validate/preview/activate, ดูสถานะงาน และจัดการ API Destination Profile/Contract Registry/Table Catalog |
 | `MappingDemo.Api` | Control plane, file watcher/intake, validation, preview, activation, operations API และ authorization |
 | PostgreSQL | เก็บ metadata, immutable versions, jobs, errors, outbox, staged payload, audit และ runtime controls |
-| Kafka | ขน event ระหว่างขั้น file import, row normalization, API delivery และ JSON finalization |
-| `MappingDemo.Worker` | Import ไฟล์, transform รายแถว, reconcile ผล, ส่ง API, finalize JSON และ dispatch outbox |
+| Kafka | ขน event ระหว่างขั้น file import, row normalization, API delivery, JSON finalization และ database delivery |
+| `MappingDemo.Worker` | Import ไฟล์, transform รายแถว, reconcile ผล, ส่ง API, finalize JSON, inspect/write external database และ dispatch outbox |
 | Input/Archive/Output folders | รับไฟล์ต้นฉบับ, เก็บไฟล์ที่ import แล้ว และเก็บ JSON artifact |
 | Partner API | รับ delivery ผ่าน server-owned API Destination Profile |
 
@@ -84,7 +90,7 @@ flowchart TD
 
 - Source Table เก็บ field จากไฟล์เป็น text และ system identity ของแถว
 - Normalized Table ใช้เฉพาะ `LegacyTable`
-- `ApiContract` และ `JsonFile` ไม่เขียน Normalized Table
+- `ApiContract`, `JsonFile` และ `DatabaseTable` ไม่เขียน Normalized Table
 - หน้า `/admin/tables` รองรับ list/search/filter, สร้าง Source/Normalized, detail, additive column และ Configuration impact
 - `table_definitions`/`table_columns` เป็น authoritative metadata; browser ส่ง typed definition/table ID เท่านั้นและไม่รับ raw SQL/schema/connection
 - PostgreSQL Inspector เปรียบเทียบ system/business columns, canonical type, nullability, identity, primary key และ unique constraintsแบบ read-only
@@ -141,6 +147,7 @@ Mapping Config เป็น logical configuration หนึ่งชุด ส�
 | `LegacyTable` | Current Normalized Result | upsert/reconcile ลง Normalized Table | Delivery Job, JSON artifact |
 | `ApiContract` | encrypted payload bytes, hash, idempotency identity และ Delivery Job | HTTPS request ต่อหนึ่ง mapped output | Normalized row, JSON artifact |
 | `JsonFile` | encrypted staged objects และ JSON Export Job | JSON array หนึ่ง artifact ต่อ revision ของ File Job | Normalized row, Delivery Job |
+| `DatabaseTable` | encrypted mapped values/hash, target/schema/key snapshot และ Database Delivery Job | parameterized INSERT ต่อ mapped outputไป PostgreSQL/SQL Server | Entity/ORM model, target DDL, Normalized row, API Delivery Job |
 
 ### 3.6 API Destination Profile Admin
 
@@ -299,6 +306,11 @@ sequenceDiagram
         Kafka->>Worker: JSON Export Job
         Worker->>Dest: temp write + atomic publish
         Worker->>DB: artifact metadata/status
+    else DatabaseTable
+        DB-->>Kafka: mapping.database-delivery
+        Kafka->>Worker: Database Delivery Job
+        Worker->>Dest: fresh schema compare + parameterized INSERT
+        Worker->>DB: attempt + delivered/retry/conflict/drift/unknown status
     end
 ```
 
@@ -370,6 +382,36 @@ stateDiagram-v2
 
 ห้ามแสดง payload body หรือ absolute Output Root ใน browser/log ปกติ
 
+### 6.4 DatabaseTable
+
+ต่อ mapped output หนึ่งรายการ Row Job transaction จะเข้ารหัส deterministic mapped values, เก็บ hash, profile configuration hash, provider/schema/table, schema snapshot/hash, mapped column names และ duplicate policy พร้อม outbox โดยยังไม่เปิด target connection
+
+Database Delivery Worker:
+
+1. ตรวจ feature/profile/runtime write gates
+2. decrypt และตรวจ mapped-values hash
+3. inspect target สดจาก `information_schema` + provider catalog แล้วเทียบ snapshot/mapped fields/selected key
+4. สร้าง INSERT จาก writable mapped columns; omit unmapped default/generated columns; quote identifier และ bind typed parameters
+5. execute target-local transaction และ classify provider error เป็น vocabulary กลาง
+6. เมื่อ unique violation/commit ambiguity และมี existing unique key ให้ query full composite keyแล้วเทียบ mapped values
+7. บันทึก attempt/status โดยไม่เก็บ raw SQL, connection string หรือ payload plaintext
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+    Pending --> Delivering
+    Delivering --> Delivered: commit confirmed
+    Delivering --> AlreadyDelivered: key and values match
+    Delivering --> RetryableFailed: transient before proven commit
+    RetryableFailed --> Delivering: bounded retry
+    Delivering --> PermanentFailed: type/constraint/retry exhausted
+    Delivering --> DeliveryConflict: key matches but values differ
+    Delivering --> BlockedSchemaDrift: breaking schema/profile change
+    Delivering --> UnknownOutcome: commit cannot be proven
+```
+
+`UnknownOutcome`, `DeliveryConflict` และ breaking drift ห้าม auto-repair/auto-retry Manual resolve ต้อง authorized พร้อม operator/reason/correlation และ append-only audit; no-key retry ต้องยืนยัน duplicate risk
+
 ## 7. สถานะรวมของ File Job
 
 Import status:
@@ -400,9 +442,10 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 | Delivery retry | persisted encrypted bytes/hash/idempotency เดิม | ไม่ | ส่ง Delivery Job เดิมซ้ำ |
 | Business resend | payload เดิมของ Delivered job | ใช่ พร้อม suffix/audit | ส่งเอกสารธุรกิจซ้ำโดยตั้งใจ |
 | JSON retry | staged identity/profile/revision/path เดิม | ไม่ | finalize/publish revision เดิมซ้ำ |
+| Database retry | encrypted mapped values + pinned target/schema/key เดิม | ไม่ | retry job ที่ policy อนุญาต; UnknownOutcome no-key ต้องรับ duplicate risk |
 | Config rollback | activate prior Config Version | มีผลเฉพาะ File Job ใหม่ | หยุดใช้ version ใหม่โดยไม่ reroute งานเดิม |
 
-งานที่ pin `ApiContract` ต้องคงเป็น API delivery งานที่ pin `JsonFile` ต้องคงเป็น JSON export แม้ active version เปลี่ยนภายหลัง
+งานที่ pin `ApiContract`, `JsonFile` หรือ `DatabaseTable` ต้องคง destination/profile/snapshot เดิม แม้ active version เปลี่ยนภายหลัง
 
 ## 9. Consistency และ crash recovery
 
@@ -412,6 +455,7 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 - destination persistence กับ terminal Row Job ถูกผูกด้วย transaction
 - Delivery Job เก็บ payload bytes ก่อน network call จึง retry โดยไม่ rebuild
 - JSON ใช้ staged encrypted items, lease และ atomic publish จึงไม่เปิด partial file
+- DatabaseTable ใช้ encrypted durable intent, lease และ target-local transaction; existing unique key ใช้ reconcile ส่วน no-key ambiguity หยุดที่ `UnknownOutcome`
 - duplicate file ใช้ content hash ไม่พึ่ง filename
 - immutable version/snapshot ทำให้ replay และ audit อธิบายผลย้อนหลังได้
 
@@ -424,7 +468,8 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 - contract/profile activation และ admin mutation ใช้ authorization แยกตาม action
 - mutation สำคัญต้องมี operator, reason, optimistic concurrency และ append-only audit
 - partner response body และ business payload ไม่ถูกเก็บ/แสดงโดย default
-- controls แยก gate สำหรับ API delivery และ JSON finalization; การปิด gate ไม่ reroute งานไปปลายทางอื่น
+- Database connection string/profile เป็น server-owned; UI ไม่เห็น credential, payload, raw SQL หรือ arbitrary identifier
+- controls แยก gate สำหรับ API delivery, JSON finalization และ DatabaseTable activation/delivery; การปิด gate ไม่ reroute งานไปปลายทางอื่น
 
 ## 11. หน้าจอและ API สำคัญ
 
@@ -435,7 +480,7 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 | `/configs` | ดู Mapping Config |
 | `/configs/new` | สร้าง Mapping Config |
 | `/configs/{id}` | ดู version, validate, preview และ activate |
-| `/delivery` | ดู File/Delivery/JSON Export status, history และ actions ที่ policy อนุญาต |
+| `/delivery` | ดู File/API/JSON/Database delivery, schema health และ audited actions ที่ policy อนุญาต |
 | `/admin/api-destination-profiles` | จัดการ API Destination Profile แบบ versioned |
 | `/prototype/file-to-json` | prototype UX เท่านั้น ไม่ใช่ runtime dependency |
 
@@ -447,6 +492,8 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 - `/delivery-jobs`: status/retry/resend
 - `/json-exports`: history/retry
 - `/delivery-operations`: metrics, alerts, controls และ rollout
+- `/database-destinations`: safe profile/schema/table inspection สำหรับ editor
+- `/database-delivery-operations`: safe jobs/schema checks/alerts และ authorized retry/resolve
 - `/api-destination-profiles`: safe runtime catalog/resolve
 - `/admin/api-destination-profiles`: permissions, drafts, validate, activate, rollback, disable
 - `/admin/api-destination-profile-operations`: safe profile metrics และ alerts สำหรับ authorized operator
@@ -461,6 +508,7 @@ Row Job terminal states คือ `Done`, `Filtered`, `Invalid`, `Failed`
 | API delivery | `delivery_jobs`, `delivery_attempts`, `delivery_resend_audit` |
 | Delivery controls | `delivery_runtime_control`, `delivery_control_audit`, `api_delivery_rollouts`, `api_delivery_rollout_audit` |
 | JSON export | `json_export_jobs`, `json_export_items`, `json_export_retry_audit`, `json_export_operation_events` |
+| Database delivery | `database_delivery_jobs`, `database_delivery_attempts`, `database_delivery_resolution_audit`, `database_target_schema_checks` |
 | API profile admin | `api_destination_profiles`, `api_destination_profile_versions`, `api_destination_profile_contracts`, `api_destination_profile_bindings`, `api_destination_profile_audit` |
 | Contract registry foundation | `contracts`, `contract_versions`, `contract_audit` |
 
@@ -471,6 +519,8 @@ Source/Normalized physical business tables สร้างตาม Table Defini
 | ขอบเขต | สถานะ |
 |---|---|
 | LegacyTable, ApiContract, JsonFile runtime | ทำแล้ว |
+| DatabaseTable profile/catalog/inspector/editor/durable delivery/reconciliation/operations (29.0–29.8) | ทำแล้วใน code; feature/profile/runtime gates ปิดโดย default |
+| Full forced provider E2E/security/canary/owner sign-off (29.9 Gate I) | ยังไม่ approved; รอ PostgreSQL+SQL Server environment และเจ้าของระบบลงนาม |
 | JSON deterministic finalization และ operations | ทำแล้ว |
 | API Destination Profile design/schema/module/Admin API/UI (26.0–26.4) | ทำแล้ว |
 | Seed/compare/cut over API+Worker ไป Postgres profile source (26.5) | ทำแล้ว; Postgres authoritative และ config definitions ซ้ำถูกลบ |
@@ -484,7 +534,7 @@ Source/Normalized physical business tables สร้างตาม Table Defini
 ## 14. เอกสารอ้างอิงเฉพาะเรื่อง
 
 - [Domain vocabulary](../CONTEXT.md)
-- [Implementation plan Phase 19–28](web-config-plan.md)
+- [Implementation plan Phase 19–29](web-config-plan.md)
 - [Backend config handoff](backend-config-handoff.md)
 - [API Destination Profile Administration Design](../spec/spec-design-api-destination-profile-administration.md)
 - [Phase 26.5 profile catalog cutover handoff](phase-26.5-cutover-handoff.md)
@@ -496,6 +546,9 @@ Source/Normalized physical business tables สร้างตาม Table Defini
 - [Phase 27 Gate G evidence](phase-27-gate-g-evidence.md)
 - [Phase 24 API delivery operations runbook](phase-24-operations-runbook.md)
 - [Phase 25 JSON export operations runbook](phase-25-json-export-operations-runbook.md)
+- [Phase 29 DatabaseTable delivery runbook](phase-29-database-table-delivery-runbook.md)
+- [Phase 29 acceptance matrix](phase-29-acceptance-matrix.md)
+- [Phase 29 Gate I evidence](phase-29-gate-i-evidence.md)
 - [Legacy program workflow](../current-program-workflow.md) — ใช้ดูบริบทระบบเดิม ไม่ใช่ภาพ current Mapping Demo ทั้งหมด
 
 เมื่อ implementation เปลี่ยน runtime semantics, destination, status หรือ cutover source ต้องอัปเดตเอกสารนี้พร้อม phase handoff เพื่อรักษาเอกสารเดียวที่บอก flow ปัจจุบันตั้งแต่ต้นจนจบ

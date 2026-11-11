@@ -1,0 +1,29 @@
+{
+  "legacyTable": {
+    "kind": "legacyTable",
+    "normalizedTableId": 42
+  },
+  "apiContract": {
+    "kind": "apiContract",
+    "apiDestinationProfileId": "phase29-api",
+    "contract": {
+      "id": "proposal",
+      "version": "1",
+      "reference": "proposal/1",
+      "schemaHash": "sha256:phase29-api"
+    }
+  },
+  "jsonFile": {
+    "kind": "jsonFile",
+    "fileDestinationProfileId": "phase29-json",
+    "contract": {
+      "id": "proposal",
+      "version": "1",
+      "reference": "proposal/1",
+      "schemaHash": "sha256:phase29-json"
+    },
+    "relativeFolder": "phase29",
+    "fileNameTemplate": "{sourceBaseName}.{fileJobId}.r{artifactRevision}.json",
+    "formatting": "compact"
+  }
+}

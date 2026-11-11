@@ -1,4 +1,5 @@
 using MappingDemo.Shared.Destinations;
+using MappingDemo.Shared.DatabaseDestinations;
 using MappingDemo.Worker.Destinations;
 using Npgsql;
 
@@ -16,7 +17,8 @@ internal static class DestinationRouterTestFactory
         {
             typeof(LegacyTableDestination),
             typeof(ApiContractDestination),
-            typeof(JsonFileDestination)
+            typeof(JsonFileDestination),
+            typeof(DatabaseTableDestination)
         })
         {
             if (!registeredTypes.Contains(destinationType))

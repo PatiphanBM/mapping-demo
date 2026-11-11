@@ -256,6 +256,7 @@ async function mockApi(
     const profile = profiles.find((item) => item.id === profileId)!;
     if (path === "/tables") return json(route, [sourceTable]);
     if (path === "/api-destination-profiles") return json(route, profiles);
+    if (path === "/database-destinations/profiles") return json(route, []);
     if (path === "/mapping-capabilities") return json(route, capabilities);
     if (path === "/mapping-configs" && request.method() === "POST") {
       onCreate?.(request.postDataJSON() as Record<string, unknown>);

@@ -1,6 +1,6 @@
-# Mapping Demo — แผน Input Layout, Transformation Config, Contract Mapping และหน้าเว็บ (Phase 19–28)
+# Mapping Demo — แผน Input Layout, Transformation Config, Contract Mapping และหน้าเว็บ (Phase 19–29 + Multi-table Phase 2 Preparation)
 
-> **Design source:** Phase 21–24 ในเอกสารนี้เป็น implementation plan ของ [Contract API and Legacy Table Delivery Design](../spec/spec-design-contract-api-legacy-delivery.md) หากรายละเอียดขัดกันให้ design specification เป็น authoritative source ส่วน Phase 19–20 เก็บเป็น baseline ของ behavior เดิมที่ต้องไม่ regression Phase 25 เป็นภาคต่อจากการเลือก Prototype C และต้องแก้ design specification ให้รองรับ `JsonFile` อย่างเป็นทางการใน Step 25.0 ก่อนเริ่ม implementation ส่วน Phase 26 ย้าย API destination profile จาก duplicated application config ไปเป็น versioned server-owned catalog พร้อมหน้า Admin และต้องล็อก design/addendum ใน Step 26.0 ก่อนเริ่ม implementation ส่วน Phase 27 ย้าย Contract schema จาก bundled fixture ไปเป็น versioned Contract Registry พร้อมหน้า Admin และต้องล็อก lifecycle/authorization/compatibility contract ใน Step 27.0 ก่อนเริ่ม implementation ส่วน Phase 28 เพิ่ม Table Admin และ physical schema verification โดยต้องล็อก comparison/authorization/drift contract ใน Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation
+> **Design source:** Phase 21–24 ในเอกสารนี้เป็น implementation plan ของ [Contract API and Legacy Table Delivery Design](../spec/spec-design-contract-api-legacy-delivery.md) หากรายละเอียดขัดกันให้ design specification เป็น authoritative source ส่วน Phase 19–20 เก็บเป็น baseline ของ behavior เดิมที่ต้องไม่ regression Phase 25 เป็นภาคต่อจากการเลือก Prototype C และต้องแก้ design specification ให้รองรับ `JsonFile` อย่างเป็นทางการใน Step 25.0 ก่อนเริ่ม implementation ส่วน Phase 26 ย้าย API destination profile จาก duplicated application config ไปเป็น versioned server-owned catalog พร้อมหน้า Admin และต้องล็อก design/addendum ใน Step 26.0 ก่อนเริ่ม implementation ส่วน Phase 27 ย้าย Contract schema จาก bundled fixture ไปเป็น versioned Contract Registry พร้อมหน้า Admin และต้องล็อก lifecycle/authorization/compatibility contract ใน Step 27.0 ก่อนเริ่ม implementation ส่วน Phase 28 เพิ่ม Table Admin และ physical schema verification โดยต้องล็อก comparison/authorization/drift contract ใน Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation ส่วน Phase 29 เพิ่ม `DatabaseTable` destination สำหรับ PostgreSQL/SQL Server ภายนอก โดยต้องล็อก profile ownership, schema compatibility, cross-database delivery, duplicate handling และ `UnknownOutcome` contract ใน Step 29.0 ก่อนเพิ่ม runtime write path ส่วน Phase 30 เป็น preparatory refactor สำหรับ Multi-table Database Delivery Phase 2 เท่านั้น โดย [Database Table Destination Design](../spec/spec-design-database-table-destination.md) ยังเป็น authoritative source ของ runtime ปัจจุบันจนกว่า Step 30.0 จะสร้างและได้รับอนุมัติ design addendum
 
 แผนนี้ต่อจาก [learning-plan.md](learning-plan.md) โดยขยาย Mapping Config จาก CSV field mapping แบบ 1:1 ให้รองรับ fixed-width text จาก `Mapping-TIB-PRD.xlsx`, transformation ที่พบใน `Mapping-PMIB-PRD.xlsx` และหน้าเว็บตั้งค่า Config Version ผ่าน `MappingDemo.Api`
 
@@ -17,11 +17,12 @@
 3. โค้ดเว็บอยู่ใน `web/`; การแก้ .NET, migration และ script ทำได้เฉพาะ step ที่ระบุ
 4. ถ้า Next.js เวอร์ชันที่ติดตั้งมีชื่อไฟล์หรือ API ต่างจากแผน ให้ใช้ตามเวอร์ชันที่ติดตั้ง แล้วบอกว่าต่างตรงไหน
 5. ห้ามแปลง pseudo-SQL จาก workbook แล้ว execute โดยตรง ทุก config ต้องผ่าน typed model, compiler และ allowlist เดียวกัน
-6. Phase 21–28 ต้องทำตามลำดับและผ่าน Phase Gate ก่อนเริ่ม Phase ถัดไป ห้ามเปิด `ApiContract` delivery ก่อน Phase 24, ห้าม activate `JsonFile` ก่อนผ่าน Gate E ใน Phase 25, ห้ามเปิด profile administration ใน production ก่อนผ่าน Gate F ใน Phase 26, ห้าม publish Contract ผ่าน Admin ใน production ก่อนผ่าน Gate G ใน Phase 27 และห้ามเปิด Table Admin mutation ใน production ก่อนผ่าน Gate H ใน Phase 28
+6. Phase 21–29 ต้องทำตามลำดับและผ่าน Phase Gate ก่อนเริ่ม Phase ถัดไป ห้ามเปิด `ApiContract` delivery ก่อน Phase 24, ห้าม activate `JsonFile` ก่อนผ่าน Gate E ใน Phase 25, ห้ามเปิด profile administration ใน production ก่อนผ่าน Gate F ใน Phase 26, ห้าม publish Contract ผ่าน Admin ใน production ก่อนผ่าน Gate G ใน Phase 27, ห้ามเปิด Table Admin mutation ใน production ก่อนผ่าน Gate H ใน Phase 28 และห้ามเปิด external database write ก่อนผ่าน Gate I ใน Phase 29
 7. ทุก step ใหม่ต้องรักษา `LegacyTable` characterization tests ให้ผ่าน และห้ามเปลี่ยน destination ของ File Job ที่ pin Config Version ไปแล้ว
-8. Schema endpoint, delivery endpoint, Output Root, authentication และ secret ต้องมาจาก server-owned profile ห้ามรับ raw URL/path/credential จาก browser
-9. ห้าม dual-delivery production payload เดียวข้าม `LegacyTable`, `ApiContract` และ `JsonFile`; shadow test ใช้ stub/sandbox/output root แยกที่ไม่มี business side effect เท่านั้น
+8. Schema endpoint, delivery endpoint, database connection, Output Root, authentication และ secret ต้องมาจาก server-owned profile ห้ามรับ raw URL/path/credential จาก browser
+9. ห้าม dual-delivery production payload เดียวข้าม `LegacyTable`, `ApiContract`, `JsonFile` และ `DatabaseTable`; shadow test ใช้ stub/sandbox/output root/database แยกที่ไม่มี business side effect เท่านั้น
 10. JSON ของ PA MTLS เป็น illustrative profile สำหรับ coverage ไม่ใช่ schema กลางและห้าม hard-code path ลง core Module
+11. Phase 30 เริ่ม preparatory refactor ได้ระหว่างที่ Gate I ยังรอ external environment/owner sign-off เฉพาะ step ที่ระบุว่าไม่เปลี่ยน runtime behavior; ห้ามเพิ่ม multi-table destination, migration, delivery-group column, generated-key propagation, dual write หรือเปิด feature/write gate ก่อนมี Phase 2 design approval แยก
 
 ### คำสั่งตั้งต้นสำหรับ AI agent (copy ไปใช้ได้)
 
@@ -29,9 +30,9 @@
 อ่าน docs/web-config-plan.md, docs/learning-plan.md (เฉพาะหัวข้อ "วิธีใช้แผนนี้"),
 docs/demo-plan.md หัวข้อ "ข้อสรุปรอบที่ 7–9", CONTEXT.md และ current-program-workflow.md หัวข้อ 6.2 กับ 8.2
 ก่อน implement ให้ตรวจเครื่องตาม "Requirement ของเครื่อง" ในแผนนี้ ถ้าไม่ตรงให้หยุดและบอกฉันก่อน
-ถ้าฉันสั่งเริ่ม Phase 19–28 ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จของ Phase นั้น แล้วหยุดรอคำสั่งใหม่
+ถ้าฉันสั่งเริ่ม Phase 19–30 ให้ทำเฉพาะ step แรกที่ยังไม่เสร็จของ Phase นั้น แล้วหยุดรอคำสั่งใหม่
 ถ้าฉันสั่ง Step ที่ระบุเลข ให้ทำเฉพาะ step นั้น อธิบาย concept ก่อนเขียนโค้ด แล้วบอกวิธีตรวจผล
-สำหรับ Phase 21–28 ให้อ่าน spec/spec-design-contract-api-legacy-delivery.md เพิ่มก่อนเริ่ม, ใน Phase 25 ให้อ่าน spec/spec-design-file-to-json-export.md เป็น historical reliability reference เท่านั้น, Phase 26–27 ต้องทำ design step ของ Phase ก่อนแก้ schema/runtime และ Phase 28 ต้องอ่าน docs/table-creation-old-vs-new.md พร้อมทำ Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation
+สำหรับ Phase 21–29 ให้อ่าน spec/spec-design-contract-api-legacy-delivery.md เพิ่มก่อนเริ่ม, ใน Phase 25 ให้อ่าน spec/spec-design-file-to-json-export.md เป็น historical reliability reference เท่านั้น, Phase 26–27 ต้องทำ design step ของ Phase ก่อนแก้ schema/runtime, Phase 28 ต้องอ่าน docs/table-creation-old-vs-new.md พร้อมทำ Step 28.0 ก่อนเพิ่ม Inspector หรือ Admin mutation, Phase 29 ต้องทำ Step 29.0 เพื่อสร้าง/อนุมัติ Database Table Destination design ก่อนเพิ่ม connection provider, migration หรือ external write และ Phase 30 ต้องอ่าน spec/spec-design-database-table-destination.md พร้อมรักษา single-table contract/runtime effects แบบ exact จนกว่า Multi-table Phase 2 design จะได้รับอนุมัติ
 ห้ามติดตั้ง package เพิ่มเอง ห้ามรับ raw URL/credential หรือ execute raw SQL จาก config และห้ามสร้าง git commit เอง
 ```
 
@@ -1516,3 +1517,510 @@ Unknown → Verifying → Healthy
 - Authorization, operator/reason, audit, rate limit, metrics/alerts, kill switch และ drift runbook ผ่านการทดสอบ
 - Backend/PostgreSQL integration, web E2E/accessibility, security และ full mapping regression ผ่าน
 - Gate H owner sign-off เสร็จก่อนเปิด Table Admin mutation ใน production
+
+## Phase 29 — External Database Table Destination สำหรับ PostgreSQL และ SQL Server
+
+### เป้าหมายและขอบเขต
+
+เพิ่ม destination ชนิด `DatabaseTable` เพื่อให้ผู้ใช้เลือกตารางจาก PostgreSQL หรือ SQL Server ปลายทาง, อ่าน field จริงจาก catalog, นำ field มาสร้าง Mapping Config และส่งผลลัพธ์ด้วย parameterized `INSERT` โดยไม่ต้องเพิ่มชื่อตารางหรือคอลัมน์ใน source code ทุกครั้ง
+
+Phase นี้ไม่เปลี่ยน `LegacyTable` เดิม: `LegacyTable` ยังหมายถึง Normalized Table ที่ระบบสร้างและเขียนใน Mapping PostgreSQL transaction เดียวกัน ส่วน `DatabaseTable` หมายถึงตารางที่มีอยู่แล้วในฐานภายนอกและต้องใช้ delivery lifecycle แยก เพราะ Mapping Database กับฐานปลายทางไม่สามารถ commit แบบ transaction เดียวกันได้
+
+ขอบเขต v1:
+
+- รองรับ PostgreSQL และ SQL Server
+- รองรับ `INSERT` เท่านั้น; ยังไม่ทำ generic `UPDATE`, `UPSERT`, `DELETE`, stored procedure หรือ raw SQL
+- connection และ credentials เป็น server-owned configuration; browser เห็นเฉพาะ logical profile ID กับ safe summary
+- อ่าน schema จากฐานปลายทางเมื่อ browse/validate และตรวจ compatibility ก่อน delivery; ไม่อ่าน `information_schema` ทุก field insert
+- Mapping Config Version เก็บ immutable target schema snapshot/hash; schema ปัจจุบันอาจมี additive field เพิ่มได้โดยไม่แก้ version เดิมอัตโนมัติ
+- field ที่ mapping ไว้แล้วห้ามหาย, rename, เปลี่ยน type/length/precision/scale/nullability หรือเปลี่ยนเป็น generated/computed โดยระบบทำงานต่อแบบเงียบ
+- ไม่เพิ่ม `mapping_delivery_id` ใน business table และไม่สร้าง receipt table ที่ฐานปลายทาง
+- ถ้ามี existing unique constraint ให้ผู้ใช้เลือกเป็น duplicate-check key; ถ้าไม่มี key และผล insert ไม่ชัดเจน งานต้องเป็น `UnknownOutcome` และรอผู้ใช้ตัดสินใจ ห้าม retry อัตโนมัติ
+- ห้าม dual-delivery output เดียวไป `DatabaseTable` พร้อม destination อื่น
+
+### Product decisions ที่ยืนยันแล้ว
+
+| เรื่อง | Decision ของ Phase 29 |
+|---|---|
+| Provider | PostgreSQL และ SQL Server ผ่าน Adapter คนละตัว |
+| Schema source | physical target catalog เป็น authoritative สำหรับ field ที่เลือกได้ |
+| Schema refresh | browse, validate/activate, pre-delivery และ scheduled monitor; ไม่ query ต่อ field |
+| Config stability | Config Version และ schema snapshot immutable |
+| Additive field | nullable, มี default หรือ generated/computed เพิ่มได้; แจ้งเตือนและงานเดิมทำต่อ |
+| Required field ใหม่ | `NOT NULL` และไม่มี default เป็น breaking change เพราะ SQL เดิม insert ไม่ได้ |
+| Mapped field drift | block delivery และแจ้ง user ให้สร้าง Config Version ใหม่หรือให้ DBA แก้ schema กลับ |
+| Write mode | parameterized `INSERT` เท่านั้นใน v1 |
+| Duplicate prevention | ใช้ existing unique constraint เมื่อมี; ไม่ใช้ identity/auto-generated key |
+| ไม่มี usable unique key | ambiguous result เป็น `UnknownOutcome`; manual resolve พร้อม audit |
+| Target mutation | ระบบไม่เพิ่ม column/table/constraint และไม่ auto-repair schema ปลายทาง |
+| Secret ownership | connection string อยู่ใน configuration/secret store ไม่อยู่ใน Mapping Config หรือ API response |
+
+### Module, Interface และ Adapter seam
+
+สร้าง deep `Database Destination Module` เป็น Interface เดียวที่ caller ใช้เพื่อ inspect, compare และ deliver โดยซ่อน provider dialect, identifier quoting, catalog queries, parameter binding และ error classification ไว้ใน implementation
+
+```csharp
+public interface IDatabaseDestinationModule
+{
+    Task<TargetTableSchema> InspectAsync(
+        TargetTableReference target,
+        CancellationToken cancellationToken = default);
+
+    SchemaCompatibilityResult Compare(
+        TargetSchemaSnapshot configured,
+        TargetTableSchema current,
+        IReadOnlySet<string> mappedColumns);
+
+    Task<DatabaseDeliveryResult> InsertAsync(
+        DatabaseInsertRequest request,
+        CancellationToken cancellationToken = default);
+}
+```
+
+ภายใน Module มี Adapter จริงสองตัว:
+
+- `PostgreSqlDatabaseDestinationAdapter`: ใช้ Npgsql, `information_schema` ร่วมกับ `pg_catalog`, quote identifier ด้วย `"name"`
+- `SqlServerDatabaseDestinationAdapter`: ใช้ `Microsoft.Data.SqlClient`, `INFORMATION_SCHEMA` ร่วมกับ `sys.*`, quote identifier ด้วย `[name]`
+
+Transformation compiler, Controller และหน้าเว็บห้ามสร้าง SQL หรือแยก provider error เอง; caller ส่ง typed target/value แล้วรับ typed result เท่านั้น การเพิ่ม provider ในอนาคตจึงเกิดหลัง Interface เดิมโดยไม่กระจาย dialect ไปหลายจุด
+
+### การทำงานแบบ end-to-end
+
+#### Control plane: เลือกตารางและสร้าง Config Version
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Web as Mapping Editor
+    participant API as MappingDemo.Api
+    participant Module as Database Destination Module
+    participant Target as PostgreSQL/SQL Server
+    participant MappingDb as Mapping PostgreSQL
+
+    User->>Web: เลือก Database Profile
+    Web->>API: ขอ schemas/tables แบบ bounded
+    API->>Module: inspect ผ่าน server-owned profile
+    Module->>Target: query catalog แบบ read-only
+    Target-->>Module: columns/types/defaults/unique constraints
+    Module-->>Web: safe TargetTableSchema
+    User->>Web: map Source/Expression ไป target fields
+    Web->>API: validate draft
+    API->>Module: inspect + compare ล่าสุด
+    Module-->>API: schema snapshot/hash + diagnostics
+    API->>MappingDb: บันทึก immutable Config Version
+```
+
+ตารางใหม่ที่ DBA สร้างใน allowed schema จะปรากฏในรายการครั้งถัดไปโดยไม่แก้ code แต่ยังไม่ถูกใช้จนกว่า user จะสร้างและ activate Config Version ที่อ้างตารางนั้น
+
+#### Data plane: normalize แล้วส่งฐานภายนอก
+
+```mermaid
+sequenceDiagram
+    participant Normalize as Row Normalize Worker
+    participant MappingDb as Mapping PostgreSQL
+    participant Kafka
+    participant Delivery as Database Delivery Worker
+    participant Target as PostgreSQL/SQL Server
+
+    Normalize->>MappingDb: Database Delivery Job + encrypted payload + outbox
+    MappingDb-->>Kafka: mapping.database-delivery
+    Kafka->>Delivery: delivery job ID
+    Delivery->>MappingDb: claim lease + โหลด pinned snapshot
+    Delivery->>Target: inspect schema ล่าสุด
+    Delivery->>Delivery: compare mapped fields/required fields/key
+    alt Compatible
+        Delivery->>Target: parameterized INSERT
+        Delivery->>MappingDb: Delivered/AlreadyDelivered/Conflict/UnknownOutcome
+    else Breaking drift
+        Delivery->>MappingDb: BlockedSchemaDrift + safe diagnostics
+    end
+```
+
+`RowNormalizeHandler` ห้ามเปิด connection ไปฐานภายนอกโดยตรง งานของมันคือ evaluate transformation และบันทึก Database Delivery Job/outbox ใน Mapping Database transaction เดียวกัน การส่งจริงเป็นอีก lifecycle หนึ่งเหมือน API Delivery เพื่อไม่ถือ Mapping transaction ค้างระหว่าง network I/O และไม่อ้างว่า external insert atomic กับ Row Job
+
+### Server-owned configuration
+
+ตัวอย่าง development configuration:
+
+```json
+{
+  "ConnectionStrings": {
+    "CustomerPostgres": "",
+    "LegacySqlServer": ""
+  },
+  "DestinationDatabases": {
+    "Profiles": [
+      {
+        "Id": "customer-postgres",
+        "Provider": "PostgreSql",
+        "ConnectionStringName": "CustomerPostgres",
+        "AllowedSchemas": [ "public" ],
+        "CommandTimeoutSeconds": 15,
+        "SchemaCacheSeconds": 60,
+        "WriteEnabled": false
+      },
+      {
+        "Id": "legacy-sqlserver",
+        "Provider": "SqlServer",
+        "ConnectionStringName": "LegacySqlServer",
+        "AllowedSchemas": [ "dbo" ],
+        "CommandTimeoutSeconds": 15,
+        "SchemaCacheSeconds": 60,
+        "WriteEnabled": false
+      }
+    ]
+  }
+}
+```
+
+กติกา configuration:
+
+- `Id` เป็น logical identity ที่ Mapping Config อ้างได้; ห้ามใช้ connection string เป็น identity
+- `ConnectionStringName` resolve ฝั่ง server เท่านั้น; API response และ log ห้ามคืน value
+- development ใช้ `appsettings.Development.json` หรือ User Secrets; production ใช้ environment/secret store เช่น `ConnectionStrings__LegacySqlServer`
+- `AllowedSchemas` ต้องไม่ว่างและใช้เป็น allowlist ก่อน query catalog หรือประกอบ identifier
+- `WriteEnabled` เป็น kill switch แยกต่อ profile; read/inspect ยังใช้ได้เมื่อ write ปิด
+- API และ Worker ต้อง validate profile IDs/provider/configuration hash ตอน startup; profile ที่ missing/ซ้ำ/invalid ทำให้ feature นั้น fail closed
+- SQL Server production profile ต้องใช้ encrypted transport ตาม operations policy; ห้ามแก้ certificate validation ด้วย permissive default โดยไม่มี owner approval
+
+### Target schema model
+
+Adapter ทั้งสองต้องแปลง provider-specific catalog เป็น model กลางอย่างน้อยดังนี้:
+
+```text
+TargetTableSchema
+  profileId, provider, catalog/database, schema, table
+  columns[]
+    name, ordinal, providerType, scalarType
+    nullable, hasDefault, identity, generated/computed, writable
+    maxLength, precision, scale
+  uniqueConstraints[]
+    name, orderedColumns[]
+  inspectedAt, schemaHash
+```
+
+กฎ field ที่ Mapping Editor แสดง:
+
+- identity, generated, computed และ SQL Server `rowversion` แสดงเป็น read-only context แต่ห้ามเลือกเป็น assignment target
+- writable `NOT NULL` field ที่ไม่มี default ต้องมี assignment ในทุก output branch ก่อน activate
+- nullable หรือ field ที่มี default ไม่บังคับ mapping; ถ้าไม่ map ให้ตัด column นั้นออกจาก `INSERT` ไม่ส่ง `NULL` ทับ default
+- unsupported provider type แสดง diagnostic และห้าม activate ถ้า field นั้น required หรือถูก mapping
+- unique key ที่เลือกต้องมาจาก unique constraint จริง, ทุก column ต้อง writable/มีค่า deterministic ก่อน insert และห้ามเป็น identity ที่รู้ค่าหลัง insert เท่านั้น
+- schema hash คำนวณจาก canonical ordered structure ไม่ขึ้นกับเวลาตรวจหรือ provider formatting ที่ไม่มีผลต่อ contract
+
+### Config model
+
+เพิ่ม destination definition ใหม่โดยไม่เปลี่ยน JSON ของ destination เดิม:
+
+```json
+{
+  "kind": "databaseTable",
+  "profileId": "legacy-sqlserver",
+  "schema": "dbo",
+  "table": "customer",
+  "writeMode": "insert",
+  "duplicatePolicy": {
+    "kind": "existingUniqueKey",
+    "columns": [ "customer_code" ]
+  },
+  "schemaHash": "sha256:..."
+}
+```
+
+ถ้าไม่มี usable unique key:
+
+```json
+{
+  "duplicatePolicy": {
+    "kind": "manualUnknownOutcome"
+  }
+}
+```
+
+Config Version ต้องเก็บ canonical target schema snapshot แยกจาก current catalog เพื่อให้ preview, retry, audit และ reprocess อธิบายได้ว่า version นั้น compile กับ schema ใด User ที่ต้องการใช้ field ใหม่ต้อง clone/create Config Version ใหม่; ระบบห้ามเติม assignment หรือเปลี่ยน schema snapshot ของ active/historical version
+
+### Schema compatibility และการแจ้งเตือน
+
+สถานะเปรียบเทียบ:
+
+```text
+Healthy
+CompatibleChange
+BreakingChange
+Unavailable
+```
+
+| การเปลี่ยนแปลงจริง | Classification | Runtime behavior |
+|---|---|---|
+| ไม่มี structural change | `Healthy` | ทำงานต่อ |
+| เพิ่ม nullable field | `CompatibleChange` | แจ้งเตือน; SQL เดิมทำงานต่อ |
+| เพิ่ม field ที่มี default | `CompatibleChange` | แจ้งเตือน; omit จาก `INSERT` |
+| เพิ่ม identity/generated/computed field | `CompatibleChange` | แจ้งเตือน; field ใหม่เขียนไม่ได้และไม่ต้อง map |
+| เพิ่ม writable `NOT NULL` field ไม่มี default | `BreakingChange` | block เพราะ SQL เดิมขาดค่าบังคับ |
+| mapped field หายหรือ rename | `BreakingChange` | block |
+| mapped field เปลี่ยน type/length/precision/scale | `BreakingChange` | block |
+| mapped field nullable → non-null หรือ writable → generated | `BreakingChange` | block |
+| unmapped field หาย | `CompatibleChange` | แจ้งเตือน; ทำงานต่อถ้าไม่มี dependency อื่น |
+| unmapped field เปลี่ยนเป็น required ไม่มี default | `BreakingChange` | block เพราะ insert แม้ไม่ map ก็ล้มเหลว |
+| selected unique constraint/key หายหรือเปลี่ยนลำดับ column | `BreakingChange` | block automatic reconciliation |
+| table/schema/profile หายหรือ catalog อ่านไม่ได้ | `Unavailable` | ไม่ insert; retry เฉพาะ failure ที่ policy ระบุว่า transient |
+
+การตรวจเกิดตอน browse, validate/activate, ก่อน delivery และ scheduled monitor แบบ bounded/cache ได้ แต่ check-then-insert ยังมี race หาก DBA เปลี่ยน schema หลัง check ดังนั้น Adapter ต้องแปลง provider error ที่เกิดตอน `INSERT` เป็น safe drift/delivery result และ trigger fresh inspection อีกครั้ง
+
+หน้า Config/Delivery ต้องแสดง banner และ field-level diff:
+
+- `New fields available`: compatible additive change; active version ยังทำงาน
+- `Mapping requires attention`: breaking change; มีปุ่ม clone/create version จาก schema ล่าสุด
+- `Target unavailable`: อ่าน catalog/เชื่อมต่อไม่ได้; ไม่เปิดเผย host, connection string หรือ raw SQL
+- historical/pinned version แสดง snapshot เดิมและ latest comparison แต่ห้ามถูกแก้ย้อนหลัง
+
+### Existing unique key และ duplicate handling
+
+unique key ใช้ตรวจว่า business row identity เดียวกันถูก insert แล้วหรือยัง ไม่ได้ใช้ตรวจว่าไฟล์หรือ Kafka message ซ้ำโดยตรง
+
+ตัวอย่าง:
+
+```text
+UNIQUE (policy_number, effective_date)
+```
+
+เมื่อ retry หรือเกิด unique violation:
+
+1. Adapter query แถวด้วย selected unique-key columns แบบ parameterized
+2. ถ้าไม่พบและผลก่อนหน้ารู้แน่ว่า rollback/ยังไม่ execute ให้ retry `INSERT`
+3. ถ้าพบและ mapped values เท่ากันตาม canonical comparison ให้ผล `AlreadyDelivered`
+4. ถ้าพบแต่ mapped values ต่างกัน ให้ผล `DeliveryConflict`; ห้าม update/overwrite อัตโนมัติ
+5. database unique constraint เป็นตัวป้องกัน concurrent inserts จริง; `SELECT` ก่อน insert เพียงอย่างเดียวไม่พอ
+
+ถ้า insert timeout/connection reset:
+
+- มี selected unique key: reconnect แล้ว reconcile ด้วย key; found+same = `AlreadyDelivered`, found+different = `DeliveryConflict`, not found = retry ได้ตาม policy
+- ไม่มี selected unique key: ผลเป็น `UnknownOutcome`; ห้าม retry อัตโนมัติ เพราะ target อาจ commit แล้วแต่ Worker ยังไม่บันทึก `Delivered`
+
+identity/auto-increment ที่ฐานสร้างหลัง insert ใช้เป็น duplicate key ไม่ได้ เว้นแต่ business payload รู้ค่าและส่งเองก่อน insert ส่วน key ที่ business อนุญาตให้ซ้ำก็ใช้ไม่ได้แม้มี index ธรรมดา; UI ให้เลือกได้เฉพาะ unique constraint ที่ Inspector ยืนยัน
+
+### Delivery statuses และ manual resolution
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+    Pending --> Delivering
+    Delivering --> Delivered: insert confirmed
+    Delivering --> AlreadyDelivered: unique key + same values
+    Delivering --> RetryableFailed: confirmed transient and safe to retry
+    RetryableFailed --> Delivering: scheduled/manual retry
+    Delivering --> PermanentFailed: validation/provider rejection
+    Delivering --> DeliveryConflict: same key, different values
+    Delivering --> BlockedSchemaDrift: breaking schema change
+    Delivering --> UnknownOutcome: commit result cannot be proven
+```
+
+กฎ manual action:
+
+- `UnknownOutcome`: authorized user ตรวจฐานปลายทางแล้วเลือก `Mark Delivered` หรือ `Retry`; UI ต้องเตือนว่า Retry อาจสร้าง duplicate เมื่อไม่มี unique key
+- `DeliveryConflict`: user ห้าม mark เป็น retryable โดยไม่แก้ข้อมูล/config/ฐานปลายทาง; ใช้ reprocess ภายใต้ Config Version ใหม่เมื่อเหมาะสม
+- `BlockedSchemaDrift`: retry ได้หลัง schema กลับมาตรง snapshot; ถ้าสร้าง Config Version ใหม่ให้ reprocess ไม่เปลี่ยน pinned version ของงานเดิม
+- ทุก action เก็บ operator, reason, previous/new status, correlation ID และ timestamp แบบ append-only
+- lease หมดขณะ `Delivering` และไม่มี unique key ต้องไป `UnknownOutcome` ไม่ใช่ `Pending`; ระบบไม่สามารถรู้ว่า process ล้มก่อนหรือหลัง target commit
+
+### Planned endpoints และหน้าเว็บ
+
+API ที่เพิ่มแบบ safe projection:
+
+```text
+GET  /database-destination-profiles
+GET  /database-destination-profiles/{profileId}/schemas
+GET  /database-destination-profiles/{profileId}/tables?schema=...&search=...&limit=...&offset=...
+GET  /database-destination-profiles/{profileId}/tables/{schema}/{table}
+POST /database-destination-profiles/{profileId}/validate
+GET  /database-delivery-jobs
+GET  /database-delivery-jobs/{id}
+POST /database-delivery-jobs/{id}/retry
+POST /database-delivery-jobs/{id}/resolve
+```
+
+API ต้อง validate profile, allowed schema และ catalog identity ฝั่ง server ทุกครั้ง ชื่อ schema/table/column ไม่ใช่ SQL parameter ได้โดยตรง จึงต้องมาจาก inspected allowlisted model แล้ว quote ด้วย provider Adapter ห้ามนำ string จาก route ไป interpolate SQL โดยไม่ resolve
+
+Mapping Editor เพิ่ม flow:
+
+```text
+Destination kind
+  → Database profile
+  → Schema
+  → Table
+  → Current columns/required/default/generated
+  → Duplicate policy/unique key
+  → Target field assignments
+  → Validate current schema
+  → Create immutable version
+```
+
+หน้า Delivery เพิ่ม provider/profile/table safe identity, schema status, attempt history, redacted error, `UnknownOutcome` resolution และ link กลับ Config Version โดยไม่แสดง connection string, payload value หรือ raw command text
+
+### Persistence ที่ต้องเพิ่มใน Mapping Database
+
+วาง migration แบบ expand-onlyสำหรับ:
+
+- `database_delivery_jobs`: pinned config/output identity, profile/schema/table, encrypted canonical values, payload hash, schema hash, duplicate policy snapshot, status, lease, attempts และ timestamps
+- `database_delivery_attempts`: attempt number, result category, duration, safe provider code, schema check status และ correlation metadata; ไม่เก็บ raw SQL/connection/payload
+- `database_delivery_resolution_audit`: manual retry/mark-delivered/conflict handling พร้อม operator/reason แบบ append-only
+- `database_schema_checks`: configured/actual hash, compatibility status, safe changes, checked/resolved time สำหรับ UI/monitoring
+- outbox topic `mapping.database-delivery` และ indexes/constraints สำหรับ claim/retry/list โดยไม่เปลี่ยน existing API/JSON delivery rows
+
+Mapped payload ต้อง persist ก่อน network call, serialize แบบ deterministic, encrypt at rest ด้วย server-owned key reference และเก็บ hash เพื่อ retry/reconcile โดยไม่ rebuild จาก active config ล่าสุด
+
+### Security และ operations invariants
+
+- ไม่มี raw SQL, arbitrary connection string, host, port, username, password หรือ trust-certificate flag ใน browser-owned Mapping Config
+- profile ใช้ least-privilege account: catalog read + `INSERT` และ `SELECT` เฉพาะ allowed target tables/keys ที่จำเป็น; ไม่มี DDL, drop, alter หรือ broad admin role
+- identifier ผ่าน provider length/rule validation, allowlisted catalog resolution และ provider quoting; values ใช้ parameters เสมอ
+- logs/metrics ใช้ bounded provider/status/result labels; ห้ามใช้ table/column/profile-secret/payload เป็น metric label
+- timeout, cancellation, transient classification และ retry limit แยกตาม provider แต่คืน typed result เดียวกัน
+- schema cache มี bounded TTL/size และ invalidation เมื่อ user กด refresh, validation ล้ม หรือ provider คืน schema-related error
+- `WriteEnabled=false` ต้องหยุด claim/send ใหม่โดยไม่ reroute pinned jobs ไป destination อื่น; read-only browse/inspect ยังใช้ได้
+- production rollout เริ่ม read/inspect ก่อน, ต่อด้วย sandbox/shadow database, แล้ว canary profile; ห้ามเปิดทุก profileพร้อมกัน
+
+### Gate I และ rollback
+
+| Gate | เงื่อนไขผ่าน | Rollback |
+|---|---|---|
+| Gate I หลัง Phase 29 | PostgreSQL/SQL Server inspect + parameterized insert, schema compatibility, existing-key reconciliation, `UnknownOutcome`, security, E2E และ runbook ผ่าน; owners อนุมัติ provider/profile ที่เปิดจริง | ปิด `WriteEnabled`, pause Database Delivery Worker และปิด creation/activation ของ `DatabaseTable`; read/inspect กับ destination เดิมยังทำงาน; pinned DatabaseTable jobs คงสถานะเดิมและห้าม reroute |
+
+- [x] **29.0 ล็อก Database Table Destination design และ Gate I contract**
+  - ทำ: สร้าง design specification ระบุคำศัพท์/ownership, `DatabaseTable` definition, provider/profile contract, schema snapshot/hash, compatibility matrix, write/idempotency semantics, statuses, authorization, observability, rollout และ rollback; บันทึก decision ว่า v1 ไม่เพิ่ม target column/table และไม่มี generic upsert
+  - เข้าใจ: feature นี้ไม่ใช่การเปลี่ยน `LegacyTable` ให้รับ connection string แต่เป็น destination ใหม่ที่มี cross-database failure modes; หากไม่ล็อก `UnknownOutcome` และ pinned-version behavior ก่อน implementation จะเผลอ retry ซ้ำหรือเปลี่ยนผลย้อนหลังได้
+  - ตรวจ: Mapping, Platform/Operations, Security และ target DB owners ยืนยัน allowed providers/schemas/permissions, existing-key rules, manual resolution และ production rollout; requirement ทุกข้อ trace ไป acceptance ID/step ได้และไม่มี unresolved decision ที่ default เป็น permissive
+  - ผล: เพิ่ม [Database Table Destination Design](../spec/spec-design-database-table-destination.md) ล็อก `DatabaseTable`/profile/schema snapshot, additive-vs-breaking drift, INSERT-only delivery, existing-key reconciliation, `UnknownOutcome`, security, rollout/rollback และ AC trace; คำสั่งวันที่ 2026-11-09 อนุมัติ design สำหรับ implementation ถึง 29.2 แต่ Gate I production sign-off ยัง pending
+
+- [x] **29.1 สร้าง characterization baseline และ migration compatibility**
+  - ทำ: ตรึง request/response/runtime effects ของ `LegacyTable`, `ApiContract` และ `JsonFile`; เพิ่ม contract test ว่า payloadเก่าที่ยังไม่มี `databaseTable` round-trip เหมือนเดิม; ระบุ source files/call sites ที่ compile/deliver destination และ transaction semantics ปัจจุบันก่อนเพิ่ม path ใหม่
+  - เข้าใจ: การเพิ่ม polymorphic destination และ delivery tables ต้องไม่เปลี่ยน normalized reconciliation, API payload, JSON artifact, retry/reprocess หรือ status calculation เดิม
+  - ตรวจ: golden/integration tests เดิมผ่าน, migration apply ซ้ำได้, old Config Versions deserialize/clone/activate ได้ และ rollback code ที่ไม่รู้ `DatabaseTable` ถูกป้องกันไม่ให้รับ version ใหม่แบบเงียบ
+  - ผล: เพิ่ม `Fixtures/Phase29/compatibility-baseline.golden.json` และ `Phase29CompatibilityBaselineTests` ตรึง JSON wire shape ของ `legacyTable`, `apiContract`, `jsonFile`; ใช้ migration/pinning regression เดิมเป็นฐานและ full backend regression ผ่าน 527/527 โดยยังไม่เพิ่ม `databaseTable` discriminator หรือ migration ใหม่
+
+- [x] **29.2 เพิ่ม server-owned profiles และ provider connection factory**
+  - ทำ: เพิ่ม typed options/validation สำหรับ profile ID, provider, connection-string name, allowed schemas, timeout, cache และ write gate; เพิ่ม provider connection factory/pool ที่ resolve secret ฝั่ง server; เพิ่ม `Microsoft.Data.SqlClient` หลังผู้ใช้อนุมัติ package/version และอัปเดต vulnerability/license evidence
+  - เข้าใจ: caller ต้องขอ connection ด้วย profile ID ไม่ใช่ถือ connection string; PostgreSQL/SQL Server adapters เป็นสอง Adapter จริงที่ทำให้ provider seam มีเหตุผล ไม่สร้าง generic abstraction ที่รั่ว dialect กลับ caller
+  - ตรวจ: missing/duplicate/unknown provider/profile/secret/empty allowlist fail closed; API/Worker startup validation, provider connection type/caller-owned lifetime, configuration hash, secret redaction และ `WriteEnabled` tests ผ่าน; live open/cancellation/TLS handshake อยู่ใน provider integration ของ 29.3/29.6
+  - ผล: เพิ่ม typed `DatabaseDestinationProfile` catalog/options validation, logical-ID `IDatabaseDestinationConnectionFactory` และ DI registration ใน API/Worker พร้อม empty-profile default; factory คืน closed caller-owned Npgsql/SqlClient connection และใช้ provider pooling เดิม. เพิ่ม `Microsoft.Data.SqlClient` 7.1.1 (MIT), pin `System.Security.Cryptography.Pkcs` 8.0.2 (MIT) แก้ transitive High/Moderate advisories; targeted profile+baseline tests ผ่าน 13/13, full backend 527/527, format/diff check ผ่าน และ NuGet vulnerability scan เหลือ 0
+
+- [x] **29.3 สร้าง Target Schema Inspector และ Compatibility Module**
+  - ทำ: query PostgreSQL `information_schema`+`pg_catalog` และ SQL Server `INFORMATION_SCHEMA`+`sys.*`; แปลง columns/defaults/identity/computed/types/unique constraints เป็น canonical model; สร้าง deterministic hash และ compatibility analyzer ตาม matrix ด้านบนพร้อม bounded cache
+  - เข้าใจ: `information_schema` อย่างเดียวไม่พอสำหรับ identity/computed/provider type/constraint details และ runtime ห้ามใช้ `table_definitions`/`table_columns` เป็น authority ของ external table; snapshot คือ contract ที่ config เคยเห็น ส่วน catalog ปัจจุบันคือสิ่งที่ต้องเปรียบเทียบ
+  - ตรวจ: integration fixtures ทั้งสอง provider ครอบคลุม new table auto-discovery, nullable/default/generated addition, required addition, mapped/unmapped removal, rename/type/nullability drift, selected key drift, unsupported type, malicious identifier, permission/timeout/outage และ stable hash
+  - ผล: เพิ่ม canonical `TargetTableSchema`/snapshot, SHA-256 structural hash, PostgreSQL `information_schema`+`pg_catalog` inspector, SQL Server `INFORMATION_SCHEMA`/`sys.*` inspector, provider type canonicalizer, selected-key/field-level compatibility analyzer และ bounded profile-aware cache; schema/table request ใช้ allowlist+parameter เท่านั้นและ error ไม่คืน connection/SQL. เพิ่ม real-provider fixtures สำหรับ PostgreSQL/SQL Server พร้อม forced env gates; รอบ implementation นี้ไม่มี target integration connection จึง compile fixtures ผ่านแต่ live provider execution รอ environment/Gate I
+
+- [x] **29.4 เพิ่ม DatabaseTable Config contract, compiler, API และ Mapping Editor**
+  - ทำ: เพิ่ม polymorphic definition/validator/serializer, TargetSchema adapter และ compiler; เพิ่ม safe profile/schema/table endpoints; ทำ selector flow, required/generated badges, unique-key choice, field mappings, schema diff, refresh และ create-version flow โดยเก็บ snapshot/hash
+  - เข้าใจ: UI ช่วยเลือกจาก catalog แต่ server validation เป็น authoritative; field ใหม่ไม่ถูกเติมเข้า active version เอง และ required field ต้อง mapped ครบทุก output branch ก่อน activate
+  - ตรวจ: request tampering, profile/schema/table not allowlisted, stale schema, unsupported type, missing required assignment, invalid key, clone/version immutability, preview side-effect-free, accessibility/responsive และ Playwright PostgreSQL/SQL Server selection flow ผ่าน
+  - ผล: เพิ่ม strict polymorphic `databaseTable`/duplicate-policy contract, immutable target snapshot/hash, TargetSchema adapter, required selected-key enforcement, safe profile/schema/table/refresh endpoints และ server-authoritative create/validate/activate drift checks. Mapping Editor เลือก profile→schema→table, แสดง required/default/generated/read-only badges, เลือก existing unique key หรือ manual `UnknownOutcome`, refresh schema และ map เฉพาะ writable supported fields; เพิ่ม `draft_destination_definition` เพื่อไม่ให้ initial destination หายก่อนสร้าง Version. Default creation/activation gates ปิด; web lint/build และ Playwright selection flow ผ่าน
+
+- [x] **29.5 เพิ่ม Database Delivery persistence, outbox และ lifecycle**
+  - ทำ: เพิ่ม migrations/models/repository สำหรับ jobs, attempts, resolution audit และ schema checks; persist encrypted deterministic mapped values/hash + exact profile/table/schema/key snapshot; publish/consume `mapping.database-delivery` ด้วย lease/recovery และ terminal statuses ที่กำหนด
+  - เข้าใจ: Row Normalize transaction จบหลังบันทึก delivery intent/outbox ไม่ใช่หลัง external insert; transform success กับ external delivery success เป็นคนละสถานะ และ retry ต้องใช้ persisted bytes/values ไม่ compile config ล่าสุด
+  - ตรวจ: atomic job+outbox, duplicate Kafka message, claim concurrency, lease expiry with/without key, crash before/after target command, retention/encryption/key rotation, latest File/Row normalization status parity และ migration rollback/run-forward tests ผ่าน
+  - ผล: เพิ่ม migration `0020_database_delivery.sql` สำหรับ jobs/attempts/resolution audit/schema checks/runtime controls, encrypted deterministic mapped values+hash, exact profile/target/schema/key snapshot, `mapping.database-delivery` outbox uniqueness, lease claim/recovery และ Kafka consumer/scheduler. Row Normalize adapter บันทึก intent+outbox ใน Mapping DB transaction เดียวและไม่เปิด target connection; no-key stale lease ไป `UnknownOutcome`, selected-key stale leaseไป reconciliation queue. `Features:DatabaseTableDelivery=false` และ runtime pause เป็น default; handler fail closed จน Phase 29.6 ใส่ provider INSERT adapter. Atomic rollback/encryption fixture, migration shape และ destination regression tests ถูกเพิ่ม
+
+- [x] **29.6 Implement PostgreSQL และ SQL Server parameterized INSERT Adapters**
+  - ทำ: สร้าง insert plan จาก inspected/snapshotted writable mapped columns, provider quoting และ typed parameters; omit unmapped default columns; execute target-local transaction; classify success, unique violation, constraint/type/schema/transient/ambiguous errors เป็น typed result โดยไม่คืน raw SQL
+  - เข้าใจ: identifier ต้อง validate/quote แต่ value ต้อง parameterize; provider error code ต่างกันแต่ delivery callerควรเห็น vocabulary เดียว การ catch ทุก exception เป็น retryable จะสร้าง duplicate
+  - ตรวจ: reserved/mixed-case identifiers, Unicode, null/default, decimal precision, date/time/Guid/boolean, large text, unique violation, FK/check/not-null violation, timeout/cancel/network reset, transaction rollback และ no-SQL-injection tests ผ่านทั้งสอง provider
+  - ผล: เพิ่ม `IDatabaseWriteAdapter`/provider adapters ที่ refresh schema ก่อนเขียน, quote identifier, bind typed parameters, omit default/generated fields, ใช้ target-local transaction และแปลง provider error เป็น status กลาง; provider fixtures ครอบคลุม Unicode/injection-shaped text/decimal/boolean/Guid/datetime/same-key conflict และ forced env gates โดย live execution ยังรอ Gate I environment
+
+- [x] **29.7 Implement existing unique-key reconciliation และ UnknownOutcome**
+  - ทำ: เมื่อมี key ให้ query existing row ด้วย full composite key และ compare canonical mapped values; คืน `AlreadyDelivered` หรือ `DeliveryConflict`; เมื่อไม่มี key หรือ reconcile พิสูจน์ไม่ได้ ให้ `UnknownOutcome`, ปิด automatic retry และเพิ่ม authorized resolve/retry actions พร้อม reason/audit
+  - เข้าใจ: select-before-insert ไม่ป้องกัน race; target unique constraint เป็นตัวป้องกันจริง ส่วน Mapping DB ledger อย่างเดียวปิดช่อง crash หลัง target commit ไม่ได้ การไม่มี key จึงต้องยอมรับ manual uncertainty อย่างเปิดเผย
+  - ตรวจ: concurrent same-key inserts, same key/same values, same key/different values, commit-then-crash, timeout with row present/absent, lease expiry, no-key ambiguous result, unauthorized/manual action race และ append-only audit tests ผ่าน
+  - ผล: unique violation/ambiguous commit ใช้ full composite-key query และ canonical mapped-value compare เพื่อคืน `AlreadyDelivered`/`DeliveryConflict`; no-key/stale lease ไป `UnknownOutcome` และหยุด auto retry. เพิ่ม authorized retry/mark-delivered/mark-failed พร้อม row lock, reason/correlation, duplicate-risk acceptance และ append-only audit; แก้ outbox uniqueness ให้กันซ้ำเฉพาะ unsent event เพื่อให้ retry ส่ง event รอบใหม่ได้
+
+- [x] **29.8 เพิ่ม schema monitor, notification, delivery operations และ runbook**
+  - ทำ: scheduled bounded monitor บันทึก latest schema check; เพิ่ม UI badges/banner/diff และ delivery filters/details/actions; เพิ่ม metrics/alerts สำหรับ inspect latency/failure, compatible/breaking drift, delivery result, conflict, unknown outcome, queue age และ write gate; เขียน runbook สำหรับทุก status
+  - เข้าใจ: compatible addition เป็นข้อมูลให้ user เลือกสร้าง version ใหม่ ไม่ใช่ incident ที่หยุดงาน ส่วน breaking drift/unknown outcome ต้องมี owner/action ชัดเจนและห้าม auto-repair/auto-retry
+  - ตรวจ: polling/cache load, alert thresholds, metric cardinality, log/ProblemDetails redaction, profile kill switch, target outage, schema recovery, manual resolution rehearsal และ UI ไม่มี connection/payload/raw SQL leakage
+  - ผล: เพิ่ม bounded scheduled schema monitor, safe latest checks/metrics/alerts, database activation+delivery runtime controls, operations API/UI และ runbook; monitor ใช้ mapped column names ที่ persist แยกจาก encrypted payload และแสดงเฉพาะ hashes/logical target/redacted diagnostics. Feature/profile/runtime gates ปิดเป็น default
+
+- [ ] **29.9 Full regression, security review, provider E2E และ Gate I sign-off**
+  - ทำ: รัน backend/PostgreSQL/SQL Server/web suites; ทดสอบ config→inspect→map→activate→normalize→deliver, additive/breaking drift, key/no-key retry, restart/crash, rollback และ access control; อัปเดต CONTEXT, current workflow, README, API examples, acceptance matrix, runbook และ Gate I evidence
+  - เข้าใจ: technical test pass ยังไม่เปิด production write; profile แต่ละตัวต้องมี least-privilege account, target owner approval, backup/incident contact และ controlled `WriteEnabled` rollout แยก
+  - ตรวจ: destination เดิม regression ผ่าน, forced integration ห้าม skip, dependency vulnerabilities/license review ผ่าน, no arbitrary SQL/credential disclosure/DDL/unsafe retry, canary observation ครบ และ Mapping/Platform/Security/target DB owners ลงนาม Gate I
+  - สถานะ 2026-11-09: code/docs และ available automated regression ผ่าน (`dotnet` 546/546, Playwright 22/22, web build/lint, format/diff, NuGet vulnerability scan); `phase-29-gate-i-evidence.md` คง `NOT APPROVED` เพราะ workspace ไม่มี forced PostgreSQL+SQL Server target connections, controlled canary/backup evidence และ owner sign-off จึงห้ามเปิด production write
+
+### Definition of Done ของ Phase 29
+
+- User เลือก server-owned PostgreSQL/SQL Server profile, schema และ table จาก Mapping Editor ได้; ตาราง/field ใหม่ปรากฏจาก catalog โดยไม่แก้ source code
+- `DatabaseTable` Config Version เก็บ immutable schema snapshot/hash และ compile field mapping/type/required/default/generated rules ได้
+- parameterized `INSERT` ทำผ่าน provider Adapter โดยไม่มี raw SQL/credential จาก browser และไม่มี target DDL
+- additive nullable/default/generated field แจ้งเตือนแต่ไม่หยุดงาน; required addition หรือ mapped-field/key drift block พร้อม field-level safe diagnostics
+- User สร้าง Config Version ใหม่เพื่อใช้ field ใหม่; historical/pinned version ไม่ถูกเปลี่ยนอัตโนมัติ
+- external write ใช้ Database Delivery Job/outbox/lease/encrypted persisted payload และมี lifecycle แยกจาก Row Normalization
+- existing unique key reconcile เป็น `AlreadyDelivered`/`DeliveryConflict`; no-key ambiguous failure เป็น `UnknownOutcome` และไม่มี automatic retry
+- manual retry/mark-delivered/reprocess มี authorization, reason, correlation ID และ append-only audit
+- profile allowlist, secret redaction, least privilege, TLS, timeout/cache, kill switch, metrics/alerts และ operations runbook ผ่านการทดสอบ
+- PostgreSQL/SQL Server integration, crash/retry, schema drift, web E2E/accessibility, security และ regression ของ destination เดิมผ่าน
+- Gate I owner sign-off เสร็จก่อนเปิด `DatabaseTable` write ใน production
+
+## Phase 30 — Multi-table Database Delivery Phase 2 Preparation
+
+### เป้าหมายและขอบเขต
+
+เตรียม seam ของหน้าเว็บและ Database Delivery persistence สำหรับ Phase 2 ที่จะให้ Source value เดียว map ไปคนละ field ของหลาย target tables ภายใน Database Profile เดียว โดย Phase นี้เป็น behavior-preserving refactor เท่านั้น ผู้ใช้ยังเลือกได้หนึ่ง profile/schema/table ต่อ Config Version, `databaseTable` JSON และ persisted delivery semantics ต้องเหมือนเดิมทุก byte/side effect ที่ถูกตรึงไว้ และ Gate I ของ Phase 29 ยังคง `NOT APPROVED` จนกว่าจะมี external provider/canary/owner evidence ครบ
+
+ลำดับงานตั้งใจให้ decision และ characterization มาก่อน refactor:
+
+```text
+30.0 Compatibility decision
+  → 30.1 Selector E2E baseline
+    → 30.2 DatabaseTargetSelector extraction
+      → 30.3 DatabaseDeliveryIntentModule extraction
+```
+
+| Step | ขอบเขต | เวลาประมาณการ |
+|---|---|---:|
+| 30.0 | Multi-table compatibility decision/addendum | 0.5 วัน |
+| 30.1 | E2E baseline ของ target-selection reset | 0.5–1 วัน |
+| 30.2 | แยก reusable `DatabaseTargetSelector` | 0.5–1 วัน |
+| 30.3 | แยก deep `DatabaseDeliveryIntentModule` | 1–2 วัน |
+| รวม | Preparatory refactor เท่านั้น | 2.5–4.5 วัน |
+
+กติกาของ Phase 30:
+
+- รักษา `DatabaseTableDestination` และ `kind: "databaseTable"` แบบเดิม; Config Version เก่าต้อง deserialize, clone, validate, activate และ retry ได้เหมือนเดิม
+- UI ยังส่ง target เดียวและไม่มี `Add table`, table array, operation ordering หรือ generated-key controls
+- Database Delivery ยังคงสร้างหนึ่ง job ต่อ Transformation output ด้วย uniqueness, encrypted values/hash, outbox key/topic, status และ retry/reconciliation เดิม
+- ใช้ `DestinationRouter` seam เดิมและให้ `RowNormalizeHandler` เรียก destination ครั้งเดียว; logic เลือกหลายตารางหรือ transaction orchestration ยังไม่อยู่ใน caller
+- ไม่มี migration, target DDL, profile contract, Kafka contract, feature flag หรือ production rollout change ใน Phase นี้
+- Phase 2 implementation จริงต้องมี design approval แยกสำหรับ destination kind, operation identity, group/job model, all-or-nothing transaction, schema snapshots, reconciliation, ambiguous commit และ generated-key policy
+
+- [x] **30.0 ล็อก Multi-table Phase 2 compatibility decision**
+  - ทำ: สร้าง design addendum สำหรับอนาคตที่ระบุว่า `databaseTable` wire contract/runtime เดิมเป็น immutable compatibility path และ Phase 2 จะใช้ destination kind ใหม่หลังอนุมัติ; ตรึง initial constraints ว่าหลาย table operations ต้องอยู่ใน Database Profile เดียว, ใช้ target-local all-or-nothing transaction, field assignments แยกต่อ operation, key ทุกค่ารู้ก่อน execute และ generated-key propagation อยู่นอก initial scope; ระบุ migration/rollback strategy โดยยังไม่สร้าง runtime model หรือ database migration
+  - เข้าใจ: การเปลี่ยน `Table` จาก scalar เป็น array ใน `databaseTable` เดิมจะทำให้ historical Config Version, validator, compiler, job identity และ retry semantics เปลี่ยนพร้อมกัน การเพิ่ม kind ใหม่ใน Phase 2 ทำให้ single-table Adapter เป็น compatibility path ที่ทดสอบและ rollback ได้อิสระ
+  - ตรวจ: Mapping, Platform/Operations และ Security review ว่า addendum ไม่มี unresolved default ที่เปิด permissive behavior; decision trace ถึง Phase 2 acceptance topics ครบ ได้แก่ table-operation identity, per-table schema snapshot/key, field mapping, ordering, atomicity, reconciliation และ `UnknownOutcome`; Phase 29 exact JSON golden/regression ยังผ่านโดยไม่มี production code/schema change
+  - ผล: [Multi-table Database Delivery Design Addendum](../spec/spec-design-multi-table-database-delivery.md) version 1.0 ล็อก `databaseTransaction`, target path แบบ `operationKey.column`, one-output/one-row-per-operation, same-profile local transaction, additive bundle persistence, bundle-level reconciliation และ defer generated-key propagation; targeted Phase 29 compatibility/schema contract regression ผ่าน 13/13. วันที่ 2026-11-10 ผู้ใช้อนุมัติในนาม Mapping/Business, Platform/Operations, Security และ Target Database owner; Step 30.1 ยังไม่เริ่มจนกว่าจะมีคำสั่งแยก
+
+- [x] **30.1 ตรึง Database Target Selector reset behavior ด้วย E2E baseline**
+  - ทำ: ขยาย Playwright flow เดิมให้พิสูจน์ว่าเปลี่ยน Database Profile แล้วล้าง schema/table/inspected snapshot/duplicate key, เปลี่ยน Schema แล้วล้าง table/snapshot/key, เปลี่ยน Table แล้วล้าง key ก่อนรับ inspected schema ใหม่ และ inspect error/retry ไม่ค้างข้าม target; ใช้ API mocks/fixtures เดิมและไม่เพิ่ม package
+  - เข้าใจ: Phase 2 จะมี selector หลาย instance ถ้า reset invariant ไม่ถูกตรึงก่อนแยก component state ของ table หนึ่งอาจรั่วไปอีก table หรือส่ง stale schema snapshot/key ได้
+  - ตรวจ: test ต้อง red เมื่อจงใจเอา reset ของ profile/schema/table ออกทีละจุดและ green กับ implementation ปัจจุบัน; assertion ตรวจทั้ง controls ที่ผู้ใช้เห็นและ request body สุดท้าย; Playwright suite เดิมผ่านโดยไม่เปลี่ยน production behavior
+  - ผล: เพิ่ม Playwright baseline 3 flow สำหรับ profile/schema/table reset, inspected snapshot, duplicate key, inspect error recovery และ final create request โดยใช้ mock catalog เดิมและไม่เพิ่ม package; red run พบ gap เดิมว่า inspect error ยังค้างเมื่อ target ถัดไป inspect สำเร็จ จึงเพิ่มการล้าง target-local table list/key/error ใน handler เดิมโดยไม่เปลี่ยน `databaseTable` request contract หรือเพิ่ม multi-table UI; focused baseline ผ่าน 3/3, `json-file-workbench.spec.ts` ผ่าน 10/10, Playwright ทั้ง suite ผ่าน 25/25 และ ESLint ผ่าน
+
+- [x] **30.2 แยก reusable DatabaseTargetSelector และ typed selection state**
+  - ทำ: แยก profile→schema→table→inspect→duplicate-key controls, loading/error/reset behavior และ safe schema summary จาก `web/app/configs/new/page.tsx` ไปเป็น `DatabaseTargetSelector`; รวม parallel state เป็น typed `DatabaseTargetSelection` value เดียวและให้ parent รับ/ส่งผ่าน `value` กับ `onChange`; parent ยังถือ selection เดียวและสร้าง `DatabaseTableDestination` request เดิม
+  - เข้าใจ: Phase 2 จะเปลี่ยน owner state จากหนึ่ง selection เป็น ordered selections โดย reuse selector ต่อ table operation ส่วน profile/schema/table discovery และ reset invariants ควรมี locality ใน component เดียว ไม่กระจาย callback ใน form หลัก
+  - ตรวจ: Step 30.1 E2E ผ่านโดยไม่แก้ expected request; keyboard labels, disabled/loading/error state, schema hash และ unique-key options เหมือนเดิม; TypeScript, ESLint, Next build และ existing web E2E ผ่าน; ไม่มี `Add table` control หรือ array ใน public request
+  - ผล: เพิ่ม `DatabaseTargetSelector` ที่รับ shared safe profile catalog กับ controlled `DatabaseTargetSelection` ผ่าน `value`/`onChange`; Module เป็นเจ้าของ table discovery, inspection, usable unique-key projection, error/reset และ stale async response guards ส่วน create page เหลือ database target state เดียวและยังประกอบ exact scalar `databaseTable` request เดิม; แก้ Next 16 build blocker เดิมโดยทำ `StatusBadge` ของ Table Admin เป็น local function โดยไม่เปลี่ยน UI; TypeScript, ESLint และ Next production build ผ่าน, `json-file-workbench.spec.ts` ผ่าน 10/10 และ Playwright ทั้ง suite ผ่าน 25/25; ไม่มี package, `Add table`, operation array, migration หรือ runtime destination change
+
+- [x] **30.3 แยก DatabaseDeliveryIntentModule จาก single-table Adapter**
+  - ทำ: ย้าย deterministic value ordering/serialization/hash, payload encryption, `database_delivery_jobs` insert/conflict check และ outbox enqueue จาก `DatabaseTableDestinationAdapter` ไปหลัง deep `DatabaseDeliveryIntentModule` ที่มี Interface หลักเพียง persist typed intent ภายใน caller-provided Mapping PostgreSQL connection/transaction; Adapter ยังคง compile destination, iterate Transformation outputs และเรียก Module หนึ่งครั้งต่อ output; ใช้ concrete Module โดยไม่เพิ่ม pass-through port/Adapter ที่มี implementation เดียว
+  - เข้าใจ: encryption, job identity, SQL และ outbox atomicity เป็น persistence knowledge ชุดเดียว การซ่อนไว้หลัง Module ทำให้ legacy single-table behavior มี locality และ Phase 2 สามารถออกแบบ group/operation persistence ที่ seam เดียวโดยไม่ย้าย logic กลับไป `RowNormalizeHandler`
+  - ตรวจ: `DatabaseDeliveryPersistenceIntegrationTests` พิสูจน์ job+outbox atomic commit/rollback, encrypted payload, deterministic hash/conflict และ event identity เท่า baseline; destination/router/full backend regression ผ่าน; diff ไม่มี migration, topic/key/status/constraint change และ `RowNormalizeHandler`/provider write semantics ไม่เปลี่ยน
+  - ผล: เพิ่ม concrete `DatabaseDeliveryIntentModule` ที่เปิด Interface เดียว `PersistAsync(DatabaseDeliveryIntent, NpgsqlConnection, NpgsqlTransaction)` และซ่อน canonical value ordering/serialization/SHA-256, payload encryption, profile configuration hash, job upsert/conflict กับ outbox enqueue ไว้ภายใน; `DatabaseTableDestinationAdapter` เหลือ compile, สร้างหนึ่ง typed intent ต่อ Transformation output และแปลง typed conflict กลับเป็น diagnostic เดิม โดย `RowNormalizeHandler`, provider write Adapter, migration, topic/key/status/constraint ไม่เปลี่ยน; integration test เรียก Module Interface โดยตรงและ forced PostgreSQL ผ่าน 1/1 ครอบคลุม atomic rollback/commit, ciphertext, ordered columns, deterministic replay/hash, conflict และ event key/payload; targeted persistence/router/Phase 29 compatibility ผ่าน 6/6, full backend regression ผ่าน 546/546 และ formatter/diff check ผ่าน
+
+### Definition of Done ของ Phase 30
+
+- Multi-table compatibility decision ได้รับ owner approval และแยก future destination contract จาก `databaseTable` เดิมชัดเจน
+- Database target selector มี typed value/reset invariants อยู่ใน reusable component แต่ create flow ยังส่ง target เดียว
+- Database delivery intent persistence, encryption, deterministic identity และ outbox atomicity อยู่หลัง Module เดียวที่ทดสอบผ่าน Interface ของมัน
+- `DatabaseTableDestinationAdapter` ยังสร้างหนึ่ง intent ต่อ output และทุก persisted/runtime effect เท่า Phase 29 baseline
+- ไม่มี multi-table UI/runtime, migration, generated-key propagation, cross-profile write หรือ feature-gate change
+- Phase 29 backend/provider/web/security regression ที่รันได้ใน environment ผ่าน และ Gate I production status ไม่ถูกเปลี่ยนโดย Phase 30

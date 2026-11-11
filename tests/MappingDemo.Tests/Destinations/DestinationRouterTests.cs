@@ -1,6 +1,7 @@
 using MappingDemo.Shared.Contracts;
 using MappingDemo.Shared.Destinations;
 using MappingDemo.Shared.Transformation;
+using MappingDemo.Shared.DatabaseDestinations;
 using MappingDemo.Worker;
 using MappingDemo.Worker.Destinations;
 using Npgsql;
@@ -16,7 +17,9 @@ public sealed class DestinationRouterTests
         var legacy = new RecordingAdapter(typeof(LegacyTableDestination));
         var api = new RecordingAdapter(typeof(ApiContractDestination));
         var json = new RecordingAdapter(typeof(JsonFileDestination));
-        IDestinationRouter router = new DestinationRouter([legacy, api, json]);
+        var database = new RecordingAdapter(typeof(DatabaseTableDestination));
+        IDestinationRouter router = new DestinationRouter(
+            [legacy, api, json, database]);
         var context = new DestinationCompilationContext(TargetSchema(), []);
         var envelope = new DeliveryEnvelope(1, 2, 3, 4, 5, [], 1);
         using var connection = new NpgsqlConnection();
@@ -31,7 +34,8 @@ public sealed class DestinationRouterTests
                 Contract(),
                 "exports",
                 "{fileJobId}.json",
-                "compact")
+                "compact"),
+            DatabaseDestination()
         ];
 
         foreach (var definition in definitions)
@@ -55,6 +59,8 @@ public sealed class DestinationRouterTests
         Assert.Equal(1, api.DeliverCalls);
         Assert.Equal(1, json.CompileCalls);
         Assert.Equal(1, json.DeliverCalls);
+        Assert.Equal(1, database.CompileCalls);
+        Assert.Equal(1, database.DeliverCalls);
     }
 
     [Fact]
@@ -106,6 +112,25 @@ public sealed class DestinationRouterTests
 
     private static ContractReference Contract() =>
         new("proposal", "1", "proposal/1", "sha256:abc");
+
+    private static DatabaseTableDestination DatabaseDestination()
+    {
+        var schema = TargetTableSchema.Create(
+            "database",
+            DatabaseProvider.PostgreSql,
+            "public",
+            "customer",
+            [],
+            []);
+        return new DatabaseTableDestination(
+            schema.ProfileId,
+            schema.Schema,
+            schema.Table,
+            "insert",
+            new ManualUnknownOutcomeDuplicatePolicy(),
+            schema.SchemaHash,
+            schema.ToSnapshot());
+    }
 
     private static TargetSchema TargetSchema() =>
         new(new TargetNode(

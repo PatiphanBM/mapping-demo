@@ -59,6 +59,142 @@ test("create switches delivery kinds and submits only JsonFile fields", async ({
   expect(JSON.stringify(submitted)).not.toContain("apiDestinationProfileId");
 });
 
+test("create inspects PostgreSQL or SQL Server table without exposing a connection string", async ({ page }) => {
+  let submitted: Record<string, unknown> | null = null;
+  await mockCatalog(page, (body) => { submitted = body; });
+  await page.goto("/configs/new");
+
+  await page.getByRole("radio", { name: /External database table/ }).check();
+  await page.getByLabel("Database profile").selectOption("customer-postgres");
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("public");
+  await page.getByLabel("Target database table").selectOption("customer");
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toBeVisible();
+  await page.getByLabel("Duplicate reconciliation").selectOption("customer_code");
+  await expect(page.getByText(/password=|server=|host=/i)).toHaveCount(0);
+
+  await page.getByLabel("Name", { exact: true }).fill("customer-database");
+  await page.getByLabel("Input folder").fill("customer-database-input");
+  await page.getByLabel("Source table").selectOption("7");
+  await page.getByRole("button", { name: "Create config" }).click();
+
+  await expect.poll(() => submitted).not.toBeNull();
+  expect(submitted).toMatchObject({
+    normalizedTableId: null,
+    destination: {
+      kind: "databaseTable",
+      profileId: "customer-postgres",
+      schema: "public",
+      table: "customer",
+      writeMode: "insert",
+      schemaHash: "sha256:database-schema",
+      duplicatePolicy: { kind: "existingUniqueKey", columns: ["customer_code"] },
+    },
+  });
+});
+
+test("changing database profile clears the prior target before submitting another profile", async ({ page }) => {
+  let submitted: Record<string, unknown> | null = null;
+  await mockCatalog(page, (body) => { submitted = body; });
+  await page.goto("/configs/new");
+
+  await page.getByRole("radio", { name: /External database table/ }).check();
+  await page.getByLabel("Database profile").selectOption("customer-postgres");
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("public");
+  await page.getByLabel("Target database table").selectOption("customer");
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toBeVisible();
+  await page.getByLabel("Duplicate reconciliation").selectOption("customer_code");
+
+  await page.getByLabel("Database profile").selectOption("ledger-sqlserver");
+  await expect(page.getByRole("combobox", { name: /^Schema/ })).toHaveValue("");
+  await expect(page.getByLabel("Target database table")).toHaveValue("");
+  await expect(page.getByLabel("Target database table")).toBeDisabled();
+  await expect(page.getByLabel("Duplicate reconciliation")).toHaveCount(0);
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("dbo");
+  await page.getByLabel("Target database table").selectOption("customer_ledger");
+  await expect(page.getByText("sha256:ledger-schema", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Duplicate reconciliation")).toHaveValue("");
+  await page.getByLabel("Duplicate reconciliation").selectOption("ledger_code");
+  await fillRequiredCreateFields(page, "customer-ledger");
+  await page.getByRole("button", { name: "Create config" }).click();
+
+  await expect.poll(() => submitted).not.toBeNull();
+  expect(submitted).toMatchObject({
+    destination: {
+      kind: "databaseTable",
+      profileId: "ledger-sqlserver",
+      schema: "dbo",
+      table: "customer_ledger",
+      schemaHash: "sha256:ledger-schema",
+      duplicatePolicy: { kind: "existingUniqueKey", columns: ["ledger_code"] },
+    },
+  });
+  expect(JSON.stringify(submitted)).not.toContain("customer_code");
+  expect(JSON.stringify(submitted)).not.toContain("sha256:database-schema");
+});
+
+test("changing database schema and table clears prior snapshots and duplicate keys", async ({ page }) => {
+  let submitted: Record<string, unknown> | null = null;
+  await mockCatalog(page, (body) => { submitted = body; });
+  await page.goto("/configs/new");
+
+  await page.getByRole("radio", { name: /External database table/ }).check();
+  await page.getByLabel("Database profile").selectOption("customer-postgres");
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("public");
+  await page.getByLabel("Target database table").selectOption("customer");
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toBeVisible();
+  await page.getByLabel("Duplicate reconciliation").selectOption("customer_code");
+
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("archive");
+  await expect(page.getByLabel("Target database table")).toHaveValue("");
+  await expect(page.getByLabel("Duplicate reconciliation")).toHaveCount(0);
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Target database table").selectOption("customer_history");
+  await expect(page.getByText("sha256:history-schema", { exact: true })).toBeVisible();
+  await page.getByLabel("Duplicate reconciliation").selectOption("history_code");
+
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("public");
+  await page.getByLabel("Target database table").selectOption("customer");
+  await expect(page.getByText("sha256:database-schema", { exact: true })).toBeVisible();
+  await page.getByLabel("Duplicate reconciliation").selectOption("customer_code");
+  await page.getByLabel("Target database table").selectOption("customer_shadow");
+  await expect(page.getByText("sha256:shadow-schema", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Duplicate reconciliation")).toHaveValue("");
+  await page.getByLabel("Duplicate reconciliation").selectOption("shadow_code");
+  await fillRequiredCreateFields(page, "customer-shadow");
+  await page.getByRole("button", { name: "Create config" }).click();
+
+  await expect.poll(() => submitted).not.toBeNull();
+  expect(submitted).toMatchObject({
+    destination: {
+      kind: "databaseTable",
+      profileId: "customer-postgres",
+      schema: "public",
+      table: "customer_shadow",
+      schemaHash: "sha256:shadow-schema",
+      duplicatePolicy: { kind: "existingUniqueKey", columns: ["shadow_code"] },
+    },
+  });
+  expect(JSON.stringify(submitted)).not.toContain("history_code");
+  expect(JSON.stringify(submitted)).not.toContain("customer_code");
+});
+
+test("successful target inspection clears an earlier inspection error", async ({ page }) => {
+  await mockCatalog(page, () => {}, { failCustomerInspectionOnce: true });
+  await page.goto("/configs/new");
+
+  await page.getByRole("radio", { name: /External database table/ }).check();
+  await page.getByLabel("Database profile").selectOption("customer-postgres");
+  await page.getByRole("combobox", { name: /^Schema/ }).selectOption("public");
+  await page.getByLabel("Target database table").selectOption("customer");
+  await expect(page.getByText("Could not create config", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Target database table").selectOption("customer_shadow");
+  await expect(page.getByText("sha256:shadow-schema", { exact: true })).toBeVisible();
+  await expect(page.getByText("Could not create config", { exact: true })).toHaveCount(0);
+});
+
 test("workbench previews a JSON array, clones unchanged, and switches by keyboard", async ({ page }) => {
   let cloned: Record<string, unknown> | null = null;
   let previewed: Record<string, unknown> | null = null;
@@ -249,7 +385,9 @@ test("activates a JSON version and rolls new files back to the prior Legacy vers
 async function mockCatalog(
   page: Page,
   onCreate: (body: Record<string, unknown>) => void,
+  options: { failCustomerInspectionOnce?: boolean } = {},
 ) {
+  let customerInspectionFailed = false;
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace(/^\/api/, "");
@@ -288,6 +426,86 @@ async function mockCatalog(
     }
     if (path === "/mapping-capabilities") {
       return json(route, capabilities);
+    }
+    if (path === "/database-destinations/profiles") {
+      return json(route, [
+        {
+          id: "customer-postgres",
+          provider: "PostgreSql",
+          allowedSchemas: ["public", "archive"],
+          writeEnabled: false,
+        },
+        {
+          id: "ledger-sqlserver",
+          provider: "SqlServer",
+          allowedSchemas: ["dbo"],
+          writeEnabled: false,
+        },
+      ]);
+    }
+    if (path === "/database-destinations/profiles/customer-postgres/schemas/public/tables") {
+      return json(route, [
+        {
+          profileId: "customer-postgres",
+          provider: "PostgreSql",
+          schema: "public",
+          table: "customer",
+        },
+        {
+          profileId: "customer-postgres",
+          provider: "PostgreSql",
+          schema: "public",
+          table: "customer_shadow",
+        },
+      ]);
+    }
+    if (path === "/database-destinations/profiles/customer-postgres/schemas/archive/tables") {
+      return json(route, [{
+        profileId: "customer-postgres",
+        provider: "PostgreSql",
+        schema: "archive",
+        table: "customer_history",
+      }]);
+    }
+    if (path === "/database-destinations/profiles/ledger-sqlserver/schemas/dbo/tables") {
+      return json(route, [{
+        profileId: "ledger-sqlserver",
+        provider: "SqlServer",
+        schema: "dbo",
+        table: "customer_ledger",
+      }]);
+    }
+    if (path === "/database-destinations/profiles/customer-postgres/schemas/public/tables/customer") {
+      if (options.failCustomerInspectionOnce && !customerInspectionFailed) {
+        customerInspectionFailed = true;
+        return route.fulfill({
+          status: 503,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ title: "Target inspection unavailable", status: 503 }),
+        });
+      }
+      return json(route, databaseTargetSchema(
+        "customer-postgres", "PostgreSql", "public", "customer",
+        "customer_code", "sha256:database-schema",
+      ));
+    }
+    if (path === "/database-destinations/profiles/customer-postgres/schemas/public/tables/customer_shadow") {
+      return json(route, databaseTargetSchema(
+        "customer-postgres", "PostgreSql", "public", "customer_shadow",
+        "shadow_code", "sha256:shadow-schema",
+      ));
+    }
+    if (path === "/database-destinations/profiles/customer-postgres/schemas/archive/tables/customer_history") {
+      return json(route, databaseTargetSchema(
+        "customer-postgres", "PostgreSql", "archive", "customer_history",
+        "history_code", "sha256:history-schema",
+      ));
+    }
+    if (path === "/database-destinations/profiles/ledger-sqlserver/schemas/dbo/tables/customer_ledger") {
+      return json(route, databaseTargetSchema(
+        "ledger-sqlserver", "SqlServer", "dbo", "customer_ledger",
+        "ledger_code", "sha256:ledger-schema",
+      ));
     }
     if (path === "/file-destination-profiles/operations-json/resolve") {
       return json(route, {
@@ -588,7 +806,7 @@ const capabilities = {
     },
   },
   destinations: {
-    kinds: ["legacyTable", "apiContract", "jsonFile"],
+    kinds: ["legacyTable", "apiContract", "jsonFile", "databaseTable"],
     jsonFile: {
       formatting: ["compact", "indented"],
       fileNameTokens: ["{sourceBaseName}", "{artifactRevision}"],
@@ -612,6 +830,46 @@ const capabilities = {
     },
   },
 };
+
+function databaseTargetSchema(
+  profileId: string,
+  provider: "PostgreSql" | "SqlServer",
+  schema: string,
+  table: string,
+  keyColumn: string,
+  schemaHash: string,
+) {
+  return {
+    profileId,
+    provider,
+    schema,
+    table,
+    columns: [{
+      name: keyColumn,
+      providerType: provider === "PostgreSql" ? "text" : "nvarchar",
+      scalarType: "Text",
+      ordinal: 1,
+      isNullable: false,
+      hasDefault: false,
+      isIdentity: false,
+      isGenerated: false,
+      isComputed: false,
+      isWritable: true,
+      length: null,
+      precision: null,
+      scale: null,
+      isRequired: true,
+    }],
+    uniqueConstraints: [{ name: `uq_${keyColumn}`, columns: [keyColumn] }],
+    schemaHash,
+  };
+}
+
+async function fillRequiredCreateFields(page: Page, name: string) {
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByLabel("Input folder").fill(`${name}-input`);
+  await page.getByLabel("Source table").selectOption("7");
+}
 
 function json(route: Route, body: unknown) {
   return route.fulfill({
