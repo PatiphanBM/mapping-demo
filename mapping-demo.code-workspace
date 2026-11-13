@@ -1,0 +1,21 @@
+{
+  "folders": [
+    {
+      "name": "mapping-demo (docs)",
+      "path": "."
+    },
+    {
+      "name": "prjInsuranceValidationMapping (mapping)",
+      "path": "../prjInsuranceValidationMapping"
+    },
+    {
+      "name": "prjInsuranceValidationWeb (web)",
+      "path": "../prjInsuranceValidationWeb"
+    },
+    {
+      "name": "prjInsuranceValidationInforms (informs — read-only)",
+      "path": "../prjInsuranceValidationInforms"
+    }
+  ],
+  "settings": {}
+}
