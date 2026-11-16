@@ -1,7 +1,7 @@
 ---
 title: contract pa-inform/1 — API รับใบคำขอ PA (Mapping → Informs)
 status: review
-last_updated: 2026-11-13
+last_updated: 2026-11-16
 ---
 
 # API รับใบคำขอ PA — `POST /api/pa/informs`
@@ -49,7 +49,8 @@ request body
 ├── fileJobId              ┐
 ├── sourceRowId            ├ idempotency key — ส่งซ้ำได้ผลเดิม
 ├── outputKey              ┘ "default" (MTLS 1 แถว = 1 ใบคำขอ)
-├── sourceRowNo            ลำดับแถวในไฟล์ (V5 ใช้เรียงลำดับ — D-23)
+├── fileReceivedAt         เวลาที่ Mapping รับไฟล์ครั้งแรก (optional — ทุกแถวของไฟล์ค่าเดียวกัน, V5 ใช้เรียงไฟล์ — D-80)
+├── sourceRowNo            ลำดับแถวในไฟล์ (V5 ใช้เรียงลำดับ — D-23, D-80)
 ├── mappingConfigVersionId
 └── inform               ← ใบคำขอ 1 ใบ (ทุกอย่างนอก inform = ข้อมูลของการส่ง)
     ├── header: partnerCode, saleChannel, sourceReference, transactionType, วันที่, product / agent, เบี้ยรวม, สาขา
@@ -68,6 +69,7 @@ request body
 | — | `inform.productCode`, `inform.insureds[0].packageCode`, `inform.agentCode` | ค่าคงที่ `MTLSPA` / `MTL2` / `74000490` |
 | — | `inform.saleId` | MTLS ไม่ส่ง (null) |
 | — | `inform.insureds[0].relation` | ค่าคงที่ `PRIMARY` 🟡 (field เพิ่ม 2026-10-21 — §5) |
+| — | `fileReceivedAt` | เวลาที่รับไฟล์และสร้าง File Job ครั้งแรก (M-09) — ทุกแถวค่าเดียวกัน, resume / retry คงค่าเดิม (D-80) |
 | `nSeq` | `sourceRowNo` | |
 | `cPol_no` | `inform.sourceReference` | |
 | `cTrans_type` | `inform.transactionType` + `sourceTransactionType` | `P` → `NEW`, `C` → `CANCELLED` + ส่งค่าเดิมด้วย |
@@ -93,6 +95,7 @@ request body
   "contractVersion": "pa-inform/1",
   "fileJobId": "1024",
   "fileName": "MTLSPA_20261021.xls",
+  "fileReceivedAt": "2026-10-21T08:15:00+07:00",
   "sourceRowId": "row-000001",
   "outputKey": "default",
   "sourceRowNo": 1,
@@ -147,6 +150,7 @@ request body
   "contractVersion": "pa-inform/1",
   "fileJobId": "1024",
   "fileName": "MTLSPA_20261021.xls",
+  "fileReceivedAt": "2026-10-21T08:15:00+07:00",
   "sourceRowId": "row-000002",
   "outputKey": "default",
   "sourceRowNo": 2,
@@ -209,6 +213,7 @@ request body
 - 2026-11-12 (D-75) `insured` → `insureds[]` · `packageCode` + `beneficiaries` ย้ายเข้าในแต่ละคน · เพิ่ม `premium` ต่อคน — เปลี่ยนโครง แต่**ไม่ขึ้น major** เพราะยังไม่มี partner ใช้ contract จริง (แนว D-61 / D-63) · mapping ต้องปรับ config MTLS ตาม
 - 🟡 2026-10-21 เพิ่ม `insured.relation` (optional) — ความสัมพันธ์ของผู้เอาประกันที่ V4 ต้องใช้ (D-19) ตกลงไว้ว่า mapping เติม แต่ contract ฉบับแรกยังไม่มี field · ไม่ส่ง → V4 ออก `INSURED_RELATION_MISSING` (service ไม่เดาความสัมพันธ์เอง — การเติมค่าของ partner เป็นงาน mapping, D-06)
 - 🟡 2026-10-26 เพิ่ม `fileName` (optional, นอก `inform`) — ชื่อไฟล์ต้นทางให้สรุปต่อไฟล์ของหน้า UW (D-36) · ไม่ส่ง → หน้าสรุปแสดง `fileJobId` แทน
+- 🟡 2026-11-16 (D-80) เพิ่ม `fileReceivedAt` (optional, นอก `inform`) — เวลาที่ Mapping รับไฟล์และสร้าง File Job ครั้งแรก (`FileJob.CreatedAt` — M-09 / M-23) ทุกแถวของไฟล์ค่าเดียวกัน · V5 เรียงใบด้วย `(fileReceivedAt, sourceRowNo)` · ไม่ส่ง → Informs ใช้เวลาที่ตัวเองรับใบแทน
 - 2026-10-27 `fileJobId` เป็น `string` ไม่บังคับรูปแบบ uuid (ผู้ใช้) — mapping-demo ใช้ `file_jobs.id` เป็น `bigint` ส่งเป็นข้อความ (เช่น `"1024"`) · service ใช้เป็น key เทียบค่าอย่างเดียว ไม่แปลงชนิด · ยังไม่มีใครใช้ contract จึงไม่ขึ้น major
 
 ## 6. ยังไม่ตัดสิน

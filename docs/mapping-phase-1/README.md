@@ -35,7 +35,7 @@ last_updated: 2026-11-13
 
 ## เปิด workspace
 
-- เปิด `mapping-demo.code-workspace` ที่ root (VS Code: File → Open Workspace from File) — รวม repo นี้ + `prjInsuranceValidationMapping` + `prjInsuranceValidationWeb` + `prjInsuranceValidationInforms` (อ่านอย่างเดียว)
+- เปิด `mti-mapping.code-workspace` ที่ root (VS Code: File → Open Workspace from File) — รวม repo นี้ + `prjInsuranceValidationMapping` + `prjInsuranceValidationWeb` + `prjInsuranceValidationInforms` (อ่านอย่างเดียว)
 - ทุก repo ต้อง clone ไว้ **folder เดียวกัน** (เช่น `C:\SourceProjects\mapping-demo`, `C:\SourceProjects\prjInsuranceValidationMapping`, …)
 - AI agent (ChatGPT / Codex) อ่าน `AGENTS.md` ของ repo ที่ทำงานอยู่ — ถ้าใช้ ChatGPT แบบแชท ให้แนบ `AGENTS.md` + ไฟล์ในโฟลเดอร์นี้ที่เกี่ยวกับงานไปด้วยทุกครั้ง
 

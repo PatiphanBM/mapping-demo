@@ -8,7 +8,7 @@
 
 ทำไมเป็นแบบนี้: เอกสารกลางของโปรเจค Insurance Validation อยู่ใน repo `insurance-validation` ซึ่ง Dev 2 เข้าไม่ได้ · Dev 1 จึงคัดส่วนที่ mapping ต้องใช้มาไว้ที่นี่ และให้ repo นี้ทำหน้าที่เดียวกับ `insurance-validation` ของ Dev 1 (เอกสารอยู่ที่เดียว · repo โค้ดมีแต่โค้ด)
 
-- เปิดงานด้วย **`mapping-demo.code-workspace`** — รวม repo เอกสาร (นี้) + repo โค้ดไว้ในหน้าต่างเดียว · repo โค้ดต้องอยู่ folder ข้างกัน (`../prjInsuranceValidationMapping` ฯลฯ)
+- เปิดงานด้วย **`mti-mapping.code-workspace`** — รวม repo เอกสาร (นี้) + repo โค้ดไว้ในหน้าต่างเดียว · repo โค้ดต้องอยู่ folder ข้างกัน (`../prjInsuranceValidationMapping` ฯลฯ)
 - โค้ด demo เดิม (`src/`, `tests/`, `web/`, `scripts/`, `samples/`, `requests/`, `docs/phase-*`, `spec/`, `specs/`) = **reference เท่านั้น ไม่พัฒนาต่อ** — ยกโค้ดไปใช้ได้ แต่ต้องจัดให้เข้าโครงของ repo Mapping (D-77)
 
 ## repo ที่ทำงานจาก workspace นี้
@@ -36,7 +36,7 @@
 ```
 mapping-demo/
 ├── AGENTS.md                      ← ไฟล์นี้ (CLAUDE.md ชี้มาที่นี่)
-├── mapping-demo.code-workspace    ← เปิด workspace (เอกสาร + repo โค้ด)
+├── mti-mapping.code-workspace    ← เปิด workspace (เอกสาร + repo โค้ด)
 ├── docs/mapping-phase-1/          ← **แหล่งความจริงของ mapping phase 1**
 │   ├── README.md                  ← ขอบเขต วันสำคัญ (Dev 1)
 │   ├── glossary.md                ← ศัพท์ร่วมของโปรเจค (Dev 1)
@@ -54,7 +54,7 @@ mapping-demo/
 
 | ไฟล์ | ใครแก้ | หมายเหตุ |
 |---|---|---|
-| `AGENTS.md`, `CLAUDE.md`, `mapping-demo.code-workspace`, `docs/mapping-phase-1/{README,glossary,rules,contract-pa-inform,mtls-file,web}.md` | **Dev 1** (คัดจากเอกสารกลาง) | Dev 2 **ห้ามแก้เอง** — ถ้าเห็นว่าผิด / ขาด / ขัดกับโค้ด ให้เขียนลงหัวข้อ "คำถาม / ข้อเสนอถึง Dev 1" ใน `plan.md` แล้วบอก Dev 1 |
+| `AGENTS.md`, `CLAUDE.md`, `mti-mapping.code-workspace`, `docs/mapping-phase-1/{README,glossary,rules,contract-pa-inform,mtls-file,web}.md` | **Dev 1** (คัดจากเอกสารกลาง) | Dev 2 **ห้ามแก้เอง** — ถ้าเห็นว่าผิด / ขาด / ขัดกับโค้ด ให้เขียนลงหัวข้อ "คำถาม / ข้อเสนอถึง Dev 1" ใน `plan.md` แล้วบอก Dev 1 |
 | `docs/mapping-phase-1/plan.md` | **ทั้งคู่** — ไฟล์กลาง | ส่วนไหนใครเขียน ดูตารางหัวไฟล์ · Dev 2 วางแผน + อัปเดตความคืบหน้า · Dev 1 ตามงาน + ตอบคำถาม |
 | ไฟล์ออกแบบอื่นในโฟลเดอร์นี้ | **Dev 2** | |
 | `CONTEXT.md` | Dev 2 | ต้อง**ไม่ขัด**กับ `glossary.md` |
