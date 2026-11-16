@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-13
+last_updated: 2026-11-16
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -180,4 +180,5 @@ feature ที่เสนอเลื่อนหลังเส้นทาง
 - [ ] **Q5** (Dev 2, 11-13) พบช่องว่างระหว่างกฎกับ schema ตัวจริงของ Informs (`6ab23ad`): BR-035 ระบุทายาทตามกฎหมาย **100%** แต่ `$defs.beneficiary` มีเพียง `seq/fullName/relationship` และ `additionalProperties: false` — ให้ mapping ส่งแค่ชื่อ default แล้วสัดส่วนเป็นหน้าที่ Informs หรือจะเพิ่ม field โดย Dev 1? อีกกรณี D-04 ให้ส่งค่าผิดเป็น null แต่ schema บังคับ `sourceReference` nonempty/`transactionType` enum; ถ้าต้นทางไม่มีค่าที่ส่งได้ จะให้ ops/UW ติดตามอย่างไร? เสนอเก็บ Source + row error/ยอดยังไม่ส่ง โดยไม่แต่งค่าและไม่เพิ่ม contract field เอง
 - [ ] **Q6** (Dev 2, 11-13) BR-001 กันไฟล์ซ้ำด้วย content hash ยังเป็น 🔶: ยืนยัน scope ของ hash ว่าเป็นต่อ config/partner/ช่วงเวลา/ทุก version และจัดการไฟล์แก้ไขชื่อเดิม/เนื้อหาเดิมที่ reprocess อย่างไร? แยกจาก DB occurrence claim ที่จำเป็นสำหรับกันหลาย pod รับไฟล์เดียวกัน · ยังไม่ถือว่า demo duplicate policy เป็นกฎที่อนุมัติแล้ว
 - [ ] **Q7** (Dev 2, 11-13) ขอ Dev 1 ระบุตำแหน่ง/identity ของ **fixture MTLS 2,556 แถวที่รับรองว่าเป็นข้อมูลสมมติ** (ไฟล์ `docs/MTLSPA0220261009.xls` ถูกอธิบายว่าเป็นตัวอย่างจริง จึงไม่ใช้ทดแทน) และ dependency: Kafka/topics/groups/owner, Mapping DB บริษัท, share mount/archive/snapshot access, Informs internal URL/auth/TLS, encryption key provisioning/rotation/retention และผู้ดู Source/delivery log/payload; phase นี้ใช้ fixed actor ตาม web.md ไม่สร้างระบบสิทธิ์จาก header ที่ browser กำหนดเอง
+  - Dev 1 (11-16): **fixture พร้อมแล้ว** ที่ [`fixtures/MTLSPA0220261201.xls`](fixtures/README.md) ข้อมูลสมมติทั้งหมด 2,556 แถว (`P` 2,553 / `C` 3 · 1,797 คน · 756 คนมี 2 แถว) สร้างด้วย `fixtures/make-mtls-fixture.py` (seed เดิม = ได้ไฟล์เหมือนเดิมทุก byte) · ⚠️ **ไฟล์จริงเป็น Excel 5.0/95 (BIFF5, stream `Book`) ไม่ใช่ BIFF8** และมี CODEPAGE = 1252 ทั้งที่ข้อความเป็น cp874 ([mtls-file.md](mtls-file.md) §1 แก้แล้ว) — fixture ทำแบบเดียวกัน reader ต้องอ่าน BIFF5 ได้และบังคับ cp874 · `docs/MTLSPA0220261009.xls` เป็นข้อมูลจริง **ห้ามใช้** (ไฟล์อยู่ใน git ของ repo นี้แล้ว — Dev 1 กำลังดูว่าจะเอาออกอย่างไร) · dependency ที่เหลือ (Kafka / DB บริษัท / share mount / URL Informs / key) ตอบตอน kickoff
 - [ ] **Q8** (Dev 2, 11-13) เสนอ prefix API **`/api/mapping`**, BaseResponse เดิม, field-path errors, expected `rowVersion` → 409, list `items/totalCount/page/pageSize` (default 20/max 100), dates ISO/UTC และ route/action subset ใน [แผน API §5](api-implementation-plan.md#5-api-ที่เสนอก่อนมี-web-design) · ขอ review ก่อน M1.2/เขียน controller; pause intake/delivery และ raw payload inspection ให้เปิดเท่าที่ scope Q1/Q2 ตกลง

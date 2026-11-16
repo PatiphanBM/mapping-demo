@@ -1,7 +1,7 @@
 ---
 title: ไฟล์ของ MTLS — รูปแบบและข้อเท็จจริงที่ mapping ต้องรู้
 status: review
-last_updated: 2026-11-13
+last_updated: 2026-11-16
 ---
 
 # ไฟล์ของ MTLS
@@ -15,7 +15,7 @@ last_updated: 2026-11-13
 
 | เรื่อง | ค่า | ผลต่อ mapping |
 |---|---|---|
-| รูปแบบ | Excel 97–2003 (`.xls`, BIFF8) **ไม่มี CODEPAGE record** | ต้องอ่านเป็น **cp874 (TIS-620)** ไม่งั้นภาษาไทยเพี้ยน → config ของไฟล์ต้องกำหนด encoding ได้ |
+| รูปแบบ | **Excel 5.0/95 (`.xls`, BIFF5 — stream `Book`)** ไม่ใช่ 97–2003 · CODEPAGE record บอก **1252** แต่ข้อความไทยเป็น byte ของ cp874 (ตรวจใหม่ 2026-11-16 — เดิมเขียนว่า BIFF8 ไม่มี CODEPAGE) | reader ต้องอ่าน BIFF5 ได้ และต้อง**บังคับ cp874 (TIS-620)** ไม่เชื่อ codepage ในไฟล์ ไม่งั้นภาษาไทยเพี้ยน → config ของไฟล์ต้องกำหนด encoding ได้ · ไฟล์ทดสอบที่ทำแบบเดียวกัน: [fixtures/](fixtures/README.md) |
 | ชื่อไฟล์ | `MTLSPA02` + `yyyymmdd` (= วันเริ่มคุ้มครอง) | |
 | sheet | 1 sheet (ชื่อ `Test` ในไฟล์ตัวอย่าง) | อ่าน **sheet แรก** แบบ legacy ไม่อ้างชื่อ sheet |
 | header | แถวที่ 1 ภาษาไทย 19 column | ลำดับตรงกับ legacy (`uMTLS.pas:515-535`) |
