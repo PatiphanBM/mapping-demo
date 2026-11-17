@@ -1,7 +1,7 @@
 ---
 title: แบบข้อมูลและ runtime กลางของ Mapping
 status: approved
-last_updated: 2026-11-16
+last_updated: 2026-11-17
 ---
 
 # แบบข้อมูลและ runtime กลางของ Mapping
@@ -12,7 +12,7 @@ last_updated: 2026-11-16
 
 - Source definition, Input Layout, Transformation Program และ contract schema กำหนด fields/paths ผ่านข้อมูลที่มี version; ไม่มี `if partner == ...` สำหรับ business mapping ใน engine
 - ใช้ physical Source Table ต่อ config ตาม M-15, กำหนดผ่าน Web ตาม M-16, เพิ่ม column ได้อย่างเดียวตาม M-17 และเปิด Source/Payload detail ตาม M-18/M-19
-- ย้าย Transformation Program ให้ครบตาม M-03; ทำ MTLS ก่อน แต่ไม่ใช้จำนวน columns/outputs/defaults ของ MTLS เป็นข้อจำกัดของ engine ทั้งระบบ
+- ย้าย Transformation Program ให้ครบตาม M-03; ผู้ใช้ชี้แจงภายหลังตาม M-27 ว่า MTLS เป็นหนึ่ง example เท่านั้น และเลือก Excel/Delimited/FixedWidth รอบแรก; [แบบ API/Web หลาย format](multi-format-api-web-design.md) เพิ่ม Input Reader seam โดยไม่เปลี่ยนตาราง/identities ของ M1.1
 - runtime destination ช่วงแรกเป็น Informs API ตาม M-21; การออกแบบกลางไม่เปิด destination/partner ใหม่โดยปริยาย และไม่เพิ่ม abstraction สำหรับ destination ที่ยังไม่ implement
 - business rules อ้าง [rules.md](rules.md) ด้วย ID; ข้อมูลตัวอย่างด้านล่างใช้ชื่อเชิงเทคนิคสมมติ ไม่เสนอ business fields ของ partner ใหม่
 - fields/defaults/สัดส่วนที่ยังไม่ส่งมาเป็น pending input ใน config/contract ไม่เดาค่า ไม่สร้าง field ใน Informs และไม่ถือว่าคำว่า cover ทุกเรื่องแปลว่าผ่าน scenarios ที่ยังไม่ทดสอบแล้ว
@@ -31,6 +31,7 @@ Module หมายถึงชุดพฤติกรรมที่มี int
 
 | Module | Interface ที่ต้องรู้ | Implementation ที่ซ่อนไว้ | Test surface |
 |---|---|---|---|
+| Input reader | รับ stable snapshot + pinned `inputLayout` → raw records พร้อม source row no/physical position/diagnostics แบบเดียวกัน | adapter Excel/Delimited/FixedWidth ตาม `kind`; limits/encoding/header/field positions อยู่หลัง seam | synthetic fixtures ของทั้งสาม format, preview/import consistency |
 | Source catalog | create definition, add columns, read pinned definition; คืน version/conflict/diagnostics | identifiers/types, DDL/metadata transaction, immutable definitions และ schema checks | CQRS handlers + PostgreSQL จริง |
 | Config lifecycle | save immutable version, validate/preview, activate/disable ด้วย expected row version | definition/compiler/contract compatibility และ folder ownership | commands/queries + pure compiler |
 | Transformation | compile pinned definition; evaluate raw row + immutable context → outputs/diagnostics | expressions/predicates/nested arrays/conversions/limits; ไม่มี file/HTTP writes | pure compile/evaluate interface เดียวกับ preview/runtime |
@@ -54,14 +55,15 @@ Module หมายถึงชุดพฤติกรรมที่มี int
 | physical Source Tables | system identity และ raw columns แบบ `text NULL` ตาม §8; รองรับค่าที่แปลงธุรกิจไม่ได้; เพิ่ม nullable column ที่ไม่มี business backfill; logical type/conversion อยู่ใน definition/program |
 | `source_row_refs` | registry ของ identity เท่านั้น: Source ID, File Job ID, definition version, row number/physical row number; ไม่มี raw values กลาง; unique `(file_job_id, row_number)` และ `(id, file_job_id)` |
 | `mapping_config_versions` | immutable Input Layout/Transformation Program/Source definition version/schema bytes+hash/profile version/evaluation semantics; unique `(config_id, version_number)` |
-| `file_intake_claims` | active ownership ของ normalized relative path ต่อ config → File Job ID; unique `(config_id, relative_path)`; เก็บจน import/archive/recovery ตัดสินปล่อย claim ได้ ไม่ใช้ lease expiry เป็นการลบหลักฐาน |
+| `file_intake_claims` | normalized relative path ต่อ config → occurrence ล่าสุด; unique `(config_id, relative_path)`; ระหว่างทำงานใช้เป็น ownership หลัง Archived เก็บ pointer กันรับ bytes เดิมซ้ำ เปลี่ยนไป job ใหม่เมื่อ stable bytes เปลี่ยนตาม M-32 ไม่ลบเพราะ lease หมด |
 | `file_content_claims` | unique `(config_id, content_sha256)` → canonical File Job ตาม M-25 ไม่รวมชื่อไฟล์/config version; failed job ยังเป็น owner เพื่อ resume งานเดิม |
-| `file_jobs` | config version, definition version, original filename/path, durable snapshot/hash, `created_at`, import checkpoint/state และ archive state; CreatedAt ใช้ตาม M-23 ไม่เพิ่มเวลารับไฟล์อีก field |
+| `file_jobs` | version pin, accepted fingerprint, durable snapshot/hash, import checkpoint/lease และ work lease แยกสำหรับ snapshot/archive, archive intent/ref/state ตาม M-32; CreatedAt ใช้ตาม M-23 ไม่เพิ่มเวลารับไฟล์อีก field |
 | `row_jobs` | Source reference, pinned execution identity, state, attempts/next-at, lease owner/epoch/until; unique initial run ต่อ Source+config version ในช่วงที่ไม่เปิด reprocess |
 | `row_errors` | stage/code/target path/source field reference และ safe diagnostic; raw value อ่านจาก Source detail ไม่คัดไป operational log |
 | `delivery_jobs` | unique `(file_job_id, source_row_id, output_key)`, pinned version/profile/contract, encrypted payload reference, payload hash, status/next-at/lease/attempts reserved, response IDs/flags |
 | `delivery_attempts` | unique `(delivery_job_id, attempt_number)`, dispatch/outcome state, HTTP status/latency/safe diagnostics, correlation และ response IDs; append history ไม่ reset |
-| `outbox` | unique event ID, job ID/type, destination topic/key, sent state; ไม่มี PII; publish/re-publish ใช้ event identity เดิม |
+| `outbox` | ordered event ID, typed IDs-only JSON, topic/key, sent/blocked state; publish ซ้ำใช้ ID เดิมใน header ตาม M-31 ไม่มี raw Source |
+| `inbox` | immutable receipt ต่อ consumer group/topic/partition/offset, event/job ID และ safe outcome; จัดคิว Row Job พร้อม receipt ก่อน commit offset ตาม M-31 |
 | `delivery_controls` | global intake/delivery pause และ concurrency budget/version ที่ claim ใช้ร่วมกัน; ค่าเริ่ม budget 1 ตาม M-07 |
 | `mapping_audits` | fixed actor/reason/request ID/action และ metadata ก่อน/หลัง; ไม่มี raw payload/keys; action request ID กัน double click ตามขอบเขต use case |
 
@@ -131,10 +133,11 @@ Schema major เดิมแต่ hash เปลี่ยนต้องได�
 | สร้าง/เพิ่ม Source column | validate expected version + physical DDL + definition version + audit | rollback ไม่ทิ้ง orphan table/column metadata; เรียกซ้ำด้วย action identity ได้ผลเดิม |
 | รับ occurrence | acquire path claim + File Job/version pin/CreatedAt + import outbox | claim/job เดิมใช้ต่อ; ไม่สร้าง File Job ใหม่จาก scanner race |
 | commit แถว | identity registry + physical raw row + Row Job + transform outbox + contiguous checkpoint | rollback ทั้งชุด หรือพบแถวเดิมแล้วขยับตาม checkpoint ที่ถูกบันทึกจริง |
+| รับ transform event (M-31) | lock broker coordinates + ตรวจ lineage/lock Row Job + schedule งานที่ยังไม่จัดคิว + immutable Inbox Receipt | rollback ไม่ commit offset; record เดิมหรือ republish ไม่ reset NextAt/backoff หรือเพิ่มงานซ้ำ |
 | transform | output jobs + encrypted final payload/bytes/hash/key reference + delivery outbox + row result | ไม่มี durable intent จึงยังไม่ส่ง; redelivery ไม่เพิ่ม output key ซ้ำ |
 | เริ่มส่ง | claim lease + ตรวจ pause/global budget/attempt cap + reserve attempt | reserved/unknown attempt ไม่ถูก reset เมื่อ restart; ห้ามเกิน 6 ตาม M-20 |
 | จบ attempt | outcome + IDs/flags + attempt history + job state/next-at + release budget | stale worker เขียนไม่ได้; HTTP ที่อาจรับแล้วต้องใช้ replay bytes/key เดิมภายในโควตา |
-| archive | persist archive intent/state หลัง import commit; filesystem operation ตรวจต้นฉบับเทียบ snapshot แล้วบันทึกผล | เก็บ snapshot เดิมไว้และ resume; ต้นฉบับเปลี่ยนไม่ย้ายทับ/ลบทิ้ง |
+| archive (M-32) | persist intent/ref หลัง Imported/Duplicate → publish/verify สำเนาจาก sealed snapshot → ตรวจ original → fenced DB result | คง input; original เปลี่ยนให้ RecoveryRequired เก็บหลักฐานทั้งคู่; crash หลัง publish ให้ตรวจ ref/hash เดิมแล้ว complete ซ้ำได้ |
 
 ตาราง metadata ใช้ EF migrations; physical Source DDL ใช้ implementation ที่สร้าง SQL จาก validated catalog ภายใน transaction ของ connection เดียวกับ metadata/row jobs ไม่สร้าง EF entity ต่อ field หรือรัน migration ที่ API startup แบบ demo การใช้ SQL เฉพาะ DDL/locks ต้องถูกซ่อนใน Infrastructure ตาม D-77
 
@@ -226,6 +229,7 @@ Schema major เดิมแต่ hash เปลี่ยนต้องได�
 - Entity ID ใช้ PostgreSQL `uuid`, สร้างด้วย `Uuid.NewV7()` ฝั่ง application ไม่มี database UUID default; external action request ID เป็น correlation ไม่ใช่ entity ID
 - เวลาใช้ `timestamptz NOT NULL` เป็น UTC; ข้อมูล mutable มี `updated_at` และ `row_version bigint NOT NULL DEFAULT 1 CHECK > 0`; command เทียบ expected version แล้วเพิ่ม 1 ใน transaction เดียว
 - Version/Source/claim เนื้อหา/audit เป็น append-only ไม่มี soft delete; immutable entities ใช้ CreatedAt แต่ไม่ persist `BaseEntity.IsActive` เป็นช่องทางแก้หลักฐาน
+- M-32 เพิ่ม accepted fingerprint (`accepted_hash/accepted_size/accepted_last_write_at`) ของ File Job และ work lease (`work_owner/work_epoch/work_until`) แยกจาก import lease; `archive_ref` เปลี่ยนไม่ได้เมื่อมีค่าแล้ว; งานเก่าที่ไม่มี accepted fingerprint ไม่ถูก scanner worker claim อัตโนมัติ
 - Fields ที่ไม่ระบุว่า optional ในตารางด้านล่างเป็น `NOT NULL`; ID ทุกตัวในตาราง entity เป็น PK เว้นตาราง claim/routes ที่ระบุ composite PK ชัดเจน
 - `hash32` ใช้ `bytea CHECK (octet_length(value)=32)` เก็บ SHA-256; content hash คำนวณจาก bytes ของ stable file snapshot ไม่ใช่ชื่อไฟล์หรือการเทียบค่าทางธุรกิจใน cells การ save Excel ใหม่อาจเปลี่ยน bytes/hash แม้ข้อมูลที่มองเห็นคล้ายเดิม
 - `jsonb` ใช้เฉพาะ definition/program/layout/safe metadata ไม่ใช้เป็นที่เก็บ raw Source กลาง; immutable schema snapshot เก็บ `bytea` ของ schema จริงพร้อม hash ไม่คำนวณ hash จาก JSON ที่ reserialize ไม่แน่นอน
@@ -244,7 +248,7 @@ Schema major เดิมแต่ hash เปลี่ยนต้องได�
 | `MappingConfigVersions` / `mapping_config_versions` | `config_id uuid` FK configs, `version_number integer CHECK >0`, `source_definition_version_id uuid`, `contract_snapshot_id uuid` FK contract snapshots, `profile_snapshot_id uuid` FK profile snapshots, `input_layout/program/evaluation_semantics jsonb` objects; FK `(source_definition_version_id,config_id)` → definition versions `(id,config_id)`; UQ `(config_id,version_number)`, `(id,config_id,source_definition_version_id)`, `(id,config_id)` |
 | `ActiveInputRoutes` / `active_input_routes` | PK `(normalized_input_path,extension)` เป็น `text`; `config_id/config_version_id uuid` FK config version ที่เป็นของ config นั้น; extension normalize lowercase; activation/disable เปลี่ยน routes กับ active pointer ใน transaction เดียว |
 | `FileJobs` / `file_jobs` | `config_id/config_version_id/source_definition_version_id uuid`, `original_file_name/input_relative_path text`, `snapshot_ref text NULL`, `content_hash hash32 NULL`, `content_size bigint NULL CHECK >=0`, `duplicate_of_file_job_id uuid NULL`, import/archive states, lease, `next_at`, row version; `read_count/committed_count/checkpoint_row_number/checkpoint_physical_row bigint DEFAULT 0 CHECK >=0`; committed <= read และ checkpoint row = committed; UQ `(id,config_id,content_hash)`, `(id,source_definition_version_id)`, `(id,config_version_id)`; FK pin triple → config versions; CreatedAt/config/version/definition ตรึงตั้งแต่รับงาน |
-| `FileIntakeClaims` / `file_intake_claims` | PK `(config_id,normalized_relative_path)`; `file_job_id uuid` FK file job ที่มี config เดียวกัน; claim mutable เก็บ owner ของ path ที่กำลังรับ/ย้าย ไม่ลบเพราะ lease หมดเฉย ๆ |
+| `FileIntakeClaims` / `file_intake_claims` | PK `(config_id,normalized_relative_path)`; `file_job_id uuid` FK file job ที่มี config เดียวกัน; claim mutable เก็บ owner ขณะทำงานและ occurrence pointer หลัง Archived; รับ bytes ใหม่จึงเปลี่ยน pointer แบบ atomic ตาม M-32 ไม่ลบเพราะ lease หมด |
 | `FileContentClaims` / `file_content_claims` | PK `(config_id,content_hash)`; `canonical_file_job_id uuid`; FK `(canonical_file_job_id,config_id,content_hash)` → file jobs `(id,config_id,content_hash)`; append-only ไม่ใส่ชื่อไฟล์/version/expiry ใน key ตาม M-25 |
 | `SourceRowRefs` / `source_row_refs` | `file_job_id/source_definition_id/source_definition_version_id uuid`, `row_number/physical_line_number bigint CHECK >0`; FK `(file_job_id,source_definition_version_id)` → file jobs; FK `(source_definition_version_id,source_definition_id)` → definition versions; UQ `(file_job_id,row_number)`, `(id,file_job_id)`, `(id,file_job_id,source_definition_id)`; index `(file_job_id,physical_line_number)` |
 | physical Source Table | `id/file_job_id/source_definition_id uuid`; PK ID; CHECK definition ID เป็นเจ้าของ physical table นี้; FK triple → registry; raw columns ทั้งหมด `text NULL` ไม่มี business defaults/NOT NULL ที่ทิ้งค่าผิดได้; row/physical numbers อ่านจาก registry ไม่เก็บซ้ำอีกชุด |
@@ -252,7 +256,8 @@ Schema major เดิมแต่ hash เปลี่ยนต้องได�
 | `RowErrors` / `row_errors` | `row_job_id uuid` FK row jobs, `stage/code text`, `path/source_field_key text NULL`, `safe_message text`; append-only; index `(row_job_id,created_at,id)`; ไม่มี raw value/exception body |
 | `DeliveryJobs` / `delivery_jobs` | `row_job_id/source_row_id/file_job_id/config_version_id uuid`; FK quadruple → row jobs; UQ `(file_job_id,source_row_id,output_key)` โดย output key เป็น `text CHECK length>0`; `payload_ciphertext bytea`, `encryption_metadata jsonb` object, `key_reference text`, `payload_hash hash32`; `attempts_reserved smallint DEFAULT 0 CHECK BETWEEN 0 AND 6`; state, next-at, lease, row version; `inform_id/existing_inform_id uuid NULL`, `replayed/replaced boolean NULL`, `last_outcome_code text NULL`; Delivered ต้องมี inform ID; index `(state,next_at,created_at,id)` |
 | `DeliveryAttempts` / `delivery_attempts` | `delivery_job_id uuid` FK deliveries; `attempt_number smallint CHECK BETWEEN 1 AND 6`; UQ `(delivery_job_id,attempt_number)`; `lease_epoch bigint CHECK >0`, dispatch state, `dispatched_at/completed_at timestamptz NULL`, `http_status smallint NULL CHECK BETWEEN 100 AND 599`, `latency_ms bigint NULL CHECK >=0`, safe outcome code/path, `inform_id/existing_inform_id uuid NULL`, replay/replace flags nullable; identity/reserved time ไม่แก้ ไม่มี delete |
-| `Outbox` / `outbox` | `job_kind text`, `job_id uuid`, `generation bigint CHECK >=0`, `topic/key text`, `published_at timestamptz NULL`, `publish_attempts integer DEFAULT 0 CHECK >=0`, next-at, lease; UQ `(job_kind,job_id,generation)`; partial index `(next_at,created_at,id) WHERE published_at IS NULL`; ไม่มี arbitrary payload JSON; event สร้างจาก allowlist event ID/job ID/kind/generation |
+| `OutboxMessages` / `outbox` (M-29/M-31) | `id bigint identity`, `topic`, `message_key`, `payload jsonb`, `created_at`, `sent_at NULL`, `blocked_code varchar(64) NULL`; partial index `(id) WHERE sent_at IS NULL AND blocked_code IS NULL`; dispatcher ใช้ transaction/`FOR UPDATE SKIP LOCKED` ตาม Informs ไม่ใช้ lease; strict parse payload เป็น UUID 4 ตัวแล้วสร้าง canonical event ใหม่ พร้อม header `mapping-event-id` = outbox ID เดิม; topic/schema/key ผิดให้ blocked ไม่มี sent timestamp |
+| `InboxMessages` / `inbox` (M-31) | UUID v7, consumer group/topic/partition/offset, nullable event ID/job ID, safe outcome, DB-created time; unique broker coordinates พร้อม advisory transaction lock และ immutable guards; ไม่มี raw body/headers; lock Row Job และตั้ง NextAt ครั้งแรกใน transaction เดียวกันก่อน commit Kafka offset |
 | `DeliveryControls` / `delivery_controls` | `scope text CHECK = 'mapping'` UQ (หนึ่ง row), `intake_paused/delivery_paused boolean DEFAULT false`, `max_parallel integer DEFAULT 1 CHECK >0`, row version; ใช้เป็น serialization lock สำหรับ route activation/intake budget/delivery claim ตามลำดับ lock ใน §8.5 |
 | `MappingAudits` / `mapping_audits` | `action/entity_kind text`, `entity_id uuid NULL`, `request_id text`, `request_hash hash32`, `fixed_actor/reason text`, `safe_metadata jsonb` object; UQ `(action,request_id)`; append-only; request ID เดิม/body เดิมคืนผลเดิม body ต่าง conflict |
 
@@ -279,7 +284,7 @@ FK ไม่อนุญาตโยง Source ของไฟล์อื่น
 4. **Import row:** transaction insert registry + raw row + initial Row Job + transform outbox + contiguous checkpoint; ไม่มี commit raw row แยกจาก identity/job; crash ใช้ UQ `(file_job_id,row_number)` และ checkpoint เดิม ไม่สร้าง Source ID ใหม่ให้แถวที่ commit แล้ว
 5. **Transform row:** ใช้ pinned compiler/context สร้าง 0..N outputs → ตรวจทุก output กับ pinned schema → encrypt → transaction persist delivery intents/outbox + row result; fatal error ของ output ใดทำให้ row นี้ Blocked ทั้งชุด แถวอื่นทำต่อได้ ค่าธุรกิจผิดที่ทำ null+unparsed ได้ไม่ใช่ fatal
 6. **Reserve/send/complete:** ตาม §8.5–§8.6; HTTP ไม่อยู่ใน DB transaction และห้ามส่งก่อน payload durable
-7. **Archive/release path:** import commit ครบแล้วเก็บ archive intent → ตรวจ original ยังเป็น occurrence เดียวกับ snapshot → move/record archive result → ปล่อย path claim; หาก original เปลี่ยนให้ RecoveryRequired เก็บ snapshot+original ไม่ย้ายไฟล์ใหม่ทับหลักฐาน
+7. **Archive/retain occurrence (M-32):** หลัง Imported/Duplicate เก็บ archive intent → copy/publish/verify sealed snapshot → ตรวจ original เทียบ accepted fingerprint → บันทึก Archived แบบ fenced และคง input/path pointer กันสแกน occurrence เดิมซ้ำ; หาก original เปลี่ยนให้ RecoveryRequired เก็บ snapshot/archive/input ใหม่ไว้ทั้งหมด; bytes ใหม่ที่ path เดิมหลัง Archived จึงรับ job ใหม่ได้
 
 Content claim ไม่ถูกล้างเมื่อ job ล้มเหลว เจ้าของ hash เดิมต้อง resume ไม่สร้าง canonical job ใหม่จากการเปลี่ยนชื่อไฟล์; duplicate occurrences ยังมี metadata/audit อธิบายว่าถูกข้าม ไม่เพิ่มยอด accepted Source rows BR-001 ใน rules ให้ Dev 1 อัปเดตสถานะตามคำตอบ Q6 ไม่แก้เอกสารของ Dev 1 เอง
 

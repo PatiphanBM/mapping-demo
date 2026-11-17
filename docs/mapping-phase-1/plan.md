@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-16
+last_updated: 2026-11-17
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -29,6 +29,149 @@ last_updated: 2026-11-16
 > - ติด / รอ: — (หรือ ติดอะไร รอใคร)
 > - ต่อไป: M2.1
 > ```
+
+### 2026-11-17 — Commit code Mapping ถึง M3.2
+- เสร็จ: ตามคำสั่งผู้ใช้ commit โค้ดใน repo `prjInsuranceValidationMapping` branch `develop` เป็น `9198a54` — `feat(mapping): add configurable preview and durable file intake`; รวม catalog/Source storage/preview/transformation/readers/lookups และ durable file intake/Kafka/archive พร้อม tests/migrations/local config ทั้งหมด 188 ไฟล์
+- หลักฐาน: ก่อน commit รัน `./scripts/check.ps1` ผ่าน build, unit **22/22**, integration **95/95** และ EF model check; staged tree ตรงกับโค้ดที่ทดสอบ ไม่มี data/build artifacts/config บริษัทหรือ connection details ที่ผู้ใช้เคยให้ และ working tree ของ repo Mapping สะอาดหลัง commit
+- ติด / รอ: ยังไม่ push ตามขอบเขตคำสั่ง commit; เอกสารใน mapping-demo ยังไม่ commit และ pull ยังติด plan.md ที่แก้ค้าง จึงไม่ stash/เขียนทับข้อความ Dev 1
+- ต่อไป: M3.3; ใช้ commit `9198a54` เป็นหลักฐาน source ของงานที่ทำไว้ถึง M3.2 โดยไม่ปิด acceptance/คำถามธุรกิจอื่นเพิ่มเติม
+
+### 2026-11-17 — ปิด M3.2: scan/snapshot/import/resume/archive บน local
+- เสร็จ: Mapping มี scanner ของ active routes, stable fingerprint/version pin/path claim, durable snapshot/content claim, import Kafka event/receipt/DB wake-up, work lease/recovery, import ครบสาม format และ archive snapshot copy โดยคง input ตาม M-32; เพิ่ม migration `20261117062250_AddFileIntakeRuntime`
+- เสร็จ: ผู้ใช้ยืนยันเพิ่ม `SourceStorageRepository.cs` เพื่อแก้ NULL parameter แล้ว; raw fields ใช้ typed PostgreSQL text parameter เก็บ SQL NULL ตามเดิม ไม่เติมค่า/แปลงเป็น empty string
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **22/22**, integration **95/95** และ EF model check; M3.2 เพิ่ม unit 2 + integration 21 (repository 5, filesystem 5, pipeline 6, Kafka 3, Excel 2); เทียบ Excel BIFF5/cp874 สมมติ **2,556 แถว × 19 fields** กับ Source ราย cell รวม NULL และ hosted Kafka pipeline ทั้งสาม format รวม **2,560 แถว** ผ่าน; ไม่มี HTTP delivery
+- หลักฐาน: import topic local `mapping.import.requested` มี 3 partitions, broker healthy, init exit 0; script default/explicit-disable/env restoration, compose read-only input/default intake disabled และ whitespace/path-leak checks ผ่าน; [แบบ/รายการไฟล์/หลักฐาน M3.2](m3-2-file-intake-design.md)
+- ติด / รอ: Kafka/DB/share/permissions/durability บริษัทติดตาม Q7 ก่อน deployment ตามแนวทางปิด local ของ M3.1; partner business fields/acceptance และ Q9 ยังแยกจากกลไก M3.2 ไม่เดาค่าธุรกิจ; source/เอกสารยังไม่ commit/push และไม่ได้ apply DB บริษัท
+- ต่อไป: M3.3 row transformation jobs/lease/recovery/diagnostics; pull ยังติด plan.md ที่แก้ค้าง จึงไม่ stash/เขียนทับงานเดิม รักษาหมายเหตุ Dev 1 ล่าสุดไว้และอ่าน glossary ใหม่จาก origin/develop แล้ว
+
+### 2026-11-17 — M3.2 implementation และทดสอบ pipeline local
+- เสร็จ: source batch ที่ผู้ใช้ยืนยันเพิ่ม scanner/accepted fingerprint/work lease, stable snapshot/content claim, import event/consumer/receipt/DB wake-up/recovery, shared Excel import และ archive snapshot copy ตาม M-32; migration `20261117062250_AddFileIntakeRuntime` และ local import topic 3 partitions พร้อม
+- หลักฐานระหว่างทำ: build ผ่าน; intake core/pipeline ชุดแรก 15/15 ผ่าน PostgreSQL/temporary filesystem และ hosted Kafka pipeline ครบ Excel (2 fields/2,556 แถว)/CSV/Fixed-width รวม 2,560 แถวผ่านแล้ว; script default/explicit-disable/env restoration และ topic init ตรวจแล้ว; [รายละเอียด M3.2](m3-2-file-intake-design.md)
+- ติด / รอ: full-fixture Excel 19 fields พบ NULL parameter bug ใน `SourceStorageRepository.cs` เดิม ซึ่งอยู่นอก source batch จึงขอคำยืนยันเพิ่มไฟล์ก่อนแก้ตาม AGENTS.md; ยังไม่ปิด M3.2 หรืออ้างว่า `check.ps1` ผ่านทั้งชุด
+- ต่อไป: ตรวจ consumer rollback/offset/restart, แก้ NULL เมื่อได้รับยืนยันเพิ่มไฟล์ แล้วรัน regression/full gate และบันทึกหลักฐานปิดงาน; ไม่มีการแก้ DB/share บริษัทหรือ commit/push; pull ยังติด plan.md ที่แก้ค้าง อ่าน glossary Dev 1 ใหม่จาก origin/develop แล้วและไม่แก้ไฟล์ Dev 1
+
+### 2026-11-17 — เตรียม M3.2 scan/snapshot/import/resume/archive
+- เสร็จ: ตรวจ File Job/claims/active routes/import core, triggers/lease, local Kafka และ pattern hosted service ของ Informs แบบ read-only; เขียน [แบบ M3.2 พร้อม source batch](m3-2-file-intake-design.md) และตัวอย่าง duplicate/restart/changed input
+- กำลังทำ: รอยืนยัน source batch ของ scanner + filesystem snapshot/archive + durable file-event wake-up/recovery; จะเชื่อม Excel import เข้ากับ reader/preview เดิมเพื่อให้ MTLS BIFF5/cp874 ใช้งานผ่าน intake ได้ด้วย
+- ติด / รอ: ยังไม่แก้ source M3.2; ข้อเสนอ archive เป็น immutable snapshot copy โดยคงต้นฉบับ input และใช้ path pointer กันรับ occurrence เดิมซ้ำ ต้องยืนยันพร้อม source; Q7 บริษัทติดตามก่อน deployment; pull ติด plan.md ที่แก้ค้างจึงไม่ stash/เขียนทับงานเดิม
+- ต่อไป: หลังยืนยัน implement และรัน PostgreSQL/Kafka/filesystem failure/recovery tests + `check.ps1` ก่อนบันทึกหลักฐานปิด M3.2; ไม่มีการแก้ DB/share บริษัทหรือ commit/push
+
+### 2026-11-17 — ปิด M3.1 ในขอบเขต Kafka local
+- เสร็จ: ปิด M3.1 ตามข้อตกลงผู้ใช้ให้ใช้ Kafka local พัฒนา/ทดสอบต่อ; หลักฐานเดิม `check.ps1` ผ่าน build, unit 20/20, integration 74/74 และ EF model check รวม transaction/offset/redelivery ของ M3.1 แล้ว จึงไม่ต้องรอ environment บริษัทเพื่อปิดงาน local
+- ติด / รอ: dependency Kafka บริษัทแยกติดตามใน Q7 และต้องพร้อมก่อนเปิด messaging บน environment บริษัท; ไม่เปลี่ยน contract/ขอบเขต phase 1/วันส่ง และยังไม่ถือว่าบริษัทพร้อมใช้งาน
+- ต่อไป: M3.2 และ M3.3; รอบนี้แก้เฉพาะแผน/แบบ M3.1 ไม่แก้ source และไม่รันทดสอบซ้ำ; ยังไม่ commit/push ส่วน pull ยังติด plan.md ที่แก้ค้างและรักษาหมายเหตุ Dev 1 ล่าสุดไว้แล้ว
+
+### 2026-11-17 — M3.1 local Kafka/outbox/inbox ผ่าน failure และ offset tests
+- เสร็จ: source batch ที่ผู้ใช้ยืนยันเพิ่ม local Kafka/topic init, OutboxDispatcher และ TransformConsumer ผ่าน MediatR; strict event มี UUID 4 ตัวพร้อม header outbox ID เดิม, invalid outbox เป็น blocked และ diagnostic receipt ไม่เก็บ raw body ตาม M-31
+- เสร็จ: migration `20261117042328_AddMappingMessagingInbox` เพิ่ม immutable Inbox Receipt; transaction บันทึก receipt และตั้ง `Pending` Row Job `NextAt` ก่อน commit Kafka offset; duplicate/restart/republish ไม่ reset job/backoff; consumer ยังไม่รัน transform ของ M3.3
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **20/20**, integration **74/74** และ EF model check; M3.1 เพิ่ม unit 3 + integration 14 (PostgreSQL 5, Kafka pipeline 7, configuration 2) รวม broker failure, broker ack แล้ว DB rollback, receipt rollback/offset, poison events, restart และหลาย dispatcher/consumer; local `apache/kafka:4.3.1` healthy/topic `mapping.transform.requested` มี 3 partitions
+- ติด / รอ: M3.1 ยังไม่ปิดทั้งข้อเพราะ broker/topics/groups/owner/auth/TLS บริษัทใน Q7 ยังไม่ตกลง; import/delivery handlers เป็น M3.2/M4; messaging ปิดโดย default และ company mode ไม่เปิดให้อัตโนมัติ; ไม่มีการแก้ DB บริษัท
+- ต่อไป: M3.2 scan/snapshot/import/resume/archive และ M3.3 transform worker ที่ claim เฉพาะ Pending/NextAt ถึงเวลาแล้ว; [แบบและหลักฐาน M3.1](m3-1-messaging-design.md); source/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้ ส่วน pull ยังติด plan.md ที่แก้ค้าง แต่รักษาหมายเหตุ Dev 1 จาก origin/develop ไว้ตรงทุกตัวอักษร
+
+### 2026-11-17 — เตรียม M3.1 local Kafka/dispatcher/consumer
+- เสร็จ: อ่าน MessagingOptions/OutboxDispatcher/StageConsumer/DI/compose และ Kafka fixture ของ Informs แบบ read-only; ตรวจ outbox/Row Job ของ Mapping แล้วเขียน [แบบ M3.1](m3-1-messaging-design.md) พร้อม event ตัวอย่างและรายการ source
+- กำลังทำ: รอยืนยัน source batch สำหรับ local Kafka/topic init, dispatcher, strict IDs-only event, durable Inbox Receipt/Row Job wake-up และ manual offset/redelivery tests ก่อนเชื่อม transform worker M3.3
+- ติด / รอ: ยังไม่แก้ source รอบ M3.1; broker/topics/groups/owner/auth/TLS บริษัทใน Q7 ยังรอ; pull ยังติดงานค้าง plan.md และไม่ได้ stash/เขียนทับข้อความเดิม
+- ต่อไป: หลังยืนยัน implement + real PostgreSQL/Kafka failure/replay/offset tests และ `check.ps1`; ไม่เปิดส่ง Informs หรืออ้างว่า transform เสร็จจากการรับ Kafka event
+
+### 2026-11-17 — M2.7 Fixed-width ผ่าน import core และ Source จริง
+- เสร็จ: Mapping เพิ่ม `FixedWidthInputLayoutValidator` ร่วมใน reader/validate/preview/import; ตรวจ range/overflow ด้วยเลข 64-bit, รองรับ UTF-8/BOM/cp874, รักษา raw padding/zeroes, ตรวจ bytes/records/columns/field/cells limits และปฏิเสธ NUL/surrogate slice ที่ไม่สมบูรณ์ ตาม M-30
+- เสร็จ: `FileImportService` dispatch Delimited/FixedWidth จาก pinned layout โดยใช้ hash/size/lease/read count/Source + Row Job + outbox + checkpoint ทางเดิมของ M-29; ไม่มี schema/migration ใหม่ และปรับ capability reason ตามความพร้อมจริง
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **17/17**, integration **60/60** และ EF model check; เพิ่ม 12 tests (reader 6, PostgreSQL/import 5, API 1) ตรวจ raw/Thai/positions/layout/limits, pinned preview เทียบ Source จริง, cp874, resume/concurrency/stale lease, hash/malformed และ outbox rollback; regression CSV/TSV/MTLS/M2.5 ผ่านทั้งหมด
+- ติด / รอ: M2.7 ยังไม่ปิดทั้งข้อ — fields/fixture ของ partner รอ Q5/M-24 และ scope/วันส่งรอ Q9; FixedWidth capability ยังคงปิดจน intake/queued processing ของ M3 พร้อม; M2.3 ยังรอ Excel import และ compiler/evaluator ของ transform worker
+- ต่อไป: เชื่อม Excel import และ runtime M3 ตาม source batch ที่ยืนยันถัดไป; [แบบและหลักฐาน M2.7](m2-7-fixed-width-import-design.md); source/เอกสารยังไม่ commit/push และไม่มีการเปลี่ยน DB บริษัท
+
+### 2026-11-17 — เตรียม M2.7 Fixed-width import
+- เสร็จ: ตรวจ Fixed-width reader/preview และ import core ล่าสุด; เขียน [แบบ M2.7](m2-7-fixed-width-import-design.md) พร้อมตัวอย่างสมมติและรายการ source; ใช้ schema/transaction/lease จาก M-29 เดิม ไม่ต้องเพิ่ม migration
+- กำลังทำ: รอยืนยัน source batch เพื่อเพิ่ม shared validator, cp874/limits/raw-slice diagnostics, dispatch FixedWidth ใน import และ API/PostgreSQL regression tests
+- ติด / รอ: source รอบ M2.7 ยังไม่แก้; partner fields/fixture รอ Q5/M-24 และ scope/วันส่งรอ Q9; pull ยังติดงานค้าง plan.md และไม่ได้ stash/ทับข้อความเดิม
+- ต่อไป: หลังยืนยัน ลงมือทดสอบ reader → preview/import → Source/Row Job/outbox พร้อม `check.ps1`; ไม่เปลี่ยน M1.2 หรือ contract ใหม่ของ Web
+
+### 2026-11-17 — M2.6 CSV/TSV ผ่าน import core และ Source จริง
+- เสร็จ: Mapping ใช้ Delimited layout validator ร่วมกันใน reader/validate/preview/import; แก้ cp874 alias, รักษา CR/LF/CRLF ภายใน quoted field, ใช้ limits bytes/records/columns/field/cells และ diagnostics ตาม physical record; ไม่มี fields ของ partner hardcode
+- เสร็จ: `FileImportService` อ่าน pinned version ของ File Job ที่ seal แล้ว ตรวจ hash/size ก่อนเขียน, claim/renew/ตรวจ lease ด้วยเวลา DB, บันทึก read count แยก committed count และ resume จาก checkpoint; Source writer commit registry + raw row + Row Job + transform outbox + checkpoint ใน transaction เดียว พร้อม replay/fencing guards ตาม M-29
+- หลักฐาน: migration `20261117024834_AddFileImportJobs` เพิ่ม `mapping.row_jobs`, `mapping.outbox`, import diagnostics และ immutable job/message guards; `./scripts/check.ps1` ผ่าน build, unit **17/17**, integration **48/48**, EF model check; เพิ่ม 16 tests (reader 6, import/PostgreSQL 9, API 1) ครอบคลุม UTF-8/cp874, CSV/TSV/headerless, raw/newlines/pins, rollback ที่ outbox, cancellation/resume, concurrent calls, stale lease, hash/malformed/limits และข้อมูลก่อน migration ที่ไม่มี Row Job
+- ติด / รอ: M2.6 ยังไม่ปิดทั้งข้อ — fields/fixture ของ partner รอ Q5/M-24 และ scope/วันส่งรอ Q9; directory intake/snapshot/archive, Kafka dispatcher/consumer และ transform worker ยังเป็น M3; Delimited capability ยัง `available=false` และอธิบายว่า sealed-snapshot import core พร้อมแล้ว ไม่อ้างว่า production processing พร้อม
+- ต่อไป: ใช้แกน import นี้ต่อ M2.7/M3 และรับตรวจด้วย partner fixtures เมื่อได้รับ; [แบบและหลักฐาน M2.6](m2-6-delimited-import-design.md); ไม่มีการ apply migration/แก้ DB บริษัท โค้ดและเอกสารยังไม่ commit/push
+
+### 2026-11-17 — เตรียม M2.6 CSV/TSV และแกน import
+- เสร็จ: ตรวจ reader/preview/Source persistence ปัจจุบัน และเขียน [แบบ M2.6](m2-6-delimited-import-design.md) พร้อมตัวอย่างสมมติ; ระบุแกน import ที่ต้องมี Row Job/outbox/checkpoint atomic ตามแบบ M1.1 ไม่ใช่ test ที่เรียก Source writer แทน import runtime
+- กำลังทำ: เตรียมรายการ source สำหรับ layout validation/limits/raw newline, FileImportService/persistence/lease, Row Job/outbox, migration และ tests ก่อนขอยืนยันตาม AGENTS.md
+- ติด / รอ: ยังไม่แก้ source รอบ M2.6; partner fields/fixtures รอ Q5/M-24 และ scope/วันส่งรอ Q9; pull ยังติดงานค้างใน plan.md จึงไม่ stash/เขียนทับงานเดิม หมายเหตุ Dev 1 ล่าสุดจาก origin/develop มีในไฟล์แล้ว
+- ต่อไป: หลังยืนยันรายการไฟล์ ลงมือ import core + reader/API/PostgreSQL tests และตรวจ `check.ps1`; M2.6 ยังไม่ติ๊กเสร็จ
+
+### 2026-11-17 — ปิด M2.5 SQL Server Named Lookup
+- เสร็จ: Mapping เพิ่ม SQL Server adapter สำหรับ `mtiOriginalPolicyExists@1` / `mtiOriginalLoanExists@1` อ่าน `dbo.MTI_ORIGINAL` ตาม M-28; เชื่อม async lookup เข้ากับ validate/raw preview/file preview พร้อม cancellation, dependency diagnostics และ capability ตามความพร้อมของแต่ละ lookup
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **17/17**, integration **32/32** (รวม SQL Server container 6 tests และ MTLS full fixture), EF model check; SQL Server tests ใช้ข้อมูลสมมติ ตรวจทั้งสอง key sets, Thai collation, SQL parameters/overlength keys, เลขแถวข้ามไฟล์, schema/dependency หาย, raw/file preview และ cancellation
+- หลักฐาน UAT (read-only): adapter ทั้งสองชื่อ `available=true`, ค้นด้วย keys สมมติได้ `false` ทั้งสองรายการ; API ชั่วคราว `GET /api/mapping/capabilities` คืน Named Lookup 2 ชื่อและ predicates **17 แบบ**; อ่านเฉพาะ metadata และ query ด้วย keys สมมติ ไม่เปลี่ยนข้อมูลบริษัท
+- ติด / รอ: ตอนใช้ SqlClient พบ certificate validation ไม่ผ่าน; ผู้ใช้อนุญาต `Encrypt=True;TrustServerCertificate=True` **เฉพาะ UAT นี้** แล้ว smoke test ผ่าน ไม่ใช้เป็น default ใน adapter; deployment ต้อง provision `ConnectionStrings__MtiOriginalDb` ผ่าน secret/environment ของ environment นั้น และ Q7 dependency อื่นยังรอ
+- ต่อไป: import runtime M3 เพื่อปิด acceptance ที่เหลือของ M2.3/M2.6/M2.7; โค้ดและเอกสารยังไม่ commit/push ตามกฎ commit เมื่อสั่งเท่านั้น; ดู [traceability M2.5](m2-5-transformation-traceability.md)
+
+### 2026-11-16 — M2.5 operators และ lookup contract
+- เสร็จ: ย้าย value expressions 13 แบบ, predicates 17 แบบ, conversion targets 7 ชนิด, `sourceWhen`/`emitWhen`, Named Transform `formatRegNo@1` และเพิ่ม contract/fail-closed สำหรับ Named Lookup สองรายการ; เพิ่ม [traceability](m2-5-transformation-traceability.md) และแก้ `GET /capabilities` ให้รายงาน predicate 15 แบบที่ไม่พึ่ง lookup โดยยังไม่ประกาศสอง lookup predicates
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **13/13**, integration **26/26** (รวม MTLS full fixture), EF model check; test ใหม่ครอบคลุม operator, conversion, branch, limit, lookup dependency และเวลา deterministic
+- ติด / รอ: M2.5 ยังไม่ปิด เพราะ `mtiOriginalPolicyExists@1`/`mtiOriginalLoanExists@1` ยังไม่มี lookup adapter และ source identity ที่ตกลงกับ Q2/Q7; ใน runtime ไม่ลงทะเบียน resolver จึงได้ `LookupDependencyUnavailable` และ `namedLookups=[]`
+- ต่อไป: ตกลง Q2/Q7 เรื่องแหล่งข้อมูล/adapter แล้ว implement lookup จริงและทดสอบกับ dependency; working tree ยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — ปิด M2.4 MTLS full fixture กับ schema จริง
+- เสร็จ: Mapping integration test อ่านไฟล์ MTLS สมมติแบบ BIFF5/cp874 ครบ 2,556 แถวด้วย Excel adapter, compile program JSON ของ MTLS จาก M2.2, สร้าง envelope `pa-inform/1` สมมติ และตรวจทุก output ด้วย `JsonSchema.Net 7.2.3`/JSON Schema ที่คัดลอกจาก Informs แบบ read-only; ตรวจแถว C และเลขบัตร 11 หลักโดยไม่แก้ Source ดิบ
+- หลักฐาน: fixture SHA-256 `CDF70EFDB67641764995D525D97FCB9752F01441CFD9F586A2AD558DD6C29E99`; schema SHA-256 `A351C48FDBF85E08F319596F91C745B102CEFDC9372A131AD886CD975A3D266B`; **2,556 records → 2,556 outputs `default` → schema ผ่านทั้งหมด**, C 3 แถวเก็บ `-293` ใน `extras.unparsed`, เลขบัตร 11 หลัก 2 แถวยังเป็นค่าเดิม; full-file test ใช้ **4,510 ms**; `./scripts/check.ps1` ผ่าน build, unit **7/7**, integration **25/25**, EF model check
+- ติด / รอ: ผลนี้ยืนยันโครง/ชนิดตาม schema snapshot ที่ hash ข้างบนด้วยข้อมูลสมมติ; ยังไม่ใช่ business validation ของ Informs, HTTP delivery หรือ UAT partner อื่น; Q5 เรื่อง field สัดส่วน/default และ bindings เพิ่มเติมรอผู้ใช้ส่ง; schema เปลี่ยนต้องตรึง/ตรวจ snapshot ใหม่
+- ต่อไป: import runtime M3 เพื่อกลับมาปิด M2.3 และ M2.6/M2.7; working tree Mapping/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — M2.3 validate/preview/file preview ชุดแรก
+- เสร็จ: Mapping เพิ่ม `POST /api/mapping/mapping-configs/{id}/{validate,preview,preview-file}` สำหรับ pinned version หรือ draft; ใช้ compiler/evaluator เดียวกันกับ raw preview และ file preview; เพิ่ม Delimited CSV/TSV กับ Fixed-width adapters เพื่อให้ route เดียวกันอ่าน 3 formats, โดย MTLS `.xls` preview ตัดที่ 50 records; limits เริ่มต้น body 1 MiB, file 20 MiB, 50 records และ Excel 100,000 cells
+- หลักฐาน: API/reader tests ตรวจ Excel, CSV, TSV, Fixed-width, quote หลายบรรทัด, physical position, malformed/short/overlap, extension ผิด `400` และ file เกิน limit `413`; PostgreSQL Testcontainers ตรวจ preview ด้วย pinned config แล้วจำนวน File Job/Source row/claims/audit ไม่เพิ่ม; `./scripts/check.ps1` ผ่าน build, unit **7/7**, integration **24/24**, EF model check
+- กำลังทำ: M2.3 ยังไม่ปิด — import runtime ยังไม่สร้าง จึงยังพิสูจน์ว่า import ใช้ parser/compiler ชุดเดียวกันไม่ได้; M2.6/M2.7 ยังรอ import/Source raw/UAT acceptance ของ partner อื่น; `GET /capabilities` คง `available=false` เพราะ import/delivery ยังไม่พร้อม และข้อความ reason ของ reader ต้องปรับใน batch source ถัดไป
+- ต่อไป: M2.4 full MTLS/schema test และต่อ import runtime ตาม M3; working tree Mapping/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — ปิด M2.2 Transformation Program ส่วน MTLS
+- เสร็จ: Mapping เพิ่ม compiler/evaluator ที่รับ Source fields และ target paths จาก versioned Program JSON; รองรับ `source`, `literal`, `case`, `defaultIfBlank`, `convert`, nested arrays, conditional items และ fallback items; config ตัวอย่าง MTLS เก็บ P/C, constants และ default ผู้รับประโยชน์ใน JSON ไม่ hardcode ใน evaluator
+- หลักฐาน: unit tests **5/5** ตรวจ P/C, nested insured/beneficiaries, `-293 → null + extras.unparsed`, default จาก config, unknown transaction ที่ไม่เดา fallback, undeclared Source/target paths และ JSON option ผิด; เทียบ program แบบ read-only กับ JSON Schema จริงของ Informs แล้ว target paths **27/27 มีใน schema**; `./scripts/check.ps1` ผ่าน build, unit 5/5, integration **17/17** และ EF model check
+- ติด / รอ: M2.2 ยังไม่ผูก API/งาน import; การตรวจ payload เต็มไฟล์กับ `pa-inform/1` schema จริงอยู่ M2.4; Q5 field สัดส่วนและ business bindings เพิ่มเติมรอผู้ใช้ส่ง; operators ที่เหลืออยู่ M2.5
+- ต่อไป: M2.3 validate/preview แล้ว M2.4 full fixture; working tree Mapping/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — ปิด M2.1 Input Reader และ Excel adapter
+- เสร็จ: Mapping เพิ่ม `IInputReader<TLayout>` contract กลาง, Excel `.xls` adapter และ diagnostics/limits; อ่าน BIFF5 sheet แรก, header/field bindings จาก config, แยก `sourceRowNo` กับ physical row, แปลงตัวเลขแบบ invariant และแก้ข้อความไทย cp874 ที่ CODEPAGE ในไฟล์ระบุ 1252
+- หลักฐาน: fixture สมมติ `MTLSPA0220261201.xls` SHA-256 `CDF70EFDB67641764995D525D97FCB9752F01441CFD9F586A2AD558DD6C29E99`; อ่านครบ **2,556 records**, header 19, P 2,553/C 3, ค่า `180`/`-293` และภาษาไทยถูกต้อง; `./scripts/check.ps1` ผ่าน build, integration tests **17/17**, EF model check
+- ติด / รอ: Excel `.xlsx` ยังไม่อยู่ใน acceptance รอบนี้; Delimited/Fixed-width แยก M2.6/M2.7; API preview/import แยก M2.3/M3; Q9 partner อื่นใน UAT รอ Dev 1/PM ลงผล
+- ต่อไป: M2.2 Transformation Program; working tree Mapping/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — ปิด M1.5 Source catalog/API
+- เสร็จ: Mapping เพิ่ม `GET/POST /api/mapping/source-definitions` และ `GET /{id}`, `POST /{id}/columns` ผ่าน CQRS; field metadata มี key/ordinal/displayName/logicalTypeHint โดย physical columns เป็น `text NULL`; create/append ทำ metadata + DDL + audit ใน PostgreSQL transaction เดียว, expected row version และ request ID กัน concurrent/double action; ไม่คืนชื่อ physical table ให้ browser
+- หลักฐาน: PostgreSQL/API integration tests **15/15 ผ่าน** รวม concurrent create/append ได้ผู้ชนะหนึ่งราย, DDL ล้มเหลวแล้ว version/audit ไม่ค้าง, schema columns ตรง metadata, idempotent request และ field ชน system column ได้ `400`; `./scripts/check.ps1` ผ่าน build/test/EF model check
+- ติด / รอ: Web editor อยู่ M5.3; Q7 สิทธิ์ DDL ของ DB บริษัทต้องตรวจใน environment จริง; Q9 scope partner อื่นใน UAT รอ Dev 1/PM; Dev 1 ตอบ Q4 เป็น D-80 แล้ว
+- ต่อไป: M2.1/Input Reader; working tree Mapping/เอกสารยังไม่ commit/push
+
+### 2026-11-16 — ปิด M1.4 contract/profile snapshot และ capability catalog
+- เสร็จ: Mapping เพิ่ม Informs schema client, immutable contract/profile snapshot, path catalog และ `GET /api/mapping/{contracts/pa-inform/1,destination-profiles,capabilities}`; pinned snapshot อ่านด้วย ID เดิมโดยไม่ fetch latest แทน; profile response ไม่คืน URL/secret; capability ของ reader/transform/delivery ยัง `available=false` ตาม code ที่มีจริง
+- หลักฐาน: HTTP fake + PostgreSQL + API integration tests รวม **11/11 ผ่าน** และ `./scripts/check.ps1` ผ่าน; เรียก `ContractPathCatalog` กับ schema file จริงของ Informs แบบ read-only ได้ **40 paths** รวม `inform.insureds[]`, `inform.insureds[].packageCode`, `inform.insureds[].beneficiaries[].seq`; SHA-256 ของไฟล์ `a351c48fdbf85e08f319596f91c745b102cefdc9372a131ad886cd975a3d266b`
+- ติด / รอ: Informs local :5176 ไม่ตอบ จึงยังไม่มี end-to-end HTTP test กับ service ที่รันจริง; Q9 scope partner อื่นใน UAT รอ Dev 1/PM
+- ต่อไป: M1.5; working tree repo Mapping/เอกสารยังไม่ commit/push
+
+### 2026-11-16 — ปิด M1.3 EF persistence และ immutable Source storage
+- เสร็จ: repo Mapping เพิ่ม `AddMappingRuntime` migration อีก 6 ตาราง รวม catalog/runtime **13 ตาราง + EF history** ใน schema `mapping`; Source physical table สร้างจาก Definition UUID และเพิ่มได้เฉพาะ nullable `text` columns ใน transaction เดียวกับ version metadata; raw row + registry + File Job checkpoint commit ด้วยกัน; immutable trigger ป้องกันแก้ version/Source/content claim/audit และ guard File Job pin/seal; config SaveVersion/activate/disable ใช้ expected row version, activate lock control row และดึง extension จาก pinned Input Layout
+- หลักฐาน: PostgreSQL 15 Testcontainers integration tests **7/7 ผ่าน** รวม raw row เดิมหลังเพิ่ม field, unknown field rollback, content claim unique/immutable, old Config Version/File Job pin, concurrent activate ที่ได้ `Applied` 1 กับ `RowVersionConflict` 1; `./scripts/check.ps1` ผ่าน build/test/EF model check และ `public` ไม่มีตาราง
+- กำลังทำ: M1.4/M1.5 แยกต่อ — capability/compiler/parser readiness, Source API/DDL audit และ Row Job/outbox ยังไม่ได้เปิดใช้งาน; Q9 ขอบเขต partner อื่นใน UAT รอ Dev 1/PM
+- ต่อไป: M1.4 แล้ว M1.5; working tree repo Mapping/เอกสารยังไม่ commit/push ตามคำสั่งผู้ใช้
+
+### 2026-11-16 — M1.3 catalog persistence ชุดแรก
+- เสร็จ: repo Mapping เพิ่ม entities/EF configurations/migration `AddMappingCatalog` สำหรับ 7 ตาราง catalog ใน schema `mapping` พร้อม composite FK, row version และ trigger ห้ามแก้ immutable versions/snapshots; PostgreSQL 15 Testcontainers integration tests **4/4 ผ่าน** และ `./scripts/check.ps1` ผ่าน build/test/model check ด้วย .NET 10; ไม่มีตาราง `public`
+- กำลังทำ: M1.3 ยังไม่ปิด — ต้องต่อ File Jobs/Source registry/physical raw rows, activation transaction และ concurrent activate tests; ยังไม่ทำ API/Web หรือแตะ Informs
+- ติด / รอ: source ชุดถัดไปต้องแจ้งรายการไฟล์/รอยืนยันใหม่ตาม AGENTS.md; Q9 ขอบเขต partner อื่นใน UAT รอ Dev 1/PM ลง D-xx; Q5 fields/fixtures partner อื่นรอผู้ใช้ส่ง
+- ต่อไป: ปิดส่วนที่เหลือของ M1.3 ด้วย source batch ใหม่หลังยืนยัน; working tree ทั้ง repo เอกสารและ Mapping ยังไม่ commit/push
+
+### 2026-11-16 — partner อื่นต้องเปิดใช้ใน UAT
+- เสร็จ: ผู้ใช้ตอบ Q9 ว่า **partner อื่นจะเปิดใช้ใน UAT**; ขอบเขตที่ขอจึงเป็น API/Web/runtime สำหรับ Excel, Delimited (CSV/TSV), Fixed-width และ config ของหลาย partner ที่ใช้งานจริง ไม่ใช่เพียง parser demo/fixture สมมติ
+- กำลังทำ: เตรียมเกณฑ์ตรวจรับและลำดับ implement แบบหลาย partner/format โดยไม่ hardcode fields ของ MTLS
+- ติด / รอ: ขอ Dev 1/PM ลงผลแก้ D-01/D-70 และวันส่งใน `rules.md`; รายชื่อ partner, field definitions และไฟล์ตัวอย่างสมมติของแต่ละงานยังรอข้อมูลจากผู้ใช้ตาม M-24/Q5; M1.2 route/DTO review ยังเลื่อนตามคำขอเดิม
+- ต่อไป: หลังขอบเขต/วันส่งตกลงแล้ว แจ้งรายการไฟล์ source ของ API/Web/reader และรอยืนยันตาม AGENTS.md ก่อนแก้; เอกสารยังไม่ commit/push
+
+### 2026-11-16 — API/หน้า Mapping ต้องรองรับหลาย format
+- เสร็จ: ผู้ใช้แก้ขอบเขตว่า MTLS เป็นเพียงตัวอย่างหนึ่ง; รอบแรกต้องรองรับ **Excel, Delimited (CSV/TSV) และ Fixed-width** จริงผ่าน API/หน้า Web เดียวกัน → [แบบหลาย format](multi-format-api-web-design.md), M-27; เลิกใช้ข้อเสนอเลื่อน Delimited/Fixed-width ใน Q2 เป็นแผนปัจจุบัน
+- กำลังทำ: M1.2 ปรับ contract ให้ `inputLayout.kind`, capabilities, preview/jobs และ UI เป็นกลางต่อ format; M2.1/M2.6/M2.7 แยก reader adapters, M5.3 ครอบคลุมหลาย config/format; ยังไม่แก้ source code/Web
+- ติด / รอ: Q9 ต้องให้ Dev 1/PM ตกลงการขยายจาก D-70 เรื่อง UAT/partner/เป้าส่ง; M1.2 route/DTO review ยังคงเลื่อนตามผู้ใช้; Q4/Q5/Q7 ที่เหลือคงเดิม
+- ต่อไป: ยืนยัน Q9 กับ Dev 1 แล้วจัดชุด source/API/Web files เพื่อขอยืนยันก่อน implement ตาม AGENTS.md; ไม่ commit/push จนผู้ใช้สั่ง
 
 ### 2026-11-16 — รวม fixture สมมติและแก้ข้อเท็จจริงไฟล์ MTLS
 - เสร็จ: ดึง commit ของ Dev 1 ที่เพิ่ม [fixture MTLS สมมติ 2,556 แถว](fixtures/README.md) และแก้ [mtls-file.md](mtls-file.md) ว่าไฟล์จริงเป็น BIFF5/stream `Book`, CODEPAGE 1252 แต่ข้อความไทยเป็น cp874; รวมข้อความ Q7 ของ Dev 1 กับคำตอบ Dev 2 โดยไม่ทับกัน; ปรับร่าง API/แผน M2 ให้ใช้ BIFF5
@@ -273,31 +416,42 @@ last_updated: 2026-11-16
   - ขอบเขตปิดงาน: Q2 ทางเลือกหลักและ Q6 ได้คำตอบแล้ว; Q4/Q5/Q7/Q8 ยังเป็น gate ของ contract/business binding/environment/API ที่เกี่ยว ไม่ทำให้ต้องเดา fields หรืออ้างว่าปิด M0.2/M1.2/M1.3/M1.5 แล้ว
   - ร่าง 11-13: [data-runtime-design.md](data-runtime-design.md) ครอบคลุม Module/interface, Source registry ที่ไม่เก็บ raw กลาง, definition/version pin, transaction/lease/recovery, global budget/attempt cap, row/output counts และ scenarios S01–S36; ยังไม่ปิด M1.1 เพราะ exact DDL/FKs/raw types และประเด็น Q4/Q6/Q7 ที่เกี่ยวต้องได้ข้อสรุป
   - คำตอบผู้ใช้ (11-13), Q2.1: physical Source Table แยกตาม config ตาม M-15 แทนตารางกลาง + JSONB; แบบต้องครอบคลุม table/field metadata, source identity, transaction/constraints และการ pin table definition ให้ config version/งานเดิม รวมถึง schema evolution/วิธีสร้างตารางที่ยังรอคำตอบ
-- [ ] **M1.2** ปิด Mapping API/DTO/error contract สำหรับ Web ภายหลัง — เสร็จเมื่อ: route/field paths/BaseResponse/version conflict/pagination/action states/preview limits มีตัวอย่าง request-response และตกลง prefix ใน Q8 · เป้า 11-17 · 🔄 [ร่าง contract](mapping-api-contract.md) 11-16; prefix `/api/mapping` ยืนยันแล้ว, ผู้ใช้ขอเลื่อน review route/DTO ที่กระทบ Web/contract boundary จึงยังไม่ติ๊กเสร็จ
-- [ ] **M1.3** Implement EF persistence, config/version lifecycle และ immutable Source storage — เสร็จเมื่อ: migration/constraints ผ่าน PostgreSQL integration tests, activate พร้อมกันได้ conflict ชัดเจน, version เก่า/Source rows ไม่ถูกแก้ · เป้า 11-18 · รอ M1.1 และการยืนยันรายการไฟล์ source
-- [ ] **M1.4** Implement Informs contract/profile snapshot และ capability catalog — เสร็จเมื่อ: schema/hash/path catalog ตรง Informs `insureds[]`, version pin ได้, ไม่มี latest-schema fallback เปลี่ยนงานเดิม, ไม่คืน secret/เปิด capability ที่ยังไม่ทำ · เป้า 11-18
+- [ ] **M1.2** ปิด Mapping API/DTO/error contract สำหรับ Web ภายหลัง — เสร็จเมื่อ: route/field paths/BaseResponse/version conflict/pagination/action states/preview limits มีตัวอย่าง request-response และตกลง prefix ใน Q8 · เป้า 11-17 · 🔄 [ร่าง contract](mapping-api-contract.md) และ [แบบหลาย format](multi-format-api-web-design.md); prefix `/api/mapping` ยืนยันแล้ว, config/preview/jobs/capabilities ต้องใช้กับ Excel/Delimited/FixedWidth โดยไม่มี route เฉพาะ MTLS; ผู้ใช้ขอเลื่อน review route/DTO ที่กระทบ Web/contract boundary จึงยังไม่ติ๊กเสร็จ
+- [x] **M1.3** Implement EF persistence, config/version lifecycle และ immutable Source storage — เสร็จเมื่อ: migration/constraints ผ่าน PostgreSQL integration tests, activate พร้อมกันได้ conflict ชัดเจน, version เก่า/Source rows ไม่ถูกแก้ · เป้า 11-18 · ✅ 11-16 Mapping `AddMappingCatalog` + `AddMappingRuntime`, PostgreSQL integration tests 7/7 และ `scripts/check.ps1` ผ่าน; code ยังไม่ commit/push
+  - 🔄 11-16 ชุดแรก: Mapping `AddMappingCatalog` migration สร้าง **7 catalog tables** + EF history ใน `mapping`; 4 integration tests ผ่าน (schema/FK owner/version immutability/stale row version) และ `scripts/check.ps1` ผ่าน; โค้ดและเอกสารยังไม่ commit ส่วน File Job/physical Source/activation transaction/concurrent activate ยังรอ batch ถัดไป จึงไม่ติ๊กเสร็จ
+  - ✅ 11-16 ชุดสอง: `AddMappingRuntime` เพิ่ม File Job/path+content claim/Source registry/control/audit รวม 6 ตาราง; physical raw Source table + version เพิ่ม columns atomic, raw row/registry/checkpoint atomic, triggers/guards และ config lifecycle transaction; 7 integration tests ผ่านรวม concurrency/immutability/pin/rollback; API/reader/Row Job/outbox แยก milestone ตามแผน
+- [x] **M1.4** Implement Informs contract/profile snapshot และ capability catalog — เสร็จเมื่อ: schema/hash/path catalog ตรง Informs `insureds[]`, version pin ได้, ไม่มี latest-schema fallback เปลี่ยนงานเดิม, ไม่คืน secret/เปิด capability ที่ยังไม่ทำ · เป้า 11-18 · ✅ 11-16 Mapping code + [แบบ M1.4](m1-4-contract-catalog-design.md), PostgreSQL/HTTP fake/API integration tests 11/11 และ `scripts/check.ps1` ผ่าน; code ยังไม่ commit/push
   - คำตอบผู้ใช้ (11-13), Q2.7: destination ช่วงแรกเป็น Informs API (`ApiContract`) ตาม M-21; LegacyTable/JsonFile/DatabaseTable เป็น backlog ไม่แสดงว่าพร้อมใช้จากการย้าย Transformation Program ทั้งหมด
-- [ ] **M1.5** Implement Source catalog/API สำหรับสร้าง physical Source Table และเพิ่ม columns ผ่าน Web — เสร็จเมื่อ: metadata/physical schema อยู่ `mapping` และตรงกัน, validation ชื่อ/ชนิด columns/system columns ผ่าน, สร้าง/เพิ่ม column พร้อมกันหรือล้มเหลวไม่ทิ้ง table/metadata ค้าง, บันทึก audit และ PostgreSQL integration tests ผ่าน; เพิ่ม columns ได้อย่างเดียวตาม M-17 และงานเก่าอ่าน definition/Source เดิมได้ · เป้า 11-18 (ร่างสำหรับ review M0.2) · รอ M1.1/M1.2, DDL permissions ใน Q7 และการยืนยันรายการไฟล์ source
+- [x] **M1.5** Implement Source catalog/API สำหรับสร้าง physical Source Table และเพิ่ม columns ผ่าน Web — เสร็จเมื่อ: metadata/physical schema อยู่ `mapping` และตรงกัน, validation ชื่อ/ชนิด columns/system columns ผ่าน, สร้าง/เพิ่ม column พร้อมกันหรือล้มเหลวไม่ทิ้ง table/metadata ค้าง, บันทึก audit และ PostgreSQL integration tests ผ่าน; เพิ่ม columns ได้อย่างเดียวตาม M-17 และงานเก่าอ่าน definition/Source เดิมได้ · เป้า 11-18 (ร่างสำหรับ review M0.2) · ✅ 11-16 Mapping API/repository + PostgreSQL/API integration tests 15/15 และ `scripts/check.ps1` ผ่าน; Web editor แยก M5.3, Q7 บริษัทแยกตรวจ
 
-### M2 — อ่าน MTLS และสร้าง payload
+### M2 — อ่านไฟล์หลาย format และสร้าง payload
 
-- [ ] **M2.1** Implement Excel reader สำหรับ MTLS — เสร็จเมื่อ: fixture ที่รับรองอ่านได้ครบ **2,556 แถว** จาก sheet แรก/header 19 columns/cp874, มี physical/import row number, ภาษาไทยและ number formatting ถูกต้อง · เป้า 11-18 · [fixture สมมติพร้อมแล้ว](fixtures/README.md); รอยืนยันรายการไฟล์ source ก่อน implement
+- [x] **M2.1** Implement Input Reader contract กลางและ Excel adapter; ใช้ MTLS เป็นหนึ่ง fixture — เสร็จเมื่อ: parser คืน raw record/physical position/diagnostics แบบร่วมกับ format อื่น และ [MTLS fixture สมมติ](fixtures/README.md) อ่านครบ **2,556 แถว** จาก sheet แรก/header 19 columns/cp874 โดยภาษาไทย/number formatting ถูกต้อง · เป้า 11-18 · ✅ 11-16 Mapping reader + fixture สมมติ, integration tests 17/17 และ `scripts/check.ps1` ผ่าน; code ยังไม่ commit/push
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 3: เริ่ม `.xls` BIFF8 ตามตัวอย่างก่อน; `.xlsx` ไม่เป็นเงื่อนไขตรวจรับช่วงแรก และยังไม่ถือว่ายืนยัน fixture ทดสอบใน Q7
   - Dev 1 ตรวจใหม่ (11-16): ไฟล์จริงและ fixture เป็น **BIFF5/stream `Book`** ไม่ใช่ BIFF8; CODEPAGE ระบุ 1252 แต่ข้อความไทยเป็น cp874; acceptance ของ reader ต้องยึด [mtls-file.md](mtls-file.md) ที่แก้แล้วและ [fixture สมมติ](fixtures/README.md)
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.1: `sourceRowNo` เป็นลำดับแถวข้อมูลเริ่ม 1 ไม่รวม header/แถวว่าง; เก็บ Physical Line Number แยก และ retry ใช้เลขเดิมตาม M-06 ไม่อิงค่า `nSeq`
-- [ ] **M2.2** ย้าย Transformation Program ส่วนที่ MTLS ใช้ และสร้าง versioned MTLS config — เสร็จเมื่อ: nested `insureds[]/beneficiaries[]`, constants, P/C, null+unparsed/default ตามคำตอบ kickoff ผ่าน unit/contract tests โดยไม่ตรวจ product/Client API เอง · เป้า 11-20 · รอ Q1/Q5
+- [x] **M2.2** Implement Transformation Program กลางและ versioned config ตัวอย่าง MTLS — เสร็จเมื่อ: evaluator รับ Source fields/target paths จาก config ไม่ hardcode partner; nested `insureds[]/beneficiaries[]`, constants, P/C, null+unparsed/default ของ MTLS เป็น test case ผ่าน unit/contract tests โดยไม่ตรวจ product/Client API เอง · เป้า 11-20 · ✅ 11-16 Program JSON สมมติ + compiler/evaluator, unit 5/5, target paths 27/27 ตรง JSON Schema จริงของ Informs และ `scripts/check.ps1` ผ่าน; full schema/fixture แยก M2.4, business bindings ที่ผู้ใช้จะส่งรอ Q5; code ยังไม่ commit/push
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 4: default ผู้รับประโยชน์อยู่ใน versioned config ของ MTLS ผ่าน Transformation Program ตาม M-04; เรื่องสัดส่วนใน Q5 ยังรอคำตอบ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 5: ค่าคงที่ MTLS และกฎ P/C อยู่ใน versioned config ผ่าน `literal` / `case` ตาม M-05; ไม่ hardcode ใน C# และไม่กำหนด fallback ให้ transaction type ที่ยังไม่ตกลงใน Q5
-- [ ] **M2.3** Implement validate/preview/workbook preview — เสร็จเมื่อ: ใช้ runtime compiler เดียวกัน, diagnostics มี path/code, จำกัดขนาด/records และ integration test ยืนยันไม่มี job/source/outbox/HTTP/archive side effects · เป้า 11-23
-- [ ] **M2.4** ทดสอบ MTLS เต็มไฟล์กับ schema จริง — เสร็จเมื่อ: 2,556 แถวได้ 2,556 outputs `default` ผ่าน `pa-inform/1`, แถว C ครบและค่าแปลงไม่ได้ยังอยู่ใน unparsed; บันทึกผล/เวลารัน/fixture identity โดยไม่มี PII · เป้า 11-23 · [fixture สมมติพร้อมแล้ว](fixtures/README.md); Q5/schema semantics ติดตามแยก
-- [ ] **M2.5** ย้าย Transformation Program ส่วนที่เหลือให้ครบตาม M-03 หลังส่วนที่ MTLS ใช้ — เสร็จเมื่อ: มี traceability และผลทดสอบของ value expressions 13 แบบ, predicates 17 แบบ, conversion targets 7 ชนิด, filter/branches, nested object/array, Named Transform 1 รายการ และ Named Lookup 2 รายการครบ; capability ที่แสดงว่าพร้อมใช้งานต้องมี implementation และ dependency พร้อมจริง · เป้า รอ review M0.2 โดยคง milestone เดิม · รอ M2.2 และคำตอบ Q2/Q7 สำหรับ lookup adapters ที่ผูก legacy
+- [ ] **M2.3** Implement validate/preview/file preview ตาม `inputLayout.kind` — เสร็จเมื่อ: Excel/Delimited/FixedWidth ใช้ parser/runtime compiler เดียวกับ import ของ format นั้น, diagnostics มี path/code, จำกัดขนาด/records และ integration test ยืนยันไม่มี job/source/outbox/HTTP/archive side effects · เป้า 11-23 เดิม; ขอบเขตเพิ่มรอ Q9 · 🔄 11-16 routes/3 readers/limits/diagnostics ผ่าน unit 7/7, integration 24/24 และ `scripts/check.ps1`; pinned preview read-only ต่อ PostgreSQL แล้ว counts ไม่เพิ่ม; ยังรอพิสูจน์ import ใช้ชุดเดียวกันและ Q9/UAT
+  - 🔄 11-17 M2.6/M2.7 พิสูจน์ shared parser/validator ของ Delimited และ FixedWidth กับ pinned preview → import → Source จริงแล้ว; ยังรอ Excel import dispatch และ transform worker ของ M3.3 ที่ใช้ compiler/evaluator เดียวกับ preview รวมถึง Q9 จึงยังไม่ปิด M2.3
+- [x] **M2.4** ทดสอบ MTLS เต็มไฟล์กับ schema จริง — เสร็จเมื่อ: 2,556 แถวได้ 2,556 outputs `default` ผ่าน `pa-inform/1`, แถว C ครบและค่าแปลงไม่ได้ยังอยู่ใน unparsed; บันทึกผล/เวลารัน/fixture identity โดยไม่มี PII · เป้า 11-23 · ✅ 11-16 fixture/schema SHA-256 ตรึงแล้ว, full-file test 4,510 ms: 2,556/2,556 outputs ผ่าน schema, C 3 แถวมี unparsed, `scripts/check.ps1` ผ่าน; Q5/business semantics และ HTTP/UAT แยกต่อ; code ยังไม่ commit/push
+- [x] **M2.5** ย้าย Transformation Program ส่วนที่เหลือให้ครบตาม M-03 หลังส่วนที่ MTLS ใช้ — เสร็จเมื่อ: มี traceability และผลทดสอบของ value expressions 13 แบบ, predicates 17 แบบ, conversion targets 7 ชนิด, filter/branches, nested object/array, Named Transform 1 รายการ และ Named Lookup 2 รายการครบ; capability ที่แสดงว่าพร้อมใช้งานต้องมี implementation และ dependency พร้อมจริง · เป้า รอ review M0.2 โดยคง milestone เดิม · ✅ 11-17 Mapping SQL Server adapter + async evaluator/preview/dependency validation/capabilities ตาม M-28; `check.ps1` unit 17/17, integration 32/32 และ EF model check ผ่าน; UAT read-only smoke ผ่านทั้งสอง lookup และ API predicates 17 แบบ; [traceability](m2-5-transformation-traceability.md); code ยังไม่ commit/push
+- [ ] **M2.6** Implement Delimited adapter สำหรับ CSV/TSV ตาม Input Reader contract กลาง — เสร็จเมื่อ: config กำหนด delimiter/quote/header/encoding/field bindings ได้; synthetic CSV และ TSV ผ่าน validate/preview/import/Source raw/row numbering/diagnostics โดยไม่ hardcode MTLS และ partner ที่ใช้ format นี้ผ่าน acceptance เมื่อได้รับ fields/fixture · เป้า รอ Dev 1/PM ตกลง Q9 · 🔄 11-17 reader/shared validator/preview/pinned snapshot import/Source raw ผ่านแล้วตาม [หลักฐาน M2.6](m2-6-delimited-import-design.md); `check.ps1` unit 17/17, integration 48/48 และ EF model ผ่าน; acceptance partner จริงยังรอ Q5/Q9 และ intake/queued processing แยก M3; ยังไม่ติ๊กปิดทั้งข้อและยังไม่ commit/push
+- [ ] **M2.7** Implement Fixed-width adapter ตาม Input Reader contract กลาง — เสร็จเมื่อ: config กำหนดช่วง start/length/encoding/field bindings ได้; synthetic fixed-width ผ่าน validate/preview/import/Source raw/row numbering/diagnostics และ reject ช่วง field ซ้อน/record สั้นด้วย code/path ชัดเจน; partner ที่ใช้ format นี้ผ่าน acceptance เมื่อได้รับ fields/fixture · เป้า รอ Dev 1/PM ตกลง Q9 · 🔄 11-17 shared validator/reader/preview/pinned import/Source raw/Row Job/outbox ผ่านแล้วตาม [หลักฐาน M2.7](m2-7-fixed-width-import-design.md); `check.ps1` unit 17/17, integration 60/60 และ EF model ผ่าน; partner acceptance ยังรอ Q5/Q9 ไม่ติ๊กปิดทั้งข้อ และยังไม่ commit/push
 
 ### M3 — รับไฟล์และประมวลผลแบบ durable
 
-- [ ] **M3.1** เพิ่ม outbox/Kafka consumers และ local infrastructure ตาม Informs — เสร็จเมื่อ: transaction/offset/redelivery integration tests ผ่าน, events มี job IDs ไม่มี PII, topic names และบริษัท dependency ได้ข้อสรุป · เป้า 11-20 · แนวทาง Q1 ข้อ 9 ตอบแล้วตาม M-13/M-14; รายละเอียดบริษัทใน Q7 ยังรอ
+- [x] **M3.1** เพิ่ม outbox/Kafka consumers และ local infrastructure ตาม Informs — เสร็จเมื่อ: transaction/offset/redelivery integration tests ผ่าน, events มี job IDs ไม่มี PII และ local broker/topic/group พร้อม · เป้า 11-20 · ปิด 11-17 ตาม M-13/M-14/M-31 และข้อตกลงใช้ Kafka local ก่อน; dependency บริษัทติดตามแยกใน Q7 ก่อนเปิดใช้งาน environment บริษัท
+  - เกณฑ์เดิมรวม “topic names และบริษัท dependency ได้ข้อสรุป”; 11-17 ผู้ใช้ตกลงใช้ local ต่อและถามปิด M3.1 จึงแยกเกณฑ์บริษัทไป Q7 โดยคงเป็นเงื่อนไขก่อนใช้งานบริษัท ไม่ลดข้อกำหนด deployment
+  - ✅ 11-17 ส่วน local ตาม M-31: dispatcher + strict typed event + durable inbox/Row Job wake-up + manual offset/redelivery พร้อม; `check.ps1` ผ่าน unit 20/integration 74/EF model, รวม M3.1 integration 14 ข้อ; local Kafka healthy และ topic 3 partitions; [หลักฐาน/รายการไฟล์](m3-1-messaging-design.md) · consumer จัดคิวต่อให้ M3.3 ยังไม่แปลงข้อมูล · ปิด M3.1 ในขอบเขต local แล้ว
+  - 🔄 11-17 ส่วนที่ M2.6 ต้องใช้: outbox persistence + IDs-only transform message + transaction/rollback tests ผ่านแล้ว; ยังไม่มี Kafka dispatcher/consumer/offset tests จึงไม่ปิด M3.1 และ topic default เป็นของ local ตาม M-29 ไม่ใช่การตกลง topic บริษัท
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 9.1: เลือก Kafka + transactional outbox ตาม M-13; ยังรอการเตรียม broker local และรายละเอียด topics/groups/owner ของบริษัทใน Q7 ไม่ถือว่าพร้อมใช้งานเพียงเพราะเลือกแนวทางแล้ว
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 9.2: เริ่ม Kafka local ผ่าน Docker ตาม M-14; ต้องแจ้งไฟล์ Compose/config/test ที่จะเพิ่มหรือแก้และรอยืนยันก่อนลงมือ ยังไม่มีการ provision หรือผลทดสอบ Kafka ของ Mapping ในงานนี้
-- [ ] **M3.2** Implement scan/snapshot/import/resume/archive — เสร็จเมื่อ: pin version ก่อนรับ, partial-file stability/path containment/ownership ทำงาน, หลาย scanner ไม่รับ occurrence ซ้ำ, Source+Row Job+outbox atomic, archive ไม่ทำหลักฐานหายเมื่อ original เปลี่ยน · เป้า 11-23 · duplicate-content policy ตามคำตอบ Q6/M-25 และแบบ M1.1
+- [x] **M3.2** Implement scan/snapshot/import/resume/archive — เสร็จเมื่อ: pin version ก่อนรับ, partial-file stability/path containment/ownership ทำงาน, หลาย scanner ไม่รับ occurrence ซ้ำ, Source+Row Job+outbox atomic, archive ไม่ทำหลักฐานหายเมื่อ original เปลี่ยน · เป้า 11-23 · ปิด 11-17 ในขอบเขต local ตาม M-25/M-32; dependency บริษัทติดตาม Q7 ก่อน deployment
+  - ✅ 11-17 `check.ps1` ผ่าน unit 22/22, integration 95/95 และ EF model; รวม M3.2 integration 21 ข้อ ตรวจ atomic receive/seal/rows, scanners/claims/dedup, fencing, cancel/resume, snapshot/archive DB failure, changed original, Kafka receipt/offset/poison/republish/restart; Excel raw 2,556 × 19 fields รวม NULL และ hosted intake ครบสาม format/2,560 แถวผ่าน [หลักฐานปิดงาน/รายการไฟล์](m3-2-file-intake-design.md); ผู้ใช้ยืนยันเพิ่มไฟล์ Source writer เพื่อแก้ NULL แล้ว โค้ด commit `9198a54` บน develop ยังไม่ push; เอกสารยังไม่ commit
+  - 🔄 11-17 เตรียม [แบบ/source batch M3.2](m3-2-file-intake-design.md) แล้ว รอยืนยันก่อนแก้ source; เสนอ snapshot-copy archive ที่คง input เดิม + path pointer เพื่อกันรับซ้ำและรักษาไฟล์ใหม่ที่ partner เขียนทับ ไม่เปลี่ยน contract/day/ขอบเขต business; M3.3/M4 ยังแยกทำ
+  - 🔄 11-17 import core สำหรับ File Job/snapshot ที่เตรียมแล้วผ่าน CSV/TSV (M2.6) และ FixedWidth (M2.7) + pinned hash/version + lease/fencing + atomic rows + cancellation/resume; scanner/path stability/snapshot filesystem/archive ยังแยกทำ ไม่ปิด M3.2 ทั้งข้อ
 - [ ] **M3.3** Implement row transformation jobs, claim/lease/recovery และ row diagnostics — เสร็จเมื่อ: restart/redelivery ไม่สร้าง Source/output ซ้ำ, business conversion failure ไม่ทิ้งแถว, system/contract failure แสดงในยอดที่ยังไม่ส่ง และแถวอื่นไปต่อได้ · เป้า 11-24
 
 ### M4 — ส่ง Informs และดูแลผลการส่ง
@@ -316,8 +470,9 @@ last_updated: 2026-11-16
 ### M5 — ส่งต่อ Web และเตรียม Kubernetes
 
 - [ ] **M5.1** เตรียม environment config, Linux paths, share mount, probes และ shutdown/recovery — เสร็จเมื่อ: `/health/live` และ `/health/ready` (ตรวจ DB) ใช้ได้, secrets/key references ไม่อยู่ใน image, pod restart ไม่ทำงานหาย, deploy/migration requirements ส่งให้ Dev 1/ทีม infrastructure · เป้า 12-04
+  - Dev 1: (11-17) Informs + Products ทำ probe แล้ว — ขอให้ Mapping ใช้แบบเดียวกันเพื่อให้ manifest ของ Kubernetes เหมือนกันทั้ง 3 service: package `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore` 10.0.4 ใน `Mapping.Api` · `builder.Services.AddHealthChecks().AddDbContextCheck<MappingDbContext>(tags: ["ready"]);` · `app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });` (ไม่ตรวจอะไร = process ยังตอบ) · `app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });` (ตรวจ DB อย่างเดียว — ไม่ใส่ Kafka / Informs API / share folder เพราะตอนนั้นล่ม งานควร retry ไม่ใช่ตัด pod ออก) · ตอบข้อความธรรมดา `Healthy` / `Unhealthy` (`200` / `503`) ไม่ห่อ `BaseResponse` · test: integration test 2 เคส — DB ปกติ live/ready `200` · connection string ชี้ `Host=127.0.0.1;Port=1` → live `200` ready `503`
 - [ ] **M5.2** ส่ง API contract/OpenAPI/examples ให้ทำ Web — เสร็จเมื่อ: เอกสารตัวอย่าง/DTO/states/counts/action availability ตรง API ที่รันจริง, CORS/base URL พร้อม, ไม่มี docs ใน repo โค้ด · เป้า 11-27
-- [ ] **M5.3** Implement และเชื่อมหน้า mapping หลังได้รับ Web design — เสร็จเมื่อ: scope ที่ตกลงใช้งานบนเครื่องผ่าน `core/mapping-api.ts` + `features/mapping/`, build/unit tests ของ Web ผ่าน, ไม่แก้เมนูอื่นและไม่เพิ่ม package โดยยังไม่บอก Dev 1 · เป้า **12-03** · รอ design จากผู้ใช้; รายการย่อยเพิ่มหลัง review design
+- [ ] **M5.3** Implement และเชื่อมหน้า mapping หลังได้รับ Web design — เสร็จเมื่อ: scope ที่ตกลงใช้งานบนเครื่องผ่าน `core/mapping-api.ts` + `features/mapping/`, build/unit tests ของ Web ผ่าน, ไม่แก้เมนูอื่นและไม่เพิ่ม package โดยยังไม่บอก Dev 1 · เป้า **12-03** เดิม · [แบบหลาย format](multi-format-api-web-design.md) ให้ Config editor/preview/jobs ใช้กับ Excel/Delimited/FixedWidth โดยไม่มี field MTLS hardcode; ขอบเขต/วันส่งเพิ่มรอ Q9 และ layout รายละเอียดรอ review design
   - คำตอบผู้ใช้ (11-13), Q2.5: รวมการเปิด JSON Delivery Payload แบบ read-only เพื่อเทียบ Source ตาม M-19; แสดงเฉพาะ snapshot ที่มีจริง รวม rejected delivery ถ้ายังไม่มี payload ให้แสดงสถานะ/diagnostic ตามจริง
   - คำตอบผู้ใช้ (11-13), Q2.4: รวมการเปิด Source ดิบรายแถวแบบ read-only จากรายการไฟล์/แถวตาม M-18; ไม่ทำหน้าจัดการใบหรือ business validation ซ้ำกับ Informs/UW
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 8: Config (สร้าง version/validate/preview/activate/disable) + ผลการส่ง (ไฟล์/แถว/attempts) + retry ตามสถานะ ตาม M-12; ยังรอ layout/interaction จาก Web design และต้องยืนยันรายการไฟล์ก่อนแก้ source ตามเดิม
@@ -328,7 +483,7 @@ last_updated: 2026-11-16
 - [ ] **M6.1** ทดสอบร่วมและ recovery บน cluster — เสร็จเมื่อ: fixture ผ่านเส้นทาง share → Mapping → Informs ครบ, ทดสอบ restart/หลาย consumer/permissions/mount/secrets พร้อมหลักฐาน environment · เป้า 12-09
 - [ ] **M6.2** ปิด regression และเตรียมหลักฐาน UAT — เสร็จเมื่อ: acceptance ในแผน API §9 ผ่าน, issue ที่บล็อกถูกปิด, มีวิธีดูยอด/แก้เหตุส่งไม่สำเร็จ/retry และ owner ของข้อจำกัดที่ยังค้าง · เป้า 12-14
 
-Source catalog/การกำหนด fields และสร้าง physical Source Table ผ่าน Web ผู้ใช้เลือกแล้วตาม M-16 และเพิ่ม M1.5; ส่วน feature ที่เสนอเลื่อนหลังเส้นทาง MTLS API (Table verification/impact admin เพิ่มเติม, input อื่น, destination อื่น, generic contract/profile admin, business resend/rollout) ยังอยู่ใน [feature matrix](api-implementation-plan.md#2-ขอบเขตและการเทียบ-feature) และ Q2/Q3; เพิ่มงาน/เป้าเมื่อได้รับข้อตกลง ไม่ถือว่าได้รับอนุมัติให้ implement หรือถูกตัดทิ้งแล้ว
+Source catalog/การกำหนด fields และสร้าง physical Source Table ผ่าน Web ผู้ใช้เลือกแล้วตาม M-16 และเพิ่ม M1.5; ผู้ใช้ขอ reader/API/Web สำหรับ Excel/Delimited/FixedWidth แล้ว จึงเพิ่ม M2.6/M2.7 และ Q9 เพื่อให้ Dev 1/PM ตกลง scope/เป้า ส่วน Table verification/impact admin เพิ่มเติม, destination อื่น, generic contract/profile admin, business resend/rollout ยังอยู่ใน [feature matrix](api-implementation-plan.md#2-ขอบเขตและการเทียบ-feature) และ Q2/Q3
 
 ## 4. การตัดสินใจของ mapping (`M-xx`)
 
@@ -541,6 +696,53 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ข้อจำกัด:** M1.2/M1.3/M1.5 และ full fixture/Kafka/HTTP tests ยังต้องทำ; Q4/Q5/Q7/Q8 และ Web design ติดตามแยก ไม่เปลี่ยน milestone/contract/business semantics หรืออ้าง corporate readiness
 - **ห้าม:** ใช้การปิด design แทนการยืนยันรายการไฟล์ก่อนแก้ source หรืออ้างว่าเอกสารถูก commit/deploy แล้ว
 
+### M-27 API/หน้า Mapping ใช้กับหลาย config และหลายรูปแบบไฟล์
+- **ตัดสิน (2026-11-16):** ตามคำชี้แจงผู้ใช้ ให้ MTLS เป็นเพียง example/fixture หนึ่ง; [แบบ API/Web หลาย format](multi-format-api-web-design.md) ใช้ config/version, Source definition, Transformation Program, job/inspection/retry และหน้า Web ชุดเดียวกัน โดย Input Layout เลือก adapter `Excel`, `Delimited` (CSV/TSV) หรือ `FixedWidth` ต่อ config
+- **ทำไม:** แต่ละงานมีโครง fields และ file format ต่างกัน; การ hardcode MTLS ใน API/UI จะบังคับงานอื่นให้ใช้โครงผิดและต้องแก้ code ทุกครั้งที่รับ format ใหม่
+- **ไม่เลือก:** ทำ `/mtls/*`/หน้า MTLS แยกเป็นโครงหลัก หรือแสดง format ว่าพร้อมใช้งานก่อน parser/validation/tests มีจริง
+- **ตัวอย่างข้อมูลสมมติ:** config A/Excel อ่าน `R001` จาก sheet row 2; config B/CSV อ่าน `R001,180` จาก physical line 2; config C/FixedWidth อ่าน `R001 000180` จาก physical line 1; ทั้งสามคืน Source fields/row identity และไป flow เดียวกัน แต่ layout options อยู่ใน version ของแต่ละ config
+- **ข้อจำกัด:** การขยายจาก D-70 เรื่อง format/partner/วันส่งเป็น Q9 ให้ Dev 1/PM ตกลงก่อน source scope เพิ่ม; destination ยังเป็น Informs API ตาม M-21, business fields Q5 ยังไม่เดา และ M1.2 review route/DTO ที่กระทบ Web ยังเลื่อนตามผู้ใช้
+
+### M-28 Named Lookup อ่าน SQL Server ภายนอกด้วย business keys
+- **ตัดสิน (2026-11-17):** ผู้ใช้ระบุ SQL Server และตาราง `NewValidateDB.dbo.MTI_ORIGINAL`; ยืนยันให้ policy lookup เทียบ `SYSTEM_ID + CPRODUCTNAME + CLOANNUMBER` และ loan lookup เทียบ `SYSTEM_ID + CLOANNUMBER` โดยนับทุกแถวที่ตรง keys ตาม collation ของตาราง
+- **ทำไม:** ตารางจริงไม่มี `source_row_id`; `ID` เป็น int identity, `TransID` เป็น uniqueidentifier และ primary key เป็น `POLICYTYPE + CLOANNUMBER + SOURCE` ซึ่งไม่ใช่ Source row identity ของ Mapping
+- **ไม่เลือก:** ไม่ยกการไม่นับแถวตัวเองของ normalized table ใน demo มาเทียบกับ `sourceRowNo` หรือ UUID ของ Source ใหม่ เพราะเป็นคนละ identity; ไม่สร้าง normalized table หรือเขียนกลับ SQL Server เพื่อเลียนแบบ demo
+- **ห้าม:** ไม่เพิ่มกฎสถานะ/กรอง `POLICYTYPE` หรือ `SOURCE` เอง; SQL เป็น parameterized read-only, ไม่คืน connection string/SQL exception ผ่าน API; schema/permission/connection ไม่พร้อมต้องได้ `LookupDependencyUnavailable` ไม่ใช่ `notExists=true`
+- **การตั้งค่า:** `ConnectionStrings__MtiOriginalDb` มาจาก secret/environment; `MtiOriginalLookup__CommandTimeoutSeconds` default 10 และรับ 1..60 วินาที; ไม่เก็บ credentials ใน repo ผู้ใช้อนุญาต `Encrypt=True;TrustServerCertificate=True` เฉพาะ connection UAT นี้ ไม่ใช่การอนุญาตทั่วไปสำหรับ production
+
+### M-29 เริ่มแกน import ของ Delimited ด้วย Source/Row Job/outbox atomic
+- **ตัดสิน (2026-11-17):** ตามรายการไฟล์และขอบเขตที่ผู้ใช้ยืนยัน ทำ `FileImportService` ภายใน Application สำหรับ File Job ที่มี pinned version และ sealed snapshot แล้ว โดยเริ่ม CSV/TSV; ตรวจ input hash/size, ใช้ parser ตัวเดียวกับ preview และ commit registry/raw Source/Row Job/transform outbox/checkpoint พร้อมกัน
+- **ทำไม:** M2.6 ต้องพิสูจน์ถึง Source จริง; แบบ M1.1 กำหนด transaction นี้ไว้แล้ว การมี reader หรือ test ที่เขียน Source โดยไม่มี Row Job/outbox ยังไม่พอสำหรับเส้นทาง import
+- **ไม่เลือก:** ไม่สร้าง CSV-specific API, ไม่เขียน raw Source แยก transaction จากงานต่อ และไม่ใช้ latest config แทน version ของ File Job; scanner/snapshot store/archive/Kafka consumers/transform worker ทำตาม M3 แยกต่อ
+- **การทำงาน:** lease owner+epoch ตรวจด้วยเวลา DB; read count เก็บเมื่อ parser อ่านครบ แยกจาก committed count; resume ข้ามเฉพาะ prefix ที่ commit แล้ว, fenced replay ต้องตรง raw เดิม; ถ้า registry/Row Job count ไม่ตรง checkpoint คืน `RecoveryRequired` ไม่สร้างงานย้อนหลังหรืออ้างสำเร็จเอง
+- **การตั้งค่า:** section `FileImport` ใช้ max bytes 50 MiB, 100,000 records, 2,000,000 cells, lease 120 วินาที/heartbeat 20 วินาที; topic local default `mapping.transform.requested` เปลี่ยนผ่าน environment ได้ บริษัท topics/groups/owner ยังรอ Q7; outbox payload มีเฉพาะ UUID ของ Row Job/Source/File Job/Config Version ตาม pattern Informs
+- **ห้าม:** ไม่เปิด Delimited production capability จากการมี import core อย่างเดียว, ไม่ใช้ fields ของ partner ที่ยังไม่ได้รับ, ไม่ถือว่าปิด Q9/M2.6 หรือส่วน M3 ที่ยังไม่มี implementation แล้ว
+
+### M-30 Fixed-width ใช้ shared validator และ import core ของ M-29
+- **ตัดสิน (2026-11-17):** ตาม source batch ที่ผู้ใช้ยืนยัน เพิ่ม FixedWidth dispatch ใน FileImportService และใช้ validator/reader ร่วมกับ preview; ช่วง start/length เป็นข้อความหลัง decode ตาม Fixed-width Slice เดิม เริ่มที่ 1 และอิง UTF-16 positions ของ .NET ไม่ใช่ byte offset
+- **ทำไม:** ให้ผล preview/Source import ตรงกันสำหรับ UTF-8/cp874 และกัน integer overflow/overlap/short record ก่อนสร้าง Source; hash/pinning/lease/transaction ของ M-29 ใช้ต่อได้โดยไม่เพิ่ม schema
+- **ไม่เลือก:** ไม่สร้าง import writer หรือ API เฉพาะ Fixed-width, ไม่ trim/แปลง business values ใน reader และไม่ตัดคู่ surrogate กลางตัวอักษร
+- **ข้อจำกัด:** cells ของ Fixed-width นับจำนวน slices ต่อ data record, blank lines นับ physical line แต่ไม่สร้าง Source; จำกัด field spans/record characters ตาม InputReadLimits เดิม; intake/Kafka/transform worker/archive และ Excel import ยังไม่อยู่ใน batch นี้
+- **ห้าม:** ไม่เปิด production capability หรือปิด M2.7 ทั้งข้อจาก synthetic tests เมื่อยังไม่มี partner acceptance/Q9; ไม่เดา business bindings ของ partner ที่ยังไม่ส่งมา
+
+### M-31 Outbox แบบ typed และ durable Inbox Receipt ก่อน commit offset
+- **ตัดสิน (2026-11-17):** ตามแบบและ source batch ที่ผู้ใช้ยืนยัน คง outbox ของ M-29 ตาม Informs: ordered long ID, topic/key, IDs-only JSON, sent timestamp; เพิ่ม strict parse/canonical publish, blocked code และ header `mapping-event-id` เท่ากับ outbox ID เดิม; dispatcher ใช้ DB transaction/row locks และ idempotent producer/acks all
+- **ทำไม:** DB เป็นเจ้าของ job state และต้องรับ publish ซ้ำเมื่อ broker รับแล้วแต่ mark sent ล้มเหลว; Inbox Receipt unique broker coordinates พร้อม immutable guards บันทึกผลรับและ Row Job wake-up ใน transaction เดียวก่อน Kafka offset commit
+- **ไม่เลือก:** ไม่ย้ายกลับไป outbox job-kind/generation/lease ในร่าง M1.1 และไม่รัน compiler/evaluator ใน consumer รอบนี้; M3.3 ต้อง claim Pending job ที่ NextAt มีค่าและถึงเวลาแล้ว โดยมี lease/fencing ของ worker ต่อไป
+- **ตัวอย่างข้อมูลสมมติ:** outbox ID `41` ส่ง UUID ของ Row Job A/Source B/File Job C/Config Version D → broker รับแต่ DB mark sent rollback → publish ซ้ำ header `41` ที่ offset ใหม่ → receipt ใหม่เป็น AlreadyQueued โดย NextAt/row version ของ A ไม่เปลี่ยน; อ่าน offset เดิมหลัง restart ไม่เพิ่ม receipt
+- **ข้อจำกัด:** local topic `mapping.transform.requested`, group prefix `insurance-validation.mapping`, host `localhost:9094`, 3 partitions; company broker/topics/groups/owner/auth/TLS รอ Q7; default ปิด messaging และ script local เปิดเฉพาะเมื่อ caller ยังไม่ตั้งค่า ส่วน company ไม่เปิดให้เอง
+- **เกณฑ์ปิด M3.1 (2026-11-17):** ตามข้อตกลงผู้ใช้ใช้ Kafka local ก่อน ปิดงานพัฒนา/ทดสอบ local เมื่อหลักฐาน transaction/offset/redelivery ผ่าน; dependency บริษัทแยกไว้ใน Q7 และเป็นเงื่อนไขก่อนเปิดใช้งาน environment บริษัท ผล local ไม่ใช่ผลรับตรวจ deployment บริษัท
+- **ห้าม:** ไม่ส่ง arbitrary raw JSON ออก bus, ไม่เก็บ body/headers/exception text ใน receipt/log, ไม่ mark sent เมื่อ event ผิดรูปแบบ และไม่ถือว่า wake-up คือ transform สำเร็จ
+
+### M-32 รับไฟล์ด้วย pinned occurrence และ archive สำเนา snapshot โดยคง input
+- **ตัดสิน (2026-11-17):** ตามแบบ/source batch ที่ผู้ใช้ยืนยัน ทำ scan → stable fingerprint → File Job/version pin/path claim/import outbox → Kafka wake-up → snapshot/content claim → shared import → archive copy; worker อยู่ Infrastructure และเรียก Application ผ่าน MediatR ตาม D-77
+- **ทำไม:** การรับหลาย scanner ต้อง serialize ใน DB; snapshot และ Source เป็นหลักฐานเดิม ส่วน path เดิมอาจถูก partner เขียนทับ การตรวจ hash แล้วค่อยย้าย path ไม่พิสูจน์ว่าไฟล์ที่จะย้ายยังเป็น occurrence เดิม
+- **ไม่เลือก:** ไม่ย้าย/ลบ input partner อัตโนมัติ; ไม่ใช้ FileSystemWatcher เป็นตัวรับหลัก และไม่ใช้ชื่อไฟล์/config version เป็น content dedup key; เปลี่ยนแบบ archive/release path ในร่าง M1.1 เป็น snapshot-copy + retained occurrence pointer
+- **กลไก:** work lease แยกจาก import lease ของ M-29 พร้อม DB clock/epoch fencing; accepted fingerprint/version/CreatedAt/ข้อมูลที่ seal แล้ว immutable; content claim `(config_id,hash)` คงที่ข้ามชื่อ/versionตาม M-25; import event มี GUID 3 ตัว ไม่มี raw fields และ receipt/audit/NextAt commit ก่อน Kafka offset
+- **ตัวอย่างข้อมูลสมมติ:** F1 ของ config A รับ `a.csv` hash H1 → import/archive สำเนา H1 แล้วคง input และ path pointer; สแกน H1 ที่ path เดิมคืน AlreadyObserved; เปลี่ยนเป็น H2 หลัง Archived จึงรับ F2 pin active version ใหม่; เปลี่ยน input หลัง seal ของ F1 ให้ RecoveryRequired เก็บ archive H1 และ input ใหม่ไว้ทั้งคู่
+- **ข้อจำกัด:** archive สำเร็จไม่ใช่ transform/delivery สำเร็จ; content claim ของงาน blocked ไม่ถูกล้าง; cleanup/retention และ permissions/durability ของ share บริษัทติดตาม Q7 ไม่แฝงคำสั่งลบต้นฉบับใน scanner
+- **ห้าม:** ไม่แก้หลักฐานย้อนหลัง ไม่เริ่ม import จาก input path โดยตรง ไม่เก็บ raw payload/exception text ใน file-event receipt/log และไม่เปลี่ยน pinned version/CreatedAt ระหว่าง resume
+
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
 > ทั้งคู่เพิ่มได้ · เลข `Q1`, `Q2`, … ต่อกันไป · ตอบใต้ข้อนั้น · ตกลงแล้วเขียนผลสั้น ๆ + ย้ายไปที่ที่ถูก (`M-xx` ใน §4 หรือ Dev 1 ลง `rules.md` เป็น `D-xx`) แล้วติ๊ก `[x]`
@@ -568,6 +770,7 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-13), kickoff ข้อ 9.1: เลือก **Kafka + transactional outbox** สำหรับงานภายใน Mapping ตาม pattern Informs → M-13; Mapping → Informs ยังคง HTTP; local broker/topics/groups/owner ยังรอข้อ 9.2/Q7
   - คำตอบผู้ใช้ (11-13), kickoff ข้อ 9.2: เลือก **Kafka local ผ่าน Docker ก่อน** ระหว่างรอ broker/topics บริษัท → M-14; แนวทางหลักทั้ง 9 ข้อมีคำตอบผู้ใช้แล้ว แต่รายละเอียด infrastructure ใน Q7, ข้อตกลง D-xx ที่เป็นหน้าที่ Dev 1 และประเด็น Q2–Q8 ยังไม่ถือว่าปิด
 - [ ] **Q2** (Dev 2, 11-13) ขอ review feature scope จาก [feature matrix](api-implementation-plan.md#2-ขอบเขตและการเทียบ-feature): เสนอทำ MTLS Excel → Informs API ก่อน; เสนอเลื่อน LegacyTable/JsonFile/DatabaseTable, Delimited/Fixed-width, dynamic Table admin, generic profile/contract admin และ advanced rollout ที่ไม่จำเป็นต่อ MTLS แต่ยังเก็บ backlog ครบ · เสนอ Source Table แบบ fixed `mapping.source_rows` + immutable JSONB values และ Source field catalog แทน physical table ต่อ config · ขอปิดขอบเขต config/job/delivery views รวมถึงการเปิดดู raw Source/payload ตาม D-07/D-36 และวันรับ Web design เพื่อรักษา milestone 12-03
+  - คำชี้แจงผู้ใช้ (11-16): **ไม่ใช้ MTLS เป็นโครงหลัก**; API/หน้า Web ต้องครอบคลุมหลายงาน และรอบแรกเลือก **Excel, Delimited (CSV/TSV), Fixed-width** จริง → M-27/Q9; ข้อเสนอเดิมที่จะเลื่อน Delimited/Fixed-width ใช้ไม่ได้แล้ว ส่วน destination อื่นยังเป็น backlog ตาม M-21
   - คำตอบผู้ใช้ (11-13), Q2.1: เลือก **physical Source Table แยกตาม config** → M-15 แทนข้อเสนอตารางกลาง + JSONB ในข้อความเดิม; วิธีสร้าง/เพิ่ม column ผ่าน Web หรือ migration/script, schema evolution, raw inspection และ feature scope ส่วนที่เหลือยังไม่ปิด
   - คำชี้แจงผู้ใช้ (11-13): ข้อมูลจากแต่ละเจ้ามีโครงสร้าง field ต่างกัน จึงต้องให้แต่ละ config อ้าง Source definition/table ของตัวเอง ไม่ hardcode โครง MTLS 19 columns ให้ทุก config; phase 1 ยังทำ MTLS ก่อนตาม D-01 และยังไม่ถือว่าคำชี้แจงนี้เลือกวิธีสร้างตารางใน Q2.2 แล้ว
   - คำตอบผู้ใช้ (11-13), Q2.2: เลือก **กำหนด fields ผ่านหน้า Mapping แล้วระบบสร้าง Source Table** → M-16/M1.5; ต้องปิดกติกาเปลี่ยน schema ใน Q2.3 และ permissions ใน Q7 ก่อน implement ไม่ถือว่าอนุมัติลบ/rename/เปลี่ยนชนิด field เดิมแล้ว
@@ -596,7 +799,10 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-16): ตกลง **config เดิม/hash เดิมซ้ำข้าม versions แม้เปลี่ยนชื่อ; เนื้อหาเปลี่ยนรับ File Job ใหม่และอ่าน/ส่งทุกแถว**; Informs ตัดสินใบซ้ำตามสถานะตาม D-05/D-46 → M-25
   - ผล: ปิด policy ภายใน Mapping ตาม M-25 และใช้ในแบบ M1.1; ขอ Dev 1 อัปเดต BR-001/ผล kickoff ใน rules ตามเจ้าของเอกสาร ไม่ตีความว่าเปลี่ยนกฎในไฟล์ของ Dev 1 ไปแล้ว
 - [ ] **Q7** (Dev 2, 11-13) ขอ Dev 1 ระบุตำแหน่ง/identity ของ **fixture MTLS 2,556 แถวที่รับรองว่าเป็นข้อมูลสมมติ** (ไฟล์ `docs/MTLSPA0220261009.xls` ถูกอธิบายว่าเป็นตัวอย่างจริง จึงไม่ใช้ทดแทน) และ dependency: Kafka/topics/groups/owner, Mapping DB บริษัท, share mount/archive/snapshot access, Informs internal URL/auth/TLS, encryption key provisioning/rotation/retention และผู้ดู Source/delivery log/payload; phase นี้ใช้ fixed actor ตาม web.md ไม่สร้างระบบสิทธิ์จาก header ที่ browser กำหนดเอง
+  - Dev 2 (11-17, หลังข้อตกลงใช้ local): ปิด M3.1 เฉพาะ local แล้ว; broker/topics/groups/owner/auth/TLS ของ Kafka บริษัทคงเป็นรายการเปิดใน Q7 ที่ต้องตกลง/เตรียม/ตรวจเชื่อมต่อก่อนเปิด messaging บน environment บริษัท ไม่รอรายการนี้เพื่อทำ M3.2/M3.3 ต่อ
+  - Dev 2 (11-17): ปิดเฉพาะ dependency/source identity ของ Named Lookup สำหรับ M2.5 ด้วยคำยืนยันผู้ใช้ตาม M-28; SQL Server metadata/query ด้วย keys สมมติและ API capability smoke ผ่านบน UAT เมื่อใช้ TLS setting ที่ผู้ใช้อนุญาต ส่วน Kafka/Mapping DB บริษัท/share/Informs/key/permissions ที่เหลือยังไม่ปิด Q7 ทั้งข้อ
   - Dev 1 (11-16): **fixture พร้อมแล้ว** ที่ [`fixtures/MTLSPA0220261201.xls`](fixtures/README.md) ข้อมูลสมมติทั้งหมด 2,556 แถว (`P` 2,553 / `C` 3 · 1,797 คน · 756 คนมี 2 แถว) สร้างด้วย `fixtures/make-mtls-fixture.py` (seed เดิม = ได้ไฟล์เหมือนเดิมทุก byte) · ⚠️ **ไฟล์จริงเป็น Excel 5.0/95 (BIFF5, stream `Book`) ไม่ใช่ BIFF8** และมี CODEPAGE = 1252 ทั้งที่ข้อความเป็น cp874 ([mtls-file.md](mtls-file.md) §1 แก้แล้ว) — fixture ทำแบบเดียวกัน reader ต้องอ่าน BIFF5 ได้และบังคับ cp874 · `docs/MTLSPA0220261009.xls` เป็นข้อมูลจริง **ห้ามใช้** (ไฟล์อยู่ใน git ของ repo นี้แล้ว — Dev 1 กำลังดูว่าจะเอาออกอย่างไร) · dependency ที่เหลือ (Kafka / DB บริษัท / share mount / URL Informs / key) ตอบตอน kickoff
+  - Dev 2 (11-17): local Kafka/topic init และ dispatcher/consumer/inbox/offset tests ผ่านตาม M-31/[M3.1](m3-1-messaging-design.md); ปิดเฉพาะการเตรียม local ใน Q7 ส่วน broker/topics/groups/owner/auth/TLS บริษัทและ dependency อื่นยังรอ ไม่ถือว่าผล local ยืนยัน environment บริษัท
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 9.1: ใช้ Kafka + transactional outbox ตาม M-13; ยังไม่ได้ระบุ broker/topics/groups/owner ของบริษัท และยังไม่ถือว่ามี Kafka local พร้อมใช้
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 9.2: เริ่ม Kafka local ผ่าน Docker ตาม M-14 เพื่อเดินงานพัฒนา/ทดสอบก่อน; broker/topics/groups/owner บริษัทและ dependency อื่นใน Q7 ยังรอข้อมูล
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 7.2: ผู้ใช้งาน delivery log คือทีม Mapping / Dev / Ops ตาม M-11; คำตอบนี้ปิดเฉพาะกลุ่มผู้ใช้งาน log ไม่ครอบคลุม raw Source/payload inspection หรือ dependency อื่นใน Q7 และไม่เพิ่มระบบสิทธิ์นอก `web.md`
@@ -604,3 +810,7 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-16): **ใช้ `/api/mapping`** เป็น prefix; บันทึกใน [ร่าง M1.2](mapping-api-contract.md) แล้ว
   - คำตอบผู้ใช้ (11-16): ขอ **review ภายหลัง**; เดินงานแบบข้อมูล/persistence ภายใน Mapping ได้ตาม M1.1 แต่ยังไม่ถือว่า Dev 1 เห็นชอบ route/DTO และไม่ implement API controller จากร่างนี้ก่อน review
   - ยังรอ: Dev 1 review เฉพาะ route/DTO ที่กระทบ Web/contract boundary; prefix ไม่ใช่การอนุมัติ response/error/action contract ทั้งชุด
+- [ ] **Q9** (Dev 2, 11-16) ผู้ใช้ชี้แจงว่า **MTLS เป็นเพียงตัวอย่างหนึ่ง ไม่ใช่ไฟล์หลัก** และให้ API/หน้า Mapping รองรับหลายงาน/หลายรูปแบบ; เลือกรอบแรก **Excel, Delimited (CSV/TSV), Fixed-width** ที่ใช้งานได้จริงตาม [แบบหลาย format](multi-format-api-web-design.md) · **ข้อเสนอถึง Dev 1/PM:** ให้ทั้งสาม format และ partner อื่นเป็น acceptance ของ API/Web/runtime ใน UAT และตกลงผลต่อวันส่ง/กำลังคนเทียบ D-01/D-70 ซึ่งเดิมกำหนด MTLS เป็น partner แรกและไม่ทำ partner อื่น; ห้ามถือว่าคำตอบผู้ใช้แก้ D-01/D-70 ใน rules แล้ว
+  - คำตอบผู้ใช้ (11-16): **partner อื่นจะเปิดใช้ใน UAT**; ไม่ใช่เพียงเตรียม parser/UI กับ synthetic fixtures แล้วเปิดใช้ภายหลัง
+  - ยังรอ: Dev 1/PM ลงผลขอบเขต/วันส่งเป็น `D-xx` ใน `rules.md`; partner identities, field bindings และตัวอย่างไฟล์ที่ใช้ทดสอบจริงผู้ใช้จะส่งภายหลังตาม M-24/Q5; ไม่เดาข้อมูลธุรกิจของ partner ใหม่
+  - ผลต่อแผน Dev 2: M2.1 เป็น reader core+Excel; เพิ่ม M2.6 Delimited, M2.7 Fixed-width; M1.2/M2.3/M5.3 เปลี่ยนเป็น format-neutral; MTLS 2,556 แถวยังเป็น regression fixture หนึ่ง ไม่ใช้เป็น schema ของ config ทั้งระบบ

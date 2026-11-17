@@ -36,7 +36,7 @@ last_updated: 2026-11-16
 
 **Q2.1 ผู้ใช้เลือก physical Source Table แยกตาม config ตาม M-15** แทนข้อเสนอตารางกลาง + JSONB; ทุกตารางอยู่ schema `mapping` และเก็บ Source แบบ immutable ตาม D-07 โดยวิธีสร้างผ่าน Web และ schema evolution ใช้คำตอบ Q2.2–Q2.3 ด้านล่าง
 
-**เหตุผลจากผู้ใช้:** ข้อมูลจากแต่ละเจ้ามีโครงสร้าง field ต่างกัน แต่ละ config จึงมี Source definition/table ของตัวเอง แล้ว Transformation Program แปลงเข้า contract กลาง; 19 columns เป็นข้อกำหนดไฟล์ MTLS ไม่ใช่โครง Source ที่ hardcode ให้ทุก config การออกแบบนี้ไม่เพิ่ม partner อื่นเข้าขอบเขต phase 1 ตาม D-01
+**เหตุผลจากผู้ใช้:** ข้อมูลจากแต่ละเจ้ามีโครงสร้าง field ต่างกัน แต่ละ config จึงมี Source definition/table ของตัวเอง แล้ว Transformation Program แปลงเข้า contract กลาง; 19 columns เป็นข้อกำหนดไฟล์ MTLS ไม่ใช่โครง Source ที่ hardcode ให้ทุก config คำตอบใหม่ Q9 วันที่ 2026-11-16 ให้ partner อื่นเปิดใช้ใน UAT; Dev 1/PM ต้องลงผลแก้ D-01/D-70 ที่ขัดกันก่อนแก้ source scope เพิ่ม
 
 **Q2.2 ผู้ใช้เลือกกำหนด fields และสร้าง Source Table ผ่านหน้า Mapping ตาม M-16** จึงเพิ่ม Source catalog/controlled creation ใน M1.5 และ Web scope; กติกาแก้ schema ใช้ M-17 ส่วน allowed names/types, DDL permissions และ definition pin ลงรายละเอียดใน M1.1/M1.2 ก่อนลง source
 
@@ -62,6 +62,10 @@ last_updated: 2026-11-16
 
 **M1.2 วันที่ 2026-11-16:** ผู้ใช้ยืนยัน Q8 ให้ใช้ prefix `/api/mapping`; [Mapping API/DTO contract ฉบับร่าง](mapping-api-contract.md) ลง routes, envelope/errors, action guards, list/counts และ preview limits แล้ว ส่วน route/DTO ที่กระทบ Web/contract boundary ยังรอ Dev 1 review ก่อนปิด M1.2/ลง controller
 
+**ผู้ใช้ชี้แจงขอบเขต (2026-11-16):** API และหน้า Mapping ต้องรองรับหลาย config/หลายรูปแบบไฟล์ โดย MTLS เป็นเพียงตัวอย่างหนึ่ง; รอบแรกเลือก Excel, Delimited (CSV/TSV) และ Fixed-width ตาม [แบบ API/Web หลาย format](multi-format-api-web-design.md) ข้อเสนอขยายจาก D-70 เรื่อง UAT/partner อื่นอยู่ Q9 เพื่อให้ Dev 1/PM ตกลงก่อน implement source ส่วนที่ขยาย scope
+
+**คำตอบ Q9 (2026-11-16):** ผู้ใช้ยืนยันว่า **partner อื่นจะเปิดใช้ใน UAT** ไม่ใช่เพียงเตรียม parser และ synthetic fixtures; scope/date ที่ขัด D-01/D-70 รอ Dev 1/PM ลงผลใน `rules.md` รายชื่อ partner/fields/ไฟล์ที่ใช้ตรวจรับยังรอผู้ใช้ส่ง ไม่เดาเอง
+
 ## 1. แหล่งอ้างอิงและสถานะที่ตรวจพบ
 
 ลำดับอ้างอิง: [README](README.md), [rules](rules.md), [glossary](glossary.md), [contract](contract-pa-inform.md), [MTLS](mtls-file.md), [Web](web.md) เป็นหลัก; ใช้ [reverse spec](../../specs/mapping_demo_reverse_spec.md) เพื่อค้น feature และโค้ดตัวอย่าง ไม่ยกพฤติกรรมทั้งหมดของ demo เป็นข้อกำหนดธุรกิจ
@@ -81,7 +85,7 @@ last_updated: 2026-11-16
 
 ## 2. ขอบเขตและการเทียบ feature
 
-**เป้าหมาย phase 1 ตาม D-70/D-77/D-78:** ไฟล์ MTLS → Source Table ที่แก้ไม่ได้ → JSON `pa-inform/1` → `POST /api/pa/informs` ทีละใบ → delivery log + retry; พร้อม API สำหรับหน้า mapping และรันบน Kubernetes
+**D-70 เดิม:** MTLS → Source Table ที่แก้ไม่ได้ → JSON `pa-inform/1` → `POST /api/pa/informs` ทีละใบ → delivery log + retry พร้อมหน้า Mapping/Kubernetes และไม่รวม partner อื่น; **คำชี้แจงผู้ใช้ใหม่:** API/หน้าเว็บและ reader ต้องใช้กับ Excel, Delimited และ Fixed-width หลาย configs โดย MTLS เป็นหนึ่ง acceptance case และ partner อื่นเปิดใช้ใน UAT การเปลี่ยน D-01/D-70 ยังรอ Dev 1/PM ลงผลใน rules
 
 ตารางนี้ครอบคลุมกลุ่ม feature และ requirement ID ใน reverse spec คำว่า **เสนอเลื่อน** หมายถึงยังเก็บเป็น backlog และรอทบทวนใน Q2 ไม่ใช่ลบ feature ออกจากแผนทั้งหมด
 
@@ -89,9 +93,9 @@ last_updated: 2026-11-16
 |---|---|---|
 | Table Catalog `OBS-TBL-001..004` | ผู้ใช้เลือก physical Source Table แยกตาม config พร้อมกำหนด fields/สร้างตาราง/เพิ่ม columns ผ่านหน้า Mapping ตาม Q2.1–Q2.3/M-15–M-17; immutable Source และเพิ่ม column ได้อย่างเดียว | Implement controlled creation/column addition ใน M1.5; naming/types/permissions/definition pin ปิดใน M1.1/M1.2; ห้ามลบ/rename/เปลี่ยนชนิด field เดิม และ verification/impact admin ทั้งชุดยังไม่ถือว่าอนุมัติแล้ว |
 | Config `OBS-CFG-001..003,006` | config identity, version immutable, validate, clone เป็น version ใหม่, active version, compare, ปิดรับไฟล์ใหม่, optimistic concurrency | จำเป็นก่อนเปิด intake; validate dependencies และ folder/extension ownership ตอน activate |
-| Preview `OBS-CFG-004..005` | text/source-row preview และ workbook upload แบบจำกัดขนาด; ใช้ compiler/evaluator ชุดเดียวกับ runtime; แสดง nested JSON + diagnostics | ทำก่อน activate; ไม่มี job/outbox/HTTP delivery และไม่ archive |
+| Preview `OBS-CFG-004..005` | text/source-row และ file upload ตาม `inputLayout.kind` ของ Excel/Delimited/FixedWidth แบบจำกัดขนาด; ใช้ parser/compiler/evaluator ชุดเดียวกับ runtime; แสดง raw record + nested JSON + diagnostics | ทำก่อน activate; ไม่มี job/outbox/HTTP delivery และไม่ archive; สาม format รอบแรกเป็นข้อเสนอ Q9 |
 | Excel `OBS-IN-003..004` | `.xls` BIFF5/stream `Book`, บังคับ cp874 แม้ CODEPAGE 1252, sheet แรก, header 19 columns, invariant numeric/date conversion | Dev 1 แก้ข้อเท็จจริงไฟล์และให้ [fixture สมมติ](fixtures/README.md) แล้ว; `.xlsx` ไม่บังคับในช่วงแรก |
-| Delimited/Fixed width `OBS-IN-001..002` | เก็บ layout interface ให้ขยายได้ แต่ยังไม่ต้องเปิดตัวอ่านเหล่านี้ | เสนอเลื่อน Q2; ไม่เปิด capability ที่ runtime ยังไม่รองรับ |
+| Delimited/Fixed width `OBS-IN-001..002` | ผู้ใช้เลือกให้ **Delimited (CSV/TSV) และ Fixed-width ใช้งานจริงรอบแรก** ผ่าน reader contract/API/Web เดียวกับ Excel; format options versioned ต่อ config, raw fields → Source ตาม definition | ยกเลิกข้อเสนอเลื่อนเดิมในส่วน reader/preview/UI; source ของ scope เพิ่มรอ Dev 1/PM ตกลง Q9; ไม่เปิด capability จนมี parser และ tests จริง |
 | Transformation `OBS-TRN-001..005` | ย้าย declarative Transformation Program ทั้งหมดตามคำตอบผู้ใช้/M-03; เริ่ม source/literal, null/default, convert แบบเก็บ unparsed, case, nested arrays และ metadata bindings ที่ MTLS ต้องใช้ใน M2.2 | Q1 ข้อ 1–5 มีคำตอบผู้ใช้แล้ว; default ผู้รับประโยชน์/ค่าคงที่/P/C อยู่ใน config ตาม M-04/M-05; ช่องว่าง schema ใน Q5 ยังรอ; MTLS ต้องได้ `default` 1 output ต่อแถว แม้ engine รองรับ filter/0..N branches |
 | Expressions/predicates เพิ่มเติม | ย้ายให้ครบใน M2.5: expressions 13 แบบ, predicates 17 แบบ, conversion targets 7 ชนิด, filter/branches, nested output, Named Transform 1 รายการ และ Named Lookup 2 รายการ; pinned evaluation time/timezone/limits | อยู่ในขอบเขตการย้ายทั้งหมด โดยทำ MTLS ก่อน; catalog ระบุพร้อมใช้เฉพาะ capability ที่ implement/ทดสอบและ dependency พร้อมแล้ว; lookup adapters ที่ผูก `mti_original`/Table Catalog เดิมรอ Q2/Q7; ไม่คัด `sqlserver-legacy-v1` มาเป็นกฎกลาง |
 | File intake `OBS-FILE-001..006` | scan เป็นหลัก, file stability/snapshot/hash, version pin, Source persistence, row outbox, archive/recovery | ไม่พึ่ง FileSystemWatcher; hash duplicate policy ยังรอ Q6 เพราะ BR-001 เป็นข้อเสนอ |
@@ -103,7 +107,7 @@ last_updated: 2026-11-16
 | DatabaseTable `OBS-DST-DB-001..007` | ผู้ใช้เลือกเก็บ profile/schema drift/insert-only/reconciliation/unknown-outcome เป็น backlog ใน Q2.7/M-21 | ไม่เพิ่ม destination DB writer ในช่วงแรกและไม่ใช้เป็นทางส่งเข้า Informs ตาม D-02 |
 | Admin `OBS-ADM-001..005` | read-only contract/profile summary, config audit และ safe delivery metrics สำหรับ MTLS; Source catalog/สร้าง physical table ผ่าน Web ตาม M-16 แยกใน M1.5 | generic profile/contract CRUD/publish/retire และ Table verification/impact admin เพิ่มเติมยังเสนอเลื่อน Q2; ไม่รวมการสร้าง Source Table ที่ผู้ใช้เลือกแล้ว; Informs ยังคงเป็นเจ้าของ contract |
 | Platform `OBS-PLT-001..003` | capability endpoint, OpenAPI, `/health/live`, `/health/ready`, environment config, migrations ผ่าน migrator | ไม่ทำ auto-migrate ตอน API start ตาม demo; ใช้ deployment flow ของ repo จริง |
-| Web `OBS-WEB-001..004` | Config + ผลการส่ง + retry ตามสถานะตาม M-12, กำหนด fields/สร้าง Source Table ตาม M-16, เพิ่ม column ตาม M-17 และ Source/Delivery Payload detail แบบ read-only ตาม M-18/M-19 | layout/interaction รอ Web design; retry ต้องผ่าน state/โควตาที่ตกลง ส่วน reprocess/generic admin เพิ่มเติม และ dashboard ทุก destination ยังรอ Q2/Q3/Q7 |
+| Web `OBS-WEB-001..004` | Config + ผลการส่ง + retry ตามสถานะตาม M-12, กำหนด fields/สร้าง Source Table ตาม M-16, เพิ่ม column ตาม M-17 และ Source/Delivery Payload detail แบบ read-only ตาม M-18/M-19; Config editor/preview/jobs รองรับ Excel/Delimited/FixedWidth ตาม [แบบหลาย format](multi-format-api-web-design.md) | MTLS ไม่กำหนด column/format ของทั้งระบบ; scope/วันส่ง format เพิ่มรอ Q9, layout รายละเอียดรอ Web design; retry ต้องผ่าน state/โควตาที่ตกลง |
 | Proxy `OBS-WEB-005` / prototype | ใช้ Angular `core/mapping-api.ts` + `environment.mappingApiUrl` ตาม Web repo | ไม่ย้าย Next.js proxy หรือ `/prototype/file-to-json` เข้า production |
 
 เรื่อง product validation, Client API/MCIS และ UW ไม่อยู่ใน Mapping ตาม D-06 ไม่มีการเรียก Products หรือ Client API จาก Mapping
@@ -191,7 +195,7 @@ prefix **`/api/mapping`** ผู้ใช้ยืนยันแล้วใน
 | `POST /mapping-configs/{id}/versions` | บันทึกทั้ง config definition เป็น immutable version ใหม่; clone ส่งทั้ง definition ไม่แก้ version เก่า |
 | `GET /mapping-configs/{id}/versions`, `GET /mapping-configs/{id}/versions/{versionId}` | version history/detail; compare ใช้สอง immutable definitions โดยยังไม่ต้องมี diff engine แยก |
 | `POST /mapping-configs/{id}/validate` | ตรวจ draft/paths/required system bindings/dependencies; ไม่สร้าง runtime job |
-| `POST /mapping-configs/{id}/preview`, `POST /mapping-configs/{id}/preview-file` | source/text หรือ multipart workbook + draft; in-memory, sample จำกัด 50 records; text จำกัด 1 MiB, workbook compressed/uncompressed/row limits ต้องระบุใน M1.2 |
+| `POST /mapping-configs/{id}/preview`, `POST /mapping-configs/{id}/preview-file` | source/text หรือ multipart file ตาม `inputLayout.kind` + draft; Excel/Delimited/FixedWidth ใช้ route เดียว, in-memory, sample จำกัด 50 records; รายละเอียด limits/DTO ใน [ร่าง M1.2](mapping-api-contract.md) |
 | `POST /mapping-configs/{id}/activate`, `POST /mapping-configs/{id}/disable` | ส่ง expected `rowVersion`, target version/reason; activate atomic; disable หยุดรับใหม่ ไม่แก้ version ของงานเดิม |
 | `GET /file-jobs`, `GET /file-jobs/{id}` | filters/config/status/date, paged rows และผลรวมที่ไม่ปน import/transform/delivery |
 | `GET /file-jobs/{id}/errors`, `GET /file-jobs/{id}/rows` | row diagnostics/history และรายการแถว; default คืน metadata ไม่คืน raw PII; เปิด Source detail แยกตาม M-18 |
@@ -300,7 +304,7 @@ ID ในตารางตรงกับ [plan.md §3](plan.md#3-งาน) �
 |---|---|---|
 | **M0 — วางแผน 11-13 → kickoff 11-16** | M0.1 แผนนี้; M0.2 ตกลง Q1–Q8/fixture/scope; M0.3 baseline build/test | แผน review, คำตอบ Dev 1, baseline ผลจริงของ repo ใหม่ |
 | **M1 — foundation / control plane 11-16 → 11-18** | M1.1 domain/state/schema; M1.2 API/DTO/error contract; M1.3 EF migration/config versions/Source storage; M1.4 contract/profile snapshots; M1.5 Source catalog/controlled physical table creation ผ่าน Web ตาม M-16 (เป้า 11-18 เป็นร่างสำหรับ review) | model/DDL + ตัวอย่าง, API contract, DB constraints/concurrency tests รวม metadata/schema consistency และ concurrent table creation; health/readiness เริ่มได้ตั้งแต่ชุดนี้ |
-| **M2 — อ่านและแปลง 11-17 → 11-23 สำหรับ MTLS** | M2.1 Excel reader; M2.2 compiler/MTLS config; M2.3 validate/preview; M2.4 read+schema acceptance; M2.5 ย้าย engine ส่วนที่เหลือให้ครบตาม M-03 โดยเป้ารอ review M0.2 | 11-18 อ่าน 2,556 แถว; 11-23 ได้ 2,556 payloads ผ่าน schema ตาม fixture ที่ยืนยันและการตัดสินใจ kickoff; M2.5 ต้องมี traceability/ผลทดสอบครบก่อนปิดงาน engine ทั้งหมด ไม่ถือว่าปิดด้วย MTLS subset หรือเปลี่ยน milestone เอง |
+| **M2 — reader/transform หลาย format** | M2.1 reader core + Excel; M2.6 Delimited; M2.7 Fixed-width; M2.2/M2.5 Transformation Program; M2.3 validate/preview ทุก kind; M2.4 MTLS เป็น regression fixture หนึ่ง | milestone เดิม MTLS 2,556 แถวยังคง; เป้า/หลักฐานสำหรับ Delimited/Fixed-width และ Web เพิ่มรอ Q9 ไม่เลื่อนวันเอง |
 | **M3 — durable pipeline 11-19 → 11-24** | M3.1 outbox/Kafka/local Compose; M3.2 scan/snapshot/import/resume/archive; M3.3 transform claim/lease/errors | crash tests, repeated message, two consumers และ version pinning ไม่ทำข้อมูลซ้ำ; ไม่มี cross-schema writes |
 | **M4 — delivery / operations 11-23 → 11-26** | M4.1 HTTP durable delivery; M4.2 retry/recovery; M4.3 logs/counts/actions; M4.4 full local flow | fixture เข้า Informs จริงบน local, source/payload/delivery counts ตรง, `400/409/429/5xx` และ replay/replaced ผ่าน; check.ps1 ผ่าน |
 | **M5 — Web handoff / Kubernetes 11-27 → 12-04** | M5.1 Linux paths/env/probes/shutdown; M5.2 API examples/OpenAPI/hand-off; M5.3 หน้า mapping หลังได้ design | API contract ใช้งานจาก Angular ได้; Web ใช้ได้ 12-03; K8s config/secret/mount พร้อม 12-04 |

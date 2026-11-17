@@ -6,7 +6,7 @@ last_updated: 2026-11-16
 
 # Mapping API และ DTO contract สำหรับหน้า Mapping
 
-เอกสารนี้เป็นแบบ M1.2 สำหรับ Web และ Mapping API ตาม [แผน](plan.md) และ [แบบข้อมูล/runtime](data-runtime-design.md) ไม่ใช่ OpenAPI ที่รันแล้ว ขอบเขตช่วงแรกคือ MTLS `.xls` **BIFF5/stream `Book`** บังคับ cp874 ตาม [mtls-file.md](mtls-file.md) → `pa-inform/1` → Informs API (M-03, M-21); Source definition/program รองรับโครงสร้างหลาย partner โดยไม่สมมติ business fields ของ Q5
+เอกสารนี้เป็นแบบ M1.2 สำหรับ Web และ Mapping API ตาม [แผน](plan.md), [แบบข้อมูล/runtime](data-runtime-design.md) และ [แบบหลาย format](multi-format-api-web-design.md) ไม่ใช่ OpenAPI ที่รันแล้ว ผู้ใช้ต้องการ Excel, Delimited (CSV/TSV) และ Fixed-width ผ่าน API/หน้าเว็บชุดเดียวกัน โดย MTLS `.xls` BIFF5/cp874 เป็นหนึ่งตัวอย่าง และ partner อื่นจะเปิดใช้ใน UAT; destination ช่วงแรกยังเป็น `pa-inform/1` → Informs API (M-21) การแก้ D-01/D-70/วันส่งรอ Dev 1/PM ตาม Q9
 
 ## 1. กติกากลาง
 
@@ -18,6 +18,7 @@ last_updated: 2026-11-16
 - `GET` list คืน `result: { items, totalCount, page, pageSize }`; `page` เริ่ม 1, `pageSize` default 20/max 100, รับ 10/20/50 ของ Web; ค่าผิดตอบ `400`; ทุก sort มี ID เป็น tie-breaker. Query sort รับเฉพาะ allowlist ต่อ route ไม่ต่อ SQL จาก browser
 - Commands ที่เปลี่ยน config/Source definition/control/job ใช้ `expectedRowVersion` positive integer; mismatch ตอบ `409 RowVersionConflict` พร้อม current `rowVersion` ใน result เฉพาะกรณีพบ entity นั้นแล้ว; ไม่ทำ partial write
 - Async/retry actions รับ `requestId` UUID + `reason` ที่ไม่ว่าง และ audit idempotently ตาม M1.1: `(action,requestId)` กับ body hash เดิมคืนผลเดิม; body ต่างตอบ `409`; `requestId` ไม่ใช่ `sourceRowId`/`outputKey` ใหม่
+- `inputLayout.kind` เลือก adapter `Excel`, `Delimited` หรือ `FixedWidth`; field options/diagnostics แตกตาม kind แต่ routes, envelope, Source identity, job/count/action DTO ใช้ร่วมกันตาม [แบบหลาย format](multi-format-api-web-design.md)
 - List ปกติไม่คืน raw Source, payload, secret, credential, HTTP error body หรือ full path; detail ที่มี raw ต้องเรียกเฉพาะ route inspection แยกตาม M-18/M-19
 
 ## 2. Route และขอบเขต DTO
@@ -26,20 +27,20 @@ last_updated: 2026-11-16
 
 | Route | Request / result หลัก |
 |---|---|
-| `GET /capabilities` | `inputLayouts`, `valueExpressions`, `predicates`, `conversionTargets`, `namedTransforms`, `namedLookups`, `destinations[] {kind,available,reason}`, `limits`; unavailable แสดงเหตุ ไม่โฆษณาว่าใช้ได้ |
+| `GET /capabilities` | `inputLayouts[] {kind,extensions,available,reason,limits}`, `valueExpressions`, `predicates`, `conversionTargets`, `namedTransforms`, `namedLookups`, `destinations[] {kind,available,reason}`; format/extension ที่ยังไม่ทดสอบไม่โฆษณาว่าใช้ได้ |
 | `GET /source-definitions`, `GET /source-definitions/{id}` | list metadata; detail มี `id`, `configId`, `currentVersionId`, `rowVersion`, `fields[] {key,ordinal,displayName,logicalTypeHint}`; ไม่เผยชื่อ physical table เป็นสิทธิ์เลือก SQL |
-| `POST /source-definitions` | `{configId,expectedRowVersion,requestId,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; key ตาม M1.1, physical columns เป็น `text NULL`; transaction metadata+DDL atomic |
-| `POST /source-definitions/{id}/columns` | `{expectedRowVersion,requestId,fields:[...]}` → `201 {versionId,rowVersion}`; เพิ่ม key ใหม่เท่านั้น; ห้ามลบ/rename/เปลี่ยนชนิดเดิม (M-17) |
+| `POST /source-definitions` | `{configId,expectedRowVersion,requestId,reason,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; key ตาม M1.1, physical columns เป็น `text NULL`; transaction metadata+DDL+audit atomic |
+| `POST /source-definitions/{id}/columns` | `{expectedRowVersion,requestId,reason,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; เพิ่ม key ใหม่เท่านั้น; ห้ามลบ/rename/เปลี่ยนชนิดเดิม (M-17) |
 | `GET /contracts/pa-inform/1`, `GET /destination-profiles` | schema hash/path catalog/safe profile metadata + availability; snapshot มาจาก Informs ไม่ส่ง URL/secret |
 | `GET /mapping-configs`, `GET /mapping-configs/{id}` | list/detail: `id,name,enabled,activeVersionId,currentVersionNumber,rowVersion`, input route แบบ relative/safe; ไม่ส่ง credential |
 | `POST /mapping-configs` | `{name,inputPath,requestId}` → `201 {id,rowVersion}`; config identity มาก่อน definition/version |
-| `POST /mapping-configs/{id}/versions` | `{expectedRowVersion,requestId,sourceDefinitionVersionId,inputLayout,transformationProgram,destination}` → `201 {versionId,versionNumber,rowVersion}`; immutable version ใหม่; `destination.kind=ApiContract` ช่วงแรก |
+| `POST /mapping-configs/{id}/versions` | `{expectedRowVersion,requestId,sourceDefinitionVersionId,inputLayout,transformationProgram,destination}` → `201 {versionId,versionNumber,rowVersion}`; immutable version ใหม่; `inputLayout.kind` เป็น discriminated union ของ Excel/Delimited/FixedWidth ไม่ใช่ MTLS DTO; `destination.kind=ApiContract` ช่วงแรก |
 | `GET /mapping-configs/{id}/versions`, `GET /mapping-configs/{id}/versions/{versionId}` | list/detail immutable versions, pinned definition/schema/profile IDs+hash; ไม่มี secret |
 | `POST /mapping-configs/{id}/validate` | `{versionId}` หรือ draft definition → `200 {valid,diagnostics[] {code,path,message},schemaHash,profileVersion}`; pure check ไม่มี job/outbox |
-| `POST /mapping-configs/{id}/preview` | `{versionId|draft,records:[...]}` → `200 {outputs,diagnostics,counts,truncated}`; ไม่เขียน DB; จำกัด 50 records และ JSON body 1 MiB |
-| `POST /mapping-configs/{id}/preview-file` | `multipart/form-data` กับ `file` BIFF5 `.xls` + `versionId` หรือ draft; 20 MiB upload, scan ไม่เกิน 100,000 cells, คืนสูงสุด 50 data records; ไม่สร้าง File Job/Source/HTTP; ไฟล์เกิน/ผิด format แจ้ง error ชัดเจน |
+| `POST /mapping-configs/{id}/preview` | `{versionId|draft,records:[...]}` → `200 {records,outputs,diagnostics,counts,truncated}`; records เป็น raw fields/row positions, ไม่มี persistent IDs; ไม่เขียน DB; จำกัด 50 records และ JSON body 1 MiB |
+| `POST /mapping-configs/{id}/preview-file` | `multipart/form-data` กับ `file` + `versionId` หรือ draft → `200 {records,outputs,diagnostics,counts,truncated}`; adapter ตาม `inputLayout.kind` อ่าน Excel/Delimited/FixedWidth ภายใต้ 20 MiB upload/สูงสุด 50 data records, Excel scan ไม่เกิน 100,000 cells; ไม่สร้าง File Job/Source/HTTP; ไฟล์ผิด format/encoding/limit แจ้ง path/code ชัดเจน |
 | `POST /mapping-configs/{id}/activate`, `/disable` | `{versionId,expectedRowVersion,requestId,reason}` สำหรับ activate; disable ไม่ต้อง versionId; `200 {id,enabled,activeVersionId,rowVersion}`; active route/owner check ใน transaction เดียว |
-| `GET /file-jobs`, `GET /file-jobs/{id}` | filters `configId,status,createdFrom,createdTo,page,pageSize`, sort `createdAt`/`id`; detail มี pin IDs, `createdAt`, import/archive states, hash, duplicate canonical ID, checkpoint/counters, `rowVersion` |
+| `GET /file-jobs`, `GET /file-jobs/{id}` | filters `configId,inputLayoutKind,status,createdFrom,createdTo,page,pageSize`, sort `createdAt`/`id`; detail มี pin IDs และ `inputLayoutKind`, `createdAt`, import/archive states, hash, duplicate canonical ID, checkpoint/counters, `rowVersion` |
 | `GET /file-jobs/{id}/rows`, `GET /file-jobs/{id}/errors` | paged metadata: row ID/number/physical line/state/outputCount หรือ safe stage/code/path/message; sort `rowNumber`/`createdAt` + ID |
 | `GET /file-jobs/{fileId}/rows/{rowId}` | raw Source detail เฉพาะ row ที่อยู่ใน file นี้: `sourceRowId,fileJobId,sourceDefinitionVersionId,configVersionId,rowNumber,physicalLineNumber,rowJobState,fields:{key:rawText|null},deliverySummary`; fields มาจาก pinned definition; read-only |
 | `POST /file-jobs/{id}/retry`, `POST /row-jobs/{id}/retry` | `{expectedRowVersion,requestId,reason}` → `202 {actionId,jobId,state}` เฉพาะ recoverable import/row failure; ไม่สร้าง Source identity ใหม่ |
@@ -115,4 +116,4 @@ Manual retry **ขอจัดคิว**; worker จอง attempt ใหม่
 - Q8: prefix ยืนยันแล้ว; route/DTO ที่เหลือเป็นแบบภายใน Mapping รอ Dev 1 review เฉพาะส่วนที่กระทบ Web/contract boundary ตาม AGENTS.md
 - ตรวจ OpenAPI/JSON serializer, `[ApiController]` auto-validation และ global exception handler ให้ตอบ envelope ที่กำหนดจริง; current source ยังไม่มี feature controllers
 - Q4 ต้องให้ Dev 1 ตัดสิน metadata เวลาฝั่ง Informs; Q5 รับ fields ภายหลัง; Q7 keys/fixture/corporate dependencies ไม่อ้างว่าพร้อมจาก local design
-- ขนาด preview 20 MiB/100,000 cells เป็น limit เริ่มต้นที่ต้องพิสูจน์กับ fixture MTLS ที่รับรองแล้ว; ปรับด้วย configuration ก่อนเปิดใช้งานจริง ไม่ลดเพดานรับไฟล์จริงจาก limit preview
+- ขนาด preview 20 MiB/50 records เป็น limit เริ่มต้นร่วม; 100,000 cells ใช้กับ Excel เท่านั้น ต้องพิสูจน์ Delimited/Fixed-width ด้วย fixture สมมติของ format นั้นก่อนเปิด capability; ปรับด้วย configuration ก่อนเปิดใช้งานจริง ไม่ลดเพดานรับไฟล์จริงจาก limit preview

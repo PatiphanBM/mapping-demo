@@ -13,8 +13,11 @@ _Avoid_: Normalized Table, ตารางปลายทาง
 _Avoid_: Source Table, nomalized_table
 
 **Input Layout**:
-ข้อกำหนดแบบมีรุ่นที่อธิบายการอ่าน input record และนำค่าดิบไปวางใน field ของ Source Table โดยเป็น Delimited หรือ Fixed Width
+ข้อกำหนดแบบมีรุ่นที่อธิบายการอ่าน input record และนำค่าดิบไปวางใน field ของ Source Table; เลือกชนิด `Excel`, `Delimited` (CSV/TSV) หรือ `FixedWidth` ต่อ Mapping Config Version ด้วย `kind` และ options เฉพาะชนิด โดยไม่ผูก API/หน้าเว็บกับ MTLS
 _Avoid_: File-to-Source Mapping, parser config
+
+**Input Reader**:
+module ที่รับ snapshot ของไฟล์กับ Input Layout ที่ pin แล้ว และคืน Source record รูปเดียวกันพร้อมลำดับแถวข้อมูล/ตำแหน่งกายภาพ/diagnostics ไม่ว่า format ต้นทางเป็น Excel, Delimited หรือ Fixed-width; parser แต่ละชนิดเป็น adapter หลัง interface นี้
 
 **Fixed-width Slice**:
 ช่วงข้อความของ fixed-width record ที่ระบุด้วยตำแหน่งเริ่มต้นแบบ 1-based และความยาว เพื่อนำค่าดิบไปยัง Source field
@@ -38,6 +41,10 @@ _Avoid_: raw SQL, lookup query
 
 **Mapping Config**:
 ชุดข้อกำหนดที่ผูก folder รับไฟล์กับ Source Table โดย Config Version แต่ละรุ่นเป็นเจ้าของ Input Layout, Transformation Program และ Destination Definition ที่ immutable; Normalized Table จำเป็นเฉพาะ `LegacyTable`
+
+**Inbox Receipt**:
+หลักฐานผลรับ event ของ Mapping สำหรับการจัดคิว Row Job หนึ่งรายการ แยกจากผลการแปลงข้อมูลและผลการส่งเข้า Informs
+_Avoid_: ผลแปลงข้อมูล, ผลการส่งเข้า Informs
 
 **Row Error**:
 รายละเอียดข้อผิดพลาดของแถวที่ไม่ผ่านการแปลงหรือตรวจสอบข้อมูล ประกอบด้วยเลขแถว field และสาเหตุ โดยแถวที่ผ่านยังบันทึกลงตารางปลายทางได้
