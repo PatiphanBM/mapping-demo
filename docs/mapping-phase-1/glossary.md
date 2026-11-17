@@ -14,7 +14,7 @@ last_updated: 2026-11-13
 
 | คำ | ความหมายที่ใช้ | ที่มักเข้าใจผิด |
 |---|---|---|
-| **Inform (ใบคำขอ)** | คำของ MTI = การแจ้งงาน · 1 รายการ = ใบคำขอ 1 ใบ · contract `pa-inform/1`, API `/api/pa/informs` | ❌ ห้ามใช้ `proposal` ในงานใหม่ (เอกสาร demo เก่าใช้คำนี้) |
+| **Inform (ใบคำขอ)** | คำของ MTI = การแจ้งงาน · 1 รายการ = ใบคำขอ 1 ใบ · contract `pa-inform/1`, API `/api/pa/informs` · **business เรียก "ใบคำขอ" หรือ "ใบแจ้งงาน"** — ข้อความที่คนอื่นอ่าน (เอกสาร / หน้าจอ / diagram) ห้ามใช้ "ใบ" เฉยๆ (ผู้ใช้ 2026-11-17) | ❌ ห้ามใช้ `proposal` ในงานใหม่ (เอกสาร demo เก่าใช้คำนี้) |
 | **Issue** | **การออกกรมธรรม์ (issue policy) เท่านั้น** — นอก phase 1 | ❌ ไม่ใช่ "ปัญหา" — ผลตรวจเรียก **validation message** |
 | **Partner code** | รหัสงานของ partner เช่น `MTLS` (legacy `CUSERGROUP`) — partner เดียวมีหลายรหัสได้ | ❌ ไม่ใช่ channel |
 | **Sale channel** | ช่องทางที่ข้อมูลใบคำขอเข้ามา: `FILE` / `MAIL` / `ONLINE` — **mapping เติมเป็นค่าคงที่** (MTLS = `FILE`) | ต้องระบุเสมอว่า channel แบบไหน |
