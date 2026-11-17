@@ -30,6 +30,27 @@ last_updated: 2026-11-17
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-17 — Commit M3.3
+- เสร็จ: ตามคำสั่งผู้ใช้ commit โค้ด `prjInsuranceValidationMapping` บน develop เป็น `7014c83` — `feat(mapping): add durable row transformation and encrypted outputs`; รวม 46 ไฟล์ของ M3.3 และ working tree ของ Mapping สะอาดหลัง commit
+- หลักฐาน: source ตรงกับชุดที่ผ่าน `./scripts/check.ps1` ล่าสุด (unit **27/27**, integration **113/113**, EF model ผ่าน) ไม่มีการแก้ source หลัง gate; staged whitespace check ผ่าน และไม่มี runtime data/key/company configuration ใน commit
+- เสร็จ: อัปเดตหลักฐาน commit ใน plan และ [แบบ M3.3](m3-3-row-transformation-design.md) พร้อม commit เอกสาร 3 ไฟล์รวมแบบข้อมูล runtime; pull เอกสารก่อนแก้แล้ว up to date
+- ติด / รอ: Informs T2.6/Q4 และ company dependency Q7 ตามเดิม; M4.1 HTTP sender ยังไม่ทำ
+- ต่อไป: M4.1; ยังไม่ push ตามขอบเขตคำสั่ง commit ครั้งนี้
+
+### 2026-11-17 — ปิด M3.3: fenced row transformation และ encrypted durable outputs บน local
+- เสร็จ: Row Job worker ทำ claim/lease/recovery/epoch fencing, โหลด pinned raw Source/config/schema/profile, ใช้ shared compiler/evaluator, เติม system envelope และ final schema validation; encrypted Delivery Jobs/delivery outbox/Row Errors/row result commit พร้อมกันตาม M-33; migration `20261117081518_AddRowTransformationOutputs`
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build, unit **27/27**, integration **113/113** และ EF model check; M3.3 เพิ่ม unit 5 + integration 18 (repository 4, crypto 2, pipeline 10, Kafka 1, full MTLS 1); ทดสอบ rollback/cancel/timeouts/key loss/stale owner หลัง encrypt/config pin/0..N/cardinality/limits และ Kafka replay/worker สองตัวแล้วไม่มี outputs ซ้ำ
+- หลักฐาน: actual import → transform → encrypted outputs ของ MTLS สังเคราะห์ **2,556/2,556** ผ่านกับ pinned synthetic schema รองรับ D-80; cancelled 3 แถวเก็บ null/unparsed และ short ID 11 หลัก 2 แถวคงค่าเดิม; actual schema เก่ามี regression ได้ ContractMissingFileReceivedAt/Blocked; [รายการไฟล์/หลักฐาน M3.3](m3-3-row-transformation-design.md)
+- หลักฐาน: local delivery topic `mapping.delivery.requested` 3 partitions/init exit 0; compose syntax และ script key generation แบบ opt-in/ไม่ overwrite/env restoration ผ่าน; worker ยังปิดโดย default ไม่มี key/connection บริษัทใน source และไม่ได้แก้ Informs/Web/demo source
+- ติด / รอ: Informs schema/deploy T2.6 ตาม Q4/D-80 ก่อนรับตรวจหรือเปิดส่งจริง; key/Kafka/share บริษัทติดตาม Q7; encrypted storage ของ M4.1 ทำแล้วเฉพาะส่วนที่ row transaction ต้องใช้ ยังไม่มี HTTP sender/delivery attempts และไม่ปิด M4.1/M4.2
+- ต่อไป: M4.1 typed Informs HttpClient และ HTTP outcome tests; source ใน `prjInsuranceValidationMapping` รวม 46 ไฟล์ที่เพิ่ม/แก้บนฐาน `9198a54` และเอกสารรอบ M3.3 ยังไม่ commit/push ตามขอบเขตคำสั่งนี้
+
+### 2026-11-17 — เตรียม M3.3 row transformation worker
+- เสร็จ: ตรวจ Row Job/transform wake-up ของ M-31, Source/version pin ของ M-32, compiler/evaluator/preview และ pattern worker ของ Informs แบบ read-only; เขียน [แบบ M3.3 พร้อม source batch](m3-3-row-transformation-design.md)
+- กำลังทำ: รอยืนยัน source batch สำหรับ claim/lease/recovery, shared compile/evaluate, system envelope/final schema validation, Row Errors และ encrypted durable Delivery Jobs/outbox; ทำ storage ที่ M4.1 ใช้ต่อเพราะ Transformed ต้องมี durable outputs แต่ยังไม่ทำ HTTP/delivery attempts
+- ติด / รอ: schema Informs ปัจจุบันยังไม่มี fileReceivedAt ตาม D-80/T2.6 (Q4); worker ต้องเก็บ safe contract diagnostic ไม่ละ field/แก้ pinned schemaเอง; success ของกลไกใช้ synthetic test schema ที่ประกาศชัด และไม่ถือว่ารับตรวจ Informs จริงแล้ว
+- ต่อไป: หลังยืนยัน implement + PostgreSQL/Kafka/crypto/failure/replay tests และ check.ps1 ก่อนบันทึกผล; source ยังไม่แก้ และรอบนี้ไม่ commit/push อัตโนมัติ
+
 ### 2026-11-17 — Commit และ pull เอกสาร Mapping โดยเก็บงานเดิมครบ
 - เสร็จ: commit เอกสารค้าง 12 ไฟล์ถึง M3.2 เป็น `adc17fb`; pull/merge origin/develop สำเร็จเป็น `4c26642` รับหมายเหตุ health probes ของ Dev 1 และ glossary ล่าสุดโดยไม่มี conflict
 - หลักฐาน: เทียบ Git content ของเอกสารทั้ง 12 ไฟล์กับ snapshot ก่อน pull แล้วตรงทั้งหมด; ประวัติ local/remote อยู่ครบ glossary ตรง origin/develop และหมายเหตุ Dev 1 ปรากฏครั้งเดียวตรงต้นฉบับ
@@ -458,11 +479,14 @@ last_updated: 2026-11-17
   - ✅ 11-17 `check.ps1` ผ่าน unit 22/22, integration 95/95 และ EF model; รวม M3.2 integration 21 ข้อ ตรวจ atomic receive/seal/rows, scanners/claims/dedup, fencing, cancel/resume, snapshot/archive DB failure, changed original, Kafka receipt/offset/poison/republish/restart; Excel raw 2,556 × 19 fields รวม NULL และ hosted intake ครบสาม format/2,560 แถวผ่าน [หลักฐานปิดงาน/รายการไฟล์](m3-2-file-intake-design.md); ผู้ใช้ยืนยันเพิ่มไฟล์ Source writer เพื่อแก้ NULL แล้ว โค้ด commit `9198a54` บน develop ยังไม่ push; เอกสารยังไม่ commit
   - 🔄 11-17 เตรียม [แบบ/source batch M3.2](m3-2-file-intake-design.md) แล้ว รอยืนยันก่อนแก้ source; เสนอ snapshot-copy archive ที่คง input เดิม + path pointer เพื่อกันรับซ้ำและรักษาไฟล์ใหม่ที่ partner เขียนทับ ไม่เปลี่ยน contract/day/ขอบเขต business; M3.3/M4 ยังแยกทำ
   - 🔄 11-17 import core สำหรับ File Job/snapshot ที่เตรียมแล้วผ่าน CSV/TSV (M2.6) และ FixedWidth (M2.7) + pinned hash/version + lease/fencing + atomic rows + cancellation/resume; scanner/path stability/snapshot filesystem/archive ยังแยกทำ ไม่ปิด M3.2 ทั้งข้อ
-- [ ] **M3.3** Implement row transformation jobs, claim/lease/recovery และ row diagnostics — เสร็จเมื่อ: restart/redelivery ไม่สร้าง Source/output ซ้ำ, business conversion failure ไม่ทิ้งแถว, system/contract failure แสดงในยอดที่ยังไม่ส่ง และแถวอื่นไปต่อได้ · เป้า 11-24
+- [x] **M3.3** Implement row transformation jobs, claim/lease/recovery และ row diagnostics — เสร็จเมื่อ: restart/redelivery ไม่สร้าง Source/output ซ้ำ, business conversion failure ไม่ทิ้งแถว, system/contract failure แสดงในยอดที่ยังไม่ส่ง และแถวอื่นไปต่อได้ · เป้า 11-24 · ปิด 11-17 ในขอบเขต worker/local ตาม M-33; Informs acceptance/deploy T2.6 ยังติดตาม Q4 และ company deployment ตาม Q7
+  - ✅ 11-17 `check.ps1` ผ่าน unit 27/27, integration 113/113 และ EF model; รวม M3.3 integration 18 ข้อพิสูจน์ DB transaction/lease/recovery/fencing, crypto/tamper/key loss, null/unparsed/schema/cardinality/config pin/limits/rollback/cancel, Kafka replay/worker สองตัวและ full MTLS สังเคราะห์ 2,556 encrypted default outputs; [หลักฐานปิดงาน/รายการไฟล์](m3-3-row-transformation-design.md); ใช้ synthetic D-80 schema เฉพาะ success mechanics และทดสอบ actual schema เก่าได้ Blocked; worker ปิดโดย default ไม่มี HTTP/Delivered; source commit `7014c83` บน develop ยังไม่ push
+  - 🔄 11-17 ตรวจแบบและทำ [source batch M3.3](m3-3-row-transformation-design.md) แล้ว รอยืนยันก่อนแก้ source; รวม encrypted output storage ของ M4.1 เท่าที่จำเป็นต่อ atomic row result ไม่ปิด HTTP/attempts ตามไปด้วย; dependency schema fileReceivedAt/T2.6 ติดตาม Q4
 
 ### M4 — ส่ง Informs และดูแลผลการส่ง
 
 - [ ] **M4.1** Implement encrypted durable Delivery Payload และ typed Informs HttpClient — เสร็จเมื่อ: 1 request/ใบ, bytes/hash/key persist ก่อนส่ง, 201/200/replayed/replaced/400/409 ตรง contract จริง และไม่แตะ `non_motor.*` · เป้า 11-24
+  - 🔄 11-17 encrypted durable storage/identity-bound AES-GCM/hash/key reference และ delivery outbox ทำพร้อม M3.3 ตาม M-33 แล้ว; เหลือ typed HttpClient/response contract/HTTP tests และรอ Informs T2.6/Q4 ก่อนตรวจ actual fileReceivedAt; ยังไม่ปิด M4.1
 - [ ] **M4.2** Implement retry/backoff/Retry-After/concurrency/lease recovery — เสร็จเมื่อ: 429/5xx/timeout และ crash หลัง Informs commit ใช้ bytes/key เดิม, attempt bounded/ไม่ retry ซ้อน, permanent rejection ไม่ auto retry · เป้า 11-25
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.2: เริ่ม HTTP concurrency สูงสุด 1 request ไป Informs และปรับผ่าน config ภายหลังตาม M-07; แบบการคุมเพดานหลาย pod ยังต้องระบุใน M1.1/M4.2 ไม่ถือว่าเพดานเพิ่มอัตโนมัติตามจำนวน pod
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.3: รวมสูงสุด 6 attempts ต่อ delivery รวมครั้งแรก 1 + retry สูงสุด 5 ตาม M-08; จำนวนครั้งต้อง durable ไม่รีเซ็ตเมื่อ restart/redelivery และไม่ให้ HttpClient retry ซ้อนเพิ่มจำนวนโดยไม่ถูกนับ
@@ -749,6 +773,16 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ข้อจำกัด:** archive สำเร็จไม่ใช่ transform/delivery สำเร็จ; content claim ของงาน blocked ไม่ถูกล้าง; cleanup/retention และ permissions/durability ของ share บริษัทติดตาม Q7 ไม่แฝงคำสั่งลบต้นฉบับใน scanner
 - **ห้าม:** ไม่แก้หลักฐานย้อนหลัง ไม่เริ่ม import จาก input path โดยตรง ไม่เก็บ raw payload/exception text ใน file-event receipt/log และไม่เปลี่ยน pinned version/CreatedAt ระหว่าง resume
 
+### M-33 แปลงแถวด้วย fenced worker และ commit encrypted intents พร้อมผลแถว
+- **ตัดสิน (2026-11-17):** ตาม source batch ที่ผู้ใช้ยืนยัน ทำ Row Job worker แยกจาก transform consumer ใช้ DB clock/owner/epoch/attempt/lease และ pinned Source/config/schema/profile; ใช้ compiler/evaluator ร่วมกับ preview และเติม system envelope จาก File Job ตาม D-80 โดย config override ไม่ได้
+- **ทำไม:** ต้องมี durable final outputs ก่อนบอกว่า Transformed และต้องกู้คืนจาก crash/redelivery โดยไม่เพิ่ม Source/output; จึงทำ encrypted output storage ของ M4.1 เท่าที่จำเป็นพร้อม row result/diagnostics/delivery outbox ใน transaction เดียว แต่ HTTP client/attempts/retry budget ยังเป็น M4
+- **กลไก:** generic 0..N (`{}`/outputPolicy many) หรือ pinned `{"outputPolicy":"oneDefault"}`; schema ผิด output เดียว Blocked ทั้งแถวไม่มี partial outputs; conversion แบบ nullable คง null/unparsed และ warning ตาม D-04; technical dependency/key failure ใช้ RetryableFailed/NextAt ไม่ถือเป็น delivery attempt และไม่ reset counter
+- **ตัวอย่างข้อมูลสมมติ:** Source S1 ได้ keys `primary`/`secondary` ที่ผ่าน schema → encrypted Delivery Jobs D1/D2 + IDs-only outbox 2 รายการ + Transformed/OutputCount 2 พร้อมกัน; ถ้า secondary ผิด contract → Blocked/OutputCount 0 พร้อม safe diagnostic โดยไม่มี D1/D2; stale owner หลัง encrypt บันทึก intent ไม่ได้
+- **การเข้ารหัส:** AES-256-GCM, nonce 12 bytes สุ่มต่อ payload, tag 16 bytes, SHA-256 final bytes, AAD ผูกทุก delivery identity/key reference/version; typed metadata columns แทน JSON; immutable encrypted payload และ unique `(file_job_id,source_row_id,output_key)` ใช้ส่ง bytes เดิมต่อใน M4
+- **ไม่เลือก:** ไม่ compile ใน Kafka consumer ไม่ fallback plaintext/latest schema ไม่เรียก HTTP ระหว่าง row transaction และไม่เปลี่ยน encrypted intent หลัง commit; ไม่ใช้ชื่อ partner กำหนด cardinality ใน engine
+- **ข้อจำกัด:** worker ปิดโดย default; local key สร้างครั้งเดียวเมื่อเปิดอย่างชัดเจน อยู่ ignored data/keys และ mount read-only; company key/Kafka/share ติดตาม Q7; Informs actual schema ที่ยังขาด fileReceivedAt ให้ ContractMissingFileReceivedAt/Blocked และรอ T2.6/Q4 ก่อนรับตรวจจริง success ของกลไกใช้ synthetic schema ที่ประกาศชัด; ไม่เปิด reprocess เปลี่ยน payload ของงานเก่าตาม M-22
+- **หลักฐาน:** [แบบ/ไฟล์/การทดสอบ M3.3](m3-3-row-transformation-design.md); migration `20261117081518_AddRowTransformationOutputs`; สถานะรวมและผล gate ดู §1/§3 ไม่มี commit/push อัตโนมัติ
+
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
 > ทั้งคู่เพิ่มได้ · เลข `Q1`, `Q2`, … ต่อกันไป · ตอบใต้ข้อนั้น · ตกลงแล้วเขียนผลสั้น ๆ + ย้ายไปที่ที่ถูก (`M-xx` ใน §4 หรือ Dev 1 ลง `rules.md` เป็น `D-xx`) แล้วติ๊ก `[x]`
@@ -798,6 +832,7 @@ Source catalog/การกำหนด fields และสร้าง physical
   - ข้อเสนอถึง Dev 1: ตกลงวิธีรับและใช้เวลารับไฟล์ครั้งแรกจาก Mapping สำหรับ D-23 (เช่น field metadata ที่ Dev 1 เพิ่มใน contract พร้อม semantics สำหรับผู้เรียกเดิม) หรือวิธีอื่นที่รักษาการเรียงได้; ยังไม่กำหนดชื่อ field/แก้ schema เอง และยังไม่ปิด Q4 ทั้งข้อ
   - รายละเอียดข้อเสนอหลัง M-23: หากส่งเวลาเป็น metadata ให้ใช้ค่า `FileJob.CreatedAt` เดิม ไม่สร้าง field เวลาเพิ่มในตาราง Mapping; วิธีรับ/ใช้ใน Informs ยังเป็นประเด็นของ Dev 1 จึงยังไม่ปิด Q4 ข้าม service
   - Dev 1: (11-16) ตอบ Q4 — **เพิ่ม `fileReceivedAt` (optional, date-time มี offset) ใน `pa-inform/1`** ระดับเดียวกับ `fileName` ส่งค่า `FileJob.CreatedAt` ตามที่เสนอ (M-23) ทุกแถวของไฟล์ค่าเดียวกัน, resume / retry คงค่าเดิม → [rules.md D-80](rules.md) + [contract-pa-inform.md](contract-pa-inform.md) §3 / §5 · Informs จะรับ field นี้ใน T2.6 (deploy Informs ก่อน mapping ส่ง — `additionalProperties: false`) · ส่วน `sourceRowNo` ตาม M-06 เหมือนเดิม — Q4 ปิดได้จากฝั่ง Dev 1
+  - Dev 2 (11-17, เตรียม M3.3): ตรวจ schema ใน repo Informs ปัจจุบันและ fixture ที่ pin แล้ว root ยังไม่มี `fileReceivedAt` และ `additionalProperties: false`; ขอ Dev 1 ติดตาม schema/deploy T2.6 ตามคำตอบเดิม ก่อนรับตรวจ runtime กับ Informs จริง ฝั่ง Mapping จะส่ง system field ตาม D-80 และแสดง safe Blocked diagnostic เมื่อ pinned schema ยังไม่รองรับ ไม่ละ field/แก้ Informs/schema snapshot เดิมเอง
 - [ ] **Q5** (Dev 2, 11-13) พบช่องว่างระหว่างกฎกับ schema ตัวจริงของ Informs (`6ab23ad`): BR-035 ระบุทายาทตามกฎหมาย **100%** แต่ `$defs.beneficiary` มีเพียง `seq/fullName/relationship` และ `additionalProperties: false` — ให้ mapping ส่งแค่ชื่อ default แล้วสัดส่วนเป็นหน้าที่ Informs หรือจะเพิ่ม field โดย Dev 1? อีกกรณี D-04 ให้ส่งค่าผิดเป็น null แต่ schema บังคับ `sourceReference` nonempty/`transactionType` enum; ถ้าต้นทางไม่มีค่าที่ส่งได้ จะให้ ops/UW ติดตามอย่างไร? เสนอเก็บ Source + row error/ยอดยังไม่ส่ง โดยไม่แต่งค่าและไม่เพิ่ม contract field เอง
   - คำสั่งผู้ใช้ (11-13): **ข้ามเรื่อง field/สัดส่วนไว้ก่อน ผู้ใช้จะส่ง fields มาให้เอง; ยึดการออกแบบให้ครอบคลุมหลาย scenarios ไม่เฉพาะเจาะจง** → M-24; ยังไม่เลือกข้อเสนอส่งเฉพาะชื่อ/เพิ่ม field สัดส่วน ไม่ปิด Q5 และไม่เปลี่ยน BR-035 เอง
   - ผลต่อการทำงาน: เดินหน้าร่างกลไก catalog/compiler/schema validation/diagnostics/pinning/lineage/recovery ได้ตาม [ร่างข้อมูลและ runtime](data-runtime-design.md); actual business bindings/defaults และ acceptance ที่ต้องใช้ fields จริงยังรอ input ไม่ตีความว่าพร้อมส่ง payload จริงแล้ว
