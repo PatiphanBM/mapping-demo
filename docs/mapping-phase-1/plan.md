@@ -30,6 +30,12 @@ last_updated: 2026-11-17
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-17 — Commit และ pull เอกสาร Mapping โดยเก็บงานเดิมครบ
+- เสร็จ: commit เอกสารค้าง 12 ไฟล์ถึง M3.2 เป็น `adc17fb`; pull/merge origin/develop สำเร็จเป็น `4c26642` รับหมายเหตุ health probes ของ Dev 1 และ glossary ล่าสุดโดยไม่มี conflict
+- หลักฐาน: เทียบ Git content ของเอกสารทั้ง 12 ไฟล์กับ snapshot ก่อน pull แล้วตรงทั้งหมด; ประวัติ local/remote อยู่ครบ glossary ตรง origin/develop และหมายเหตุ Dev 1 ปรากฏครั้งเดียวตรงต้นฉบับ
+- สำรอง: branch `backup/mapping-demo-pre-pull-20261117-c852319e` ชี้ commit เอกสารก่อน pull; มีสำเนาไฟล์เดิมพร้อม SHA-256 manifest ใน `.git/codex-backups/mapping-demo-pre-pull-20261117-c852319e/`
+- ต่อไป: M3.3; ยังไม่ push ตามขอบเขตคำสั่งครั้งนี้ และไม่เปลี่ยนโค้ด demo หรือ repo โค้ดอื่น
+
 ### 2026-11-17 — Commit code Mapping ถึง M3.2
 - เสร็จ: ตามคำสั่งผู้ใช้ commit โค้ดใน repo `prjInsuranceValidationMapping` branch `develop` เป็น `9198a54` — `feat(mapping): add configurable preview and durable file intake`; รวม catalog/Source storage/preview/transformation/readers/lookups และ durable file intake/Kafka/archive พร้อม tests/migrations/local config ทั้งหมด 188 ไฟล์
 - หลักฐาน: ก่อน commit รัน `./scripts/check.ps1` ผ่าน build, unit **22/22**, integration **95/95** และ EF model check; staged tree ตรงกับโค้ดที่ทดสอบ ไม่มี data/build artifacts/config บริษัทหรือ connection details ที่ผู้ใช้เคยให้ และ working tree ของ repo Mapping สะอาดหลัง commit
