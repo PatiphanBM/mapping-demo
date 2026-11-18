@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-17
+last_updated: 2026-11-18
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -29,6 +29,49 @@ last_updated: 2026-11-17
 > - ติด / รอ: — (หรือ ติดอะไร รอใคร)
 > - ต่อไป: M2.1
 > ```
+
+### 2026-11-18 — Commit/push M4.1 และ M4.2
+- เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `aca67c6` — `feat(mapping): add durable Informs delivery and bounded retries`; รวม 41 ไฟล์ของ M4.1/M4.2 และ push origin/develop สำเร็จแล้ว พร้อม commit M3.3 `7014c83` ที่ยังค้าง; local/remote source ตรงกันและ working tree สะอาดหลัง push
+- เสร็จ: บันทึก source commit ในแบบ M4.1/M4.2 และ plan พร้อมแบบข้อมูล runtime รวมเอกสาร 4 ไฟล์ใน commit เอกสารชุดนี้ตามคำสั่ง commit/push
+- หลักฐาน: check.ps1 ล่าสุดผ่าน unit 32/32, integration 138/138 และ EF model ด้วย temporary RunSettings รัน collections ตามลำดับ; หลังลบ EF configuration ที่ซ้ำตรวจ build Release/model consistency ผ่านเพิ่มแล้ว; staged whitespace check ผ่าน ไม่มี runtime data/key/company config ใน commit
+- ติด / รอ: default parallel gate ยังมีประวัติ Kafka timeout ตามข้อสังเกตเดิม; actual Informs T2.6/Q4, company dependency Q7 และ M4.3/M4.4 ยังแยกติดตาม
+- ต่อไป: M4.3 log/summary/inspection/action APIs
+
+### 2026-11-18 — ปิด M4.2: durable delivery runner/retry/recovery บน local
+- เสร็จ: worker แบบ opt-in จาก DB NextAt, atomic claim/attempt reservation ก่อน HTTP, global budget/pause guard, dispatch/heartbeat/epoch fencing, bounded retry/backoff/Retry-After และ recovery ตาม M-35; ใช้ immutable bytes/key เดิม จำกัดสูงสุด 6 reservations ไม่มี attempt 7; migration `20261117095253_AddDeliveryRuntime`
+- หลักฐาน: check.ps1 ผ่าน build Release, unit **32/32**, integration **138/138** และ EF model check โดยตั้ง temporary RunSettings `ParallelizeTestCollections=false`; ไม่มี filter/skip และไม่เปลี่ยน explicit concurrency ภายใน tests; รอบ default parallel ที่เคย timeout ยังเป็นข้อจำกัดการรันบนเครื่องนี้ ไม่อ้างว่าแก้ถาวรแล้ว
+- หลักฐาน: M4.2 เพิ่ม unit **5** และ integration **14** (repository 4/runtime 4/recovery 5/hosted worker 1); ทดสอบ rollback reserve/complete, lease/grace/heartbeat failure/stale owner, pause/budget ข้าม workers, Retry-After, shutdown/cancel, crash/unknown/replay/ครบ 6 และ payload/key/profile pin; tests สอง worker peak HTTP 1 ผ่าน
+- หลักฐาน: gate รอบผ่าน integration ใช้เวลา 9 นาที 12 วินาที; Kafka intake เดิมผ่าน 59.73 วินาทีภายใน timeout 3 นาที; full MTLS สังเคราะห์ 2,556 encrypted outputs ผ่าน 2 นาที 35.38 วินาที; heartbeat failure หลัง synchronize ผ่านพร้อมรหัส LeaseHeartbeatLost; [แบบ/รายการไฟล์/เงื่อนไขตรวจ M4.2](m4-2-durable-delivery-design.md)
+- เสร็จ: อัปเดตแบบข้อมูล runtime และ M-35; รวม source ค้าง M4.1+M4.2 41 ไฟล์บนฐาน `7014c83` ไม่มี secret/runtime key/company config; Informs/Web ไม่ได้แก้ sender ยัง disabled โดย default และไม่มี HTTP/DB write ไปบริษัท
+- ติด / รอ: actual Informs acceptance/deploy T2.6/Q4 และ dependency บริษัท Q7; M4.3 log/summary/inspection/action APIs และ M4.4 end-to-end จริงยังไม่ปิด; การทำให้ default parallel gate เสถียรเป็น follow-up ของ test infrastructure
+- ต่อไป: M4.3; source/docs ยังไม่ commit/push ตามขอบเขตคำสั่ง
+
+### 2026-11-18 — ตรวจ gate รวมของ M4.2 ต่อ
+- เสร็จ: source M4.2/attempt ledger/worker/recovery และ tests ใหม่ทำแล้วตาม M-35; unit 32/32 และ integration 137/138 ผ่านในการรันรวมสองรอบที่ผ่านมาซึ่งยังไม่ถือเป็น gate สำเร็จ
+- กำลังทำ: รัน check.ps1 เดิมด้วย temporary RunSettings ปิด parallel test collections เพื่อแยกการแย่งทรัพยากรของ PostgreSQL/Kafka/full MTLS fixtures; คง Kafka timeout/assertion และ concurrency ภายใน tests ของ worker สองตัว
+- เสร็จ: ปรับ DeliveryRecoveryTests.HeartbeatDatabaseFailure ให้ติดตั้ง failure trigger หลัง HTTP request มาถึง stub แทนก่อนเริ่มส่ง และเพิ่ม assertion LastOutcomeCode=LeaseHeartbeatLost; ใช้ HTTP timeout 10 วินาทีเฉพาะ test นี้เพื่อไม่ให้ transport timeout กลบ heartbeat failure; targeted rerun ผ่าน 1/1 โดย production source ไม่เปลี่ยนในรอบตรวจนี้
+- ติด / รอ: Kafka intake เดิม timeout ที่ 3 นาทีเมื่อรวมทั้งชุด แต่รันแยกผ่าน 1/1 ใน 2 นาที 5 วินาทีพร้อม checkpoint เดิน/ไม่มี blocked diagnostic; ต้องยืนยันผลรวมครบก่อนติ๊กปิด M4.2; actual Informs T2.6/Q4 และ dependency บริษัท Q7 ยังแยกจาก local gate
+- ต่อไป: บันทึกผล gate และเงื่อนไขที่ใช้ให้ทำซ้ำได้ในแบบ M4.2; ไม่ commit/push อัตโนมัติ
+
+### 2026-11-17 — เตรียม M4.2 durable delivery runner
+- เสร็จ: ตรวจ encrypted Delivery Jobs/NextAt, typed Informs client ของ M4.1 และ delivery_controls/global budget/attempt guards ของแบบข้อมูล; เขียน [แบบ M4.2 พร้อม source batch](m4-2-durable-delivery-design.md) สำหรับ reserve ก่อน HTTP/เพดาน 6/heartbeat/fencing/Retry-After/recovery และ failure tests
+- กำลังทำ: รอยืนยัน source batch ตาม AGENTS.md; เสนอ DB polling จาก Delivery Job ที่ commit แล้ว โดยไม่ให้ Kafka redelivery สร้าง attempt/reset backoff และคง sender ปิดโดย default
+- ติด / รอ: Informs schema/deploy T2.6/Q4 และ company dependency Q7 ตามเดิม; local HTTP stub เป็นหลักฐานกลไก ไม่ใช่ acceptance จริง; API controls/inspection แยก M4.3
+- ต่อไป: หลังยืนยัน implement/migration/PostgreSQL/HTTP/worker/recovery tests และ check.ps1; source M4.2 ยังไม่แก้ ไม่ commit/push งาน M4.1 แทรกเอง
+
+### 2026-11-17 — ปิด M4.1: typed Informs HTTP client และ durable payload HTTP tests บน local
+- เสร็จ: เพิ่ม typed `IInformsClient`/safe outcome DTO/Infrastructure HttpClient ตาม M-34 ใช้ final bytes จาก encrypted output ของ M-33; แปล Created/Replayed/Replaced/400/409/429/5xx/unknown outcome ด้วย bounded strict response parsing และ Retry-After โดยไม่มี internal retry/redirect/cookie reuse
+- หลักฐาน: `./scripts/check.ps1` ผ่าน build Release, unit **27/27**, integration **124/124** และ EF model check; M4.1 เพิ่ม integration **11** ข้อ (HTTP client 8 + durable payload HTTP 3) ตรวจ status/flags/UUID/duplicate properties/limits/media/depth, timeout/cancellation/header/body stall, Retry-After delta/date, connection abort, offline config/no hosted sender และ exact UTF-8 bytes
+- หลักฐาน: PostgreSQL → committed encrypted output → decrypt → HTTP loopback ผ่าน; โหลดด้วย DbContext ใหม่หลังเปลี่ยน/disable config แล้ว replay ส่ง bytes/hash/idempotency identity เดิม และ ciphertext/key reference/DB state/row version/Source-output-outbox counts ไม่เปลี่ยน; key หายหรือ payload/identity ถูกแก้ไม่มี HTTP request
+- หลักฐาน: actual schema เก่าที่ขาด fileReceivedAt ยังคง Blocked/ContractMissingFileReceivedAt ไม่มี intent/HTTP; success mechanics ใช้ synthetic D-80 schema ชัดเจน; [แบบ/รายการไฟล์/ผลตรวจ M4.1](m4-1-informs-http-client-design.md); source เพิ่ม/แก้ 12 ไฟล์ ไม่มี DB migration/การแก้ Informs/Web/demo หรือ key/company configuration ในชุดงาน
+- ติด / รอ: Informs T2.6/Q4 ก่อนรับตรวจจริงและ company dependency Q7; runtime ยังไม่มี send API/hosted delivery runner/attempt ledger ไม่อ้าง Delivered หรือเปิด capability ส่งจริง; งานเหล่านี้เป็น M4.2/M4.3/M4.4 ตามเดิม
+- ต่อไป: M4.2 durable attempt reservation/retry/backoff/concurrency/lease recovery แล้วเชื่อม client; source/docs รอบนี้ยังไม่ commit/push ตามขอบเขตคำสั่ง
+
+### 2026-11-17 — เตรียม M4.1 typed Informs HTTP client
+- เสร็จ: ตรวจ encrypted payload ของ M3.3 commit `7014c83`, controller/response records ของ Informs และ contract §4; เขียน [แบบ M4.1 พร้อม source batch](m4-1-informs-http-client-design.md) สำหรับ exact bytes POST/typed outcomes/bounded safe parsing/timeout/Retry-After และ durable-payload HTTP tests
+- กำลังทำ: รอยืนยันชุด source ตาม AGENTS.md; storage/crypto ใช้ของ M-33 เดิม ไม่เพิ่ม sender worker ที่ข้าม attempt ledger; durable retry/concurrency/lease/attempt reservations ยังเป็น M4.2
+- ติด / รอ: schema/DTO Informs ปัจจุบันยังขาด fileReceivedAt ตาม T2.6/Q4 และ URL/auth/TLS บริษัทตาม Q7; ทดสอบกลไกด้วย local HTTP stub/ข้อมูลสังเคราะห์ก่อน ไม่เปลี่ยน schema/bytes ของงานเก่า
+- ต่อไป: หลังยืนยัน implement/tests และ check.ps1; source ยังไม่แก้ รอบนี้ไม่ commit/push อัตโนมัติ
 
 ### 2026-11-17 — Commit M3.3
 - เสร็จ: ตามคำสั่งผู้ใช้ commit โค้ด `prjInsuranceValidationMapping` บน develop เป็น `7014c83` — `feat(mapping): add durable row transformation and encrypted outputs`; รวม 46 ไฟล์ของ M3.3 และ working tree ของ Mapping สะอาดหลัง commit
@@ -485,9 +528,15 @@ last_updated: 2026-11-17
 
 ### M4 — ส่ง Informs และดูแลผลการส่ง
 
-- [ ] **M4.1** Implement encrypted durable Delivery Payload และ typed Informs HttpClient — เสร็จเมื่อ: 1 request/ใบ, bytes/hash/key persist ก่อนส่ง, 201/200/replayed/replaced/400/409 ตรง contract จริง และไม่แตะ `non_motor.*` · เป้า 11-24
+- [x] **M4.1** Implement encrypted durable Delivery Payload และ typed Informs HttpClient — เสร็จเมื่อ: 1 request/ใบ, bytes/hash/key persist ก่อนส่ง, 201/200/replayed/replaced/400/409 ตรง contract จริง และไม่แตะ `non_motor.*` · เป้า 11-24 · ปิด 11-17 เฉพาะ encrypted storage + HTTP adapter/local tests ตาม M-33/M-34; actual Informs acceptance/deploy T2.6 แยก Q4/M4.4 และ durable delivery runner แยก M4.2
+  - ✅ 11-18 source รวมกับ M4.2 ใน commit `aca67c6` และ push develop แล้ว; หลักฐานรวมล่าสุด unit 32/32, integration 138/138 และ EF model ตามเงื่อนไข RunSettings ใน M4.2
+  - ✅ 11-17 `check.ps1` ผ่าน unit 27/27, integration 124/124 และ EF model; เพิ่ม M4.1 integration 11 ข้อ ตรวจ exact committed bytes/replay/config change, safe status/strict response/Retry-After/limits/cancel/timeout/no retry/redirect/cookies และ key/tamper/old schema ไม่ส่ง HTTP; [หลักฐานปิดงาน/รายการไฟล์](m4-1-informs-http-client-design.md); capability ยัง false ไม่สร้าง delivery attempt หรือ mark Delivered จาก adapter; source/docs ยังไม่ commit/push
+  - 🔄 11-17 ตรวจ response ของ controller จริงและเตรียม [แบบ/source batch M4.1](m4-1-informs-http-client-design.md) แล้ว รอยืนยันก่อนแก้ source; ส่ง exact final bytes หนึ่ง POST ต่อ invocation, safe bounded result/Retry-After/no internal retry; ไม่เปิด delivery runner ก่อน M4.2 และไม่อ้าง actual Informs acceptance ก่อน T2.6/Q4
   - 🔄 11-17 encrypted durable storage/identity-bound AES-GCM/hash/key reference และ delivery outbox ทำพร้อม M3.3 ตาม M-33 แล้ว; เหลือ typed HttpClient/response contract/HTTP tests และรอ Informs T2.6/Q4 ก่อนตรวจ actual fileReceivedAt; ยังไม่ปิด M4.1
-- [ ] **M4.2** Implement retry/backoff/Retry-After/concurrency/lease recovery — เสร็จเมื่อ: 429/5xx/timeout และ crash หลัง Informs commit ใช้ bytes/key เดิม, attempt bounded/ไม่ retry ซ้อน, permanent rejection ไม่ auto retry · เป้า 11-25
+- [x] **M4.2** Implement retry/backoff/Retry-After/concurrency/lease recovery — เสร็จเมื่อ: 429/5xx/timeout และ crash หลัง Informs commit ใช้ bytes/key เดิม, attempt bounded/ไม่ retry ซ้อน, permanent rejection ไม่ auto retry · เป้า 11-25 · ปิด 11-18 ในขอบเขต local runner/HTTP loopback ตาม M-35; actual Informs acceptance แยก Q4/M4.4 และ company deployment แยก Q7
+  - ✅ 11-18 source commit `aca67c6` และ push develop แล้ว พร้อมแบบ/หลักฐาน M4.1/M4.2 ใน commit เอกสารชุดนี้
+  - ✅ 11-18 check.ps1 ผ่าน unit 32/32, integration 138/138 และ EF model โดยใช้ temporary RunSettings รัน test collections ตามลำดับ ไม่มี skip/filter และ concurrency cases ภายใน tests คงเดิม; default parallel gate มี Kafka intake timeout บนเครื่องนี้และรันแยกผ่าน ไม่อ้างว่า default ถูกแก้ถาวร; [หลักฐาน/ไฟล์/เงื่อนไขตรวจ](m4-2-durable-delivery-design.md); worker default disabled, ไม่มี attempt 7, raw payload/key เดิมเมื่อ replay; source/docs ยังไม่ commit/push
+  - 🔄 11-17 เตรียม [แบบ/source batch M4.2](m4-2-durable-delivery-design.md) แล้ว รอยืนยันก่อนแก้ source; รวม DB attempt ledger/global budget/pause guard/worker/heartbeat/fencing และ recovery โดย sender default disabled; ใช้ typed client/encrypted payload M4.1 เดิมที่ยังไม่ commit; actual Informs acceptance แยก Q4/M4.4
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.2: เริ่ม HTTP concurrency สูงสุด 1 request ไป Informs และปรับผ่าน config ภายหลังตาม M-07; แบบการคุมเพดานหลาย pod ยังต้องระบุใน M1.1/M4.2 ไม่ถือว่าเพดานเพิ่มอัตโนมัติตามจำนวน pod
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.3: รวมสูงสุด 6 attempts ต่อ delivery รวมครั้งแรก 1 + retry สูงสุด 5 ตาม M-08; จำนวนครั้งต้อง durable ไม่รีเซ็ตเมื่อ restart/redelivery และไม่ให้ HttpClient retry ซ้อนเพิ่มจำนวนโดยไม่ถูกนับ
 - [ ] **M4.3** Implement delivery log/file summary/retry และ pause controls ที่ตกลง — เสร็จเมื่อ: counts ต่อ unique output ไม่ปน attempts, แยก import/transform/delivery, field reason/history ดูได้, action state guard/audit ผ่าน; changed-payload reprocess/business resend ปิดในช่วงแรกตาม M-22 · เป้า 11-26
@@ -782,6 +831,25 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ไม่เลือก:** ไม่ compile ใน Kafka consumer ไม่ fallback plaintext/latest schema ไม่เรียก HTTP ระหว่าง row transaction และไม่เปลี่ยน encrypted intent หลัง commit; ไม่ใช้ชื่อ partner กำหนด cardinality ใน engine
 - **ข้อจำกัด:** worker ปิดโดย default; local key สร้างครั้งเดียวเมื่อเปิดอย่างชัดเจน อยู่ ignored data/keys และ mount read-only; company key/Kafka/share ติดตาม Q7; Informs actual schema ที่ยังขาด fileReceivedAt ให้ ContractMissingFileReceivedAt/Blocked และรอ T2.6/Q4 ก่อนรับตรวจจริง success ของกลไกใช้ synthetic schema ที่ประกาศชัด; ไม่เปิด reprocess เปลี่ยน payload ของงานเก่าตาม M-22
 - **หลักฐาน:** [แบบ/ไฟล์/การทดสอบ M3.3](m3-3-row-transformation-design.md); migration `20261117081518_AddRowTransformationOutputs`; สถานะรวมและผล gate ดู §1/§3 ไม่มี commit/push อัตโนมัติ
+
+### M-34 ส่ง durable final bytes ผ่าน typed Informs client ครั้งเดียวต่อ invocation
+- **ตัดสิน (2026-11-17):** ตาม source batch M4.1 ที่ผู้ใช้ยืนยัน เพิ่ม Application `IInformsClient`/typed outcomes/result และ Infrastructure typed HttpClient ใช้ POST `/api/pa/informs` กับ final payload bytes เดิมจาก M-33 ไม่ serialize request ใหม่หรือสร้าง idempotency key อีกชุด
+- **ทำไม:** ต้องแยก transport result ที่ยืนยันแล้วออกจาก unknown outcome ก่อนทำ delivery runner; HTTP status เพียงอย่างเดียวไม่ยืนยัน inform ID/flags และ automatic retry/redirect อาจข้าม durable attempt budget ตาม M-08/M-20
+- **กลไก:** strict bounded BaseResponse parsing ตาม D-61/controller จริง, known Created/Replayed/Replaced/ContractRejected/DuplicateRejected/Throttled/TransientFailure/UnknownOutcome/Blocked; timeout ครอบคลุม headers/body, caller cancellation propagate, Retry-After delta/date คืน retryNotBefore ให้ M4.2 ใช้ต่อ; มีแต่ fixed codes/IDs/flags/status ไม่มี body/messageText/exception text
+- **ตัวอย่างข้อมูลสมมติ:** encrypted D1/hash H1 ถูก commit แล้ว → decrypt bytes B1 → POST B1 ได้ 201/informId I1 → caller ทดสอบโหลด D1 หลัง config ใหม่และส่ง B1 ซ้ำกับ stub ได้ 200/replayed/I1; request bytes/hash/key เดิม แต่ Delivery Job ยัง Pending เพราะ adapter ไม่ใช่ runner ที่บันทึก attempt/outcome
+- **ไม่เลือก:** ไม่ทำ HTTP retry handler/automatic redirect/cookie reuse ไม่อ่าน latest config/Source เพื่อสร้าง payload ตอนส่ง และไม่ใช้ ProblemDetails template แทน BaseResponse จริง; 400 ไม่คัด field error message ที่อาจมี PII การ inspection/history แยก M4.3
+- **ข้อจำกัด:** M4.1 ไม่เพิ่ม send API/hosted sender/consumer หรือ mark Delivered; M4.2 ต้อง reserve durable attempt/claim/global budget ก่อนเรียก client พร้อม fenced result/retry/concurrency/lease recovery; capability คง false จน runner พร้อม; actual Informs acceptance/deploy T2.6 ตาม Q4 และ company URL/auth/TLS/key ตาม Q7 ยังเปิด
+- **หลักฐาน:** [แบบ/source batch/ผลตรวจ M4.1](m4-1-informs-http-client-design.md); ทดสอบ local HTTP loopback/PostgreSQL ด้วยข้อมูลสังเคราะห์และ regression old schema โดยไม่แก้ Informs/Web; source ยังไม่ commit/push
+
+### M-35 จอง delivery attempt ก่อน HTTP และใช้ DB budget ร่วมทุก worker
+- **ตัดสิน (2026-11-17):** ตาม source batch M4.2 ที่ผู้ใช้ยืนยัน เพิ่ม durable delivery runner แบบ DB polling/NextAt, Delivery Attempts และ owner/epoch/lease/heartbeat; ใช้ typed HTTP client M-34 กับ immutable encrypted bytes ของ M-33 ไม่เพิ่ม retry handler/DeliveryConsumer หรือเปลี่ยน payload/key
+- **ทำไม:** ต้องบันทึก reservation/attempt number ก่อนส่งเพื่อให้ crash/restart/หลาย pod ใช้เพดาน 6 ร่วมกันตาม M-08/M-20; Delivery Job มี NextAt จาก row transaction แล้ว จึงกู้คืนจาก DB โดยไม่ต้องให้ broker republish และไม่ให้ event ซ้ำ reset backoff
+- **กลไก:** control→job→attempt lock order/DB clock; DeliveryPaused และ persisted MaxParallel default 1 คุมทุก process ไม่คูณเพดานตามจำนวน pod; reserve/insert attempt atomic ก่อน Reserved→Dispatching guard/HTTP; renew/complete ต้องตรง owner/epoch/attempt/lease และรอ heartbeat จบก่อนใช้ DbContext บันทึกผล
+- **ผล:** 201/replay/replaced → Delivered พร้อม IDs/flags; 400/409 → Rejected; 429/5xx/unknown → RetryableFailed เมื่อยังเหลือ reservation หรือ Failed เมื่อครบ 6; profile/key/config/protocol failure → Blocked; Retry-After เป็น lower bound ของ durable next-at และไม่ลด counter เพื่อชดเชย reservation ที่ไม่ทราบผล
+- **ตัวอย่างข้อมูลสมมติ:** D1/A1 reserve แล้ว HTTP stub รับแต่ DB complete ล้มเหลว → A1 OutcomeUnknown/D1 รอ backoff; restart reserve A2 ส่ง bytes/hash/key เดิมได้ replay I1 → Delivered/attempts_reserved 2; A6 crash แล้วหมด leaseให้ Failed/OutcomeUnknown ไม่ส่ง A7 เพื่อ probe
+- **ไม่เลือก:** ไม่คุม concurrency ด้วย semaphore ต่อ pod อย่างเดียว ไม่ reset attempts/key/NextAt จาก redelivery และไม่เปิด manual-send/retry API ข้าม ledger; API controls/inspection แยก M4.3
+- **ข้อจำกัด:** default sender ปิด เปิดด้วย Delivery.Enabled อย่างชัดเจน; lease/grace ไม่พิสูจน์ว่า server หยุดรับ HTTP ที่อาจส่งไปแล้ว จึงใช้ D-44/OutcomeUnknown และเพดานเดิม; actual Informs acceptance/deploy T2.6 ตาม Q4/M4.4 และ company dependency Q7 ยังแยกติดตาม ไม่มีบริษัท key generation/DB write/HTTP ในงานนี้
+- **หลักฐาน:** [แบบ/source batch/tests M4.2](m4-2-durable-delivery-design.md), migration `20261117095253_AddDeliveryRuntime`; ไม่มี commit/push อัตโนมัติ และไม่แก้ Informs/Web/demo
 
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
