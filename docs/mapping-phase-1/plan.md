@@ -30,6 +30,12 @@ last_updated: 2026-11-18
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-18 — เตรียม M4.4 กับ Informs จริง
+- เสร็จ: ตรวจ origin/develop ของ Informs พบ `f1eca8d` ใหม่กว่า checkout `6ab23ad`; cloneชั่วคราวแบบอ่านsourceเดิม, buildimagelocalด้วยDockerfileของInforms และรัน HTTP schema preflightได้200พร้อม `fileReceivedAt` ตาม D-80; schema SHA-256 `38b1fc59bf83dda277eb2143e841a1fc34c89ef8f7b245d8a4ba8ab14e7da5bd`; หยุดcontainer preflightแล้วและยังไม่ส่งใบ/ไม่เชื่อม DBในขั้นนี้
+- กำลังทำ: เตรียม [แบบ M4.4/public seams/scenarios/source batch](m4-4-informs-end-to-end-design.md) เพื่อยืนยันก่อนเพิ่ม integration tests; จะทดสอบ fullMTLS2556แถว/3formats/actual201-200-400-409/replaced/replay/real429/Retry-After/lostack/restart พร้อม countsจากAPIs
+- ติด / รอ: การยืนยัน source batch/seams; Q4มี implementation/schemaใหม่ให้ทดสอบแล้ว แต่ยังไม่ปิดจนยืนยันข้อมูล/เวลารับจริงผ่านruntime; Q7และ Q5/Q9/M1.2/Q8/Web reviewยังแยกตามเดิม
+- ต่อไป: เพิ่มtests/runnerตามชุดที่ยืนยัน แล้วรันcheck.ps1แบบเปิดexternalE2Eทุกข้อจริงก่อนติ๊ก M4.4; ยังไม่แก้sourceและไม่commit/pushอัตโนมัติ
+
 ### 2026-11-18 — Commit/push M4.3
 - เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `3fd48f8` — `feat(mapping): add delivery operations and inspection APIs`; รวม77ไฟล์ของ M4.3 และ push origin/develop สำเร็จ ตรวจ local/remote hash ตรงกันและ working tree สะอาด
 - เสร็จ: บันทึก source commit ใน plan/แบบ M4.3/แบบข้อมูล runtime รวมเอกสาร3ไฟล์ใน commit เอกสารชุดนี้
@@ -569,6 +575,7 @@ last_updated: 2026-11-18
   - คำตอบผู้ใช้ (11-13), Q2.4: Source inspection รายแถวแบบ read-only ตาม M-18; แยกยอดแถวที่อ่านพบ/Source ที่บันทึกและยอดส่งตามสถานะโดยไม่ปน attempts พร้อมแสดง import state เพื่อไม่อ้างว่าอ่านครบขณะ import ยังไม่จบ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 7.1: ชุดข้อมูล delivery log ตาม M-10; ผู้ใช้งาน/ขอบเขต action และ raw inspection แยกยังรอข้อสรุป ไม่ถือว่าปิดทั้ง task
 - [ ] **M4.4** ทดสอบ end-to-end Mapping → Informs บนเครื่อง — เสร็จเมื่อ: fixture ครบ, source/payload/delivery counts กระทบยอดได้, replay/replaced/rejection/throttle/restart ผ่าน, `scripts/check.ps1` ผ่านและบันทึก repo+commit/ผลจริง · เป้า **11-26**
+  - 🔄 11-18 [แบบ/public seams/source batch M4.4](m4-4-informs-end-to-end-design.md) พร้อมแล้ว; Informs origin/develop `f1eca8d` รองรับ D-80 และ HTTP schema preflightจริงได้200 (checkoutเดิมยังเก่า); รอยืนยันก่อนเพิ่มtests/runner ไม่มี source editsและยังไม่ส่งใบ จึงยังไม่ปิดtask
 
 ### M5 — ส่งต่อ Web และเตรียม Kubernetes
 
@@ -934,6 +941,7 @@ Source catalog/การกำหนด fields และสร้าง physical
   - รายละเอียดข้อเสนอหลัง M-23: หากส่งเวลาเป็น metadata ให้ใช้ค่า `FileJob.CreatedAt` เดิม ไม่สร้าง field เวลาเพิ่มในตาราง Mapping; วิธีรับ/ใช้ใน Informs ยังเป็นประเด็นของ Dev 1 จึงยังไม่ปิด Q4 ข้าม service
   - Dev 1: (11-16) ตอบ Q4 — **เพิ่ม `fileReceivedAt` (optional, date-time มี offset) ใน `pa-inform/1`** ระดับเดียวกับ `fileName` ส่งค่า `FileJob.CreatedAt` ตามที่เสนอ (M-23) ทุกแถวของไฟล์ค่าเดียวกัน, resume / retry คงค่าเดิม → [rules.md D-80](rules.md) + [contract-pa-inform.md](contract-pa-inform.md) §3 / §5 · Informs จะรับ field นี้ใน T2.6 (deploy Informs ก่อน mapping ส่ง — `additionalProperties: false`) · ส่วน `sourceRowNo` ตาม M-06 เหมือนเดิม — Q4 ปิดได้จากฝั่ง Dev 1
   - Dev 2 (11-17, เตรียม M3.3): ตรวจ schema ใน repo Informs ปัจจุบันและ fixture ที่ pin แล้ว root ยังไม่มี `fileReceivedAt` และ `additionalProperties: false`; ขอ Dev 1 ติดตาม schema/deploy T2.6 ตามคำตอบเดิม ก่อนรับตรวจ runtime กับ Informs จริง ฝั่ง Mapping จะส่ง system field ตาม D-80 และแสดง safe Blocked diagnostic เมื่อ pinned schema ยังไม่รองรับ ไม่ละ field/แก้ Informs/schema snapshot เดิมเอง
+  - Dev 2 (11-18, เตรียม M4.4): origin/develop ของ Informsเป็น `f1eca8d` แล้วและมี `fileReceivedAt`; checkoutเดิม `6ab23ad` ยังไม่อัปเดต จึงทดสอบimageจากcloneชั่วคราว ได้ HTTPschema200/hash `38b1fc59bf83dda277eb2143e841a1fc34c89ef8f7b245d8a4ba8ab14e7da5bd` จริง; ไม่ได้แก้Informsและยังไม่ยืนยัน intake/metadata persistence/end-to-end หรือdeployบริษัทจน M4.4ผ่าน
 - [ ] **Q5** (Dev 2, 11-13) พบช่องว่างระหว่างกฎกับ schema ตัวจริงของ Informs (`6ab23ad`): BR-035 ระบุทายาทตามกฎหมาย **100%** แต่ `$defs.beneficiary` มีเพียง `seq/fullName/relationship` และ `additionalProperties: false` — ให้ mapping ส่งแค่ชื่อ default แล้วสัดส่วนเป็นหน้าที่ Informs หรือจะเพิ่ม field โดย Dev 1? อีกกรณี D-04 ให้ส่งค่าผิดเป็น null แต่ schema บังคับ `sourceReference` nonempty/`transactionType` enum; ถ้าต้นทางไม่มีค่าที่ส่งได้ จะให้ ops/UW ติดตามอย่างไร? เสนอเก็บ Source + row error/ยอดยังไม่ส่ง โดยไม่แต่งค่าและไม่เพิ่ม contract field เอง
   - คำสั่งผู้ใช้ (11-13): **ข้ามเรื่อง field/สัดส่วนไว้ก่อน ผู้ใช้จะส่ง fields มาให้เอง; ยึดการออกแบบให้ครอบคลุมหลาย scenarios ไม่เฉพาะเจาะจง** → M-24; ยังไม่เลือกข้อเสนอส่งเฉพาะชื่อ/เพิ่ม field สัดส่วน ไม่ปิด Q5 และไม่เปลี่ยน BR-035 เอง
   - ผลต่อการทำงาน: เดินหน้าร่างกลไก catalog/compiler/schema validation/diagnostics/pinning/lineage/recovery ได้ตาม [ร่างข้อมูลและ runtime](data-runtime-design.md); actual business bindings/defaults และ acceptance ที่ต้องใช้ fields จริงยังรอ input ไม่ตีความว่าพร้อมส่ง payload จริงแล้ว
