@@ -30,6 +30,33 @@ last_updated: 2026-11-18
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-18 — Commit M4.4
+- เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `1b5f2f2` — `feat(mapping): verify Informs delivery and enable capabilities`; รวม12ไฟล์ (E2E tests/runner/capabilities/regressions) และ working tree ของโค้ดสะอาดหลังcommit
+- เสร็จ: บันทึกsourcecommitใน planและแบบ/ผลทดสอบ M4.4 รวมเอกสาร2ไฟล์ในcommitเอกสารชุดนี้; ยังไม่pushทั้งสองrepo
+- หลักฐาน: โค้ดชุดที่commitผ่านcheck.ps1ล่าสุด unit38/38 integration171/171 externalE2E9/9ไม่มีskipและEFmodelกับInforms `f1eca8d`; ไม่มีsourceเปลี่ยนเพิ่มจากชุดที่ผ่านgate
+- ติด / รอ: companydeploy/Q7, partnerbusiness/Q5/Q9, M1.2/Q8/Web และM5.1 probesแยกตามเดิม
+
+### 2026-11-18 — ปิด M4.4 Mapping ถึง Informs จริงบน local
+- เสร็จ: hosted pipelineของMapping + PostgreSQL/Kafka/Informsจริงที่ pin `f1eca8d` ผ่าน fullMTLS2556แถว/Delimited/FixedWidth; Source/outputs/Deliveredกระทบยอด2556ครบ, ReceiverมีReceived2553/Cancelled3, request hashesและD-80 metadataตรงsnapshotที่บันทึก
+- หลักฐาน: `scripts/test-e2e.ps1 -InformsSource <clean checkout at f1eca8d> -NoBuild -Gate` ผ่าน Release build, unit **38/38**, integration **171/171**, EF model และ scriptตรวจexternal **9/9** Passed ไม่มีfilter/skip/abort; integrationใช้เวลา **17นาที5วินาที**; TRX `m4-4-gate.trx` ในทั้ง2test projects
+- หลักฐาน: actual201/200/replay/replaced/400/409, lostack/restart, proxy503/ครบ6 และ real429/Retry-Afterผ่าน; regressionstreaming20รอบผ่านในgateหลังแก้100Continue/isolation; FullMTLSในgateใช้4นาที17.40วินาที; [รายการไฟล์/ผลจริง/ขอบเขต](m4-4-informs-end-to-end-design.md)
+- เสร็จ: source12ไฟล์บนฐาน `3fd48f8` ตามชุดที่ผู้ใช้ยืนยัน; capabilitiesพร้อมเฉพาะExcel/Delimited/FixedWidth/ApiContract ส่วนworker defaultsยังdisabled; อัปเดตแบบM4.4/M-37/Q4และplanโดยยังไม่commit/push
+- ติด / รอ: Q7/company deployment, Q5/Q9/partnerbusiness acceptance, M1.2/Q8/Web review และM5.1 probesแยกตามเดิม; ผลนี้เฉพาะintakeกับInforms `f1eca8d` ไม่อ้างremoteใหม่ `6cb5664` หรือProducts/Client API validationครบทุกstage
+- ต่อไป: M1.2สำหรับAPIจัดการconfig และM5.1สำหรับhealth/probesตามแผน
+
+### 2026-11-18 — ตรวจ gate M4.4 และแก้ race ใน test harness
+- เสร็จ: actualacceptance/fullMTLS2556/3formatsผ่านในการรันแยก; Gateรวมรอบแรกได้unit38/38 และ integration167/170 แต่recovery3ข้อfail จึงยังไม่ปิดtask
+- หลักฐาน: regressionHTTPstreamingแบบวน20รอบโดยไม่เปิดMappingworkerจับholderได้429ใน5วินาที ยืนยันว่าprobeแย่งpermit; requestsเกินในกรณีถัดไปเป็นคนละSourceRowIdจากsharedfixture ไม่ใช่attempt7ของdeliveryเดิม
+- กำลังทำ: synchronizeด้วยHTTP100Continueก่อนprobe และแยกfixtureต่อrecoverytest; เพิ่มregressionเป็นexternalรวม9ข้อในsource12ไฟล์เดิม รันfocusedแล้วจะตรวจgateรวมใหม่โดยไม่ลดassertions/เพิ่มquotaหรือแก้productiontransport
+- หลักฐานหลังแก้: focusedrecovery4/4ผ่าน ไม่มีskip รวมregression20รอบ; เริ่มcheck.ps1รอบรวมใหม่ด้วยexternal9ข้อจริงแล้ว (unit38/38ผ่าน) รอintegration171ข้อและEFmodelก่อนปิดtask
+- ติด / รอ: gateรวมที่ผ่านครบ; Q7/Q5/Q9/M1.2/Q8/Webยังแยกตามเดิม; ยังไม่commit/push
+
+### 2026-11-18 — เริ่ม implement M4.4 ตามชุดที่ผู้ใช้ยืนยัน
+- เสร็จ: ผู้ใช้ยืนยัน 12 ไฟล์/public seams/scenarios ใน [แบบ M4.4](m4-4-informs-end-to-end-design.md); เพิ่ม fixture ที่ใช้ Informs API/migrator images จาก `f1eca8d`, isolated PostgreSQL/Kafka และ Mapping host จริง ไม่มี project/assembly reference ข้าม service
+- หลักฐานระหว่างทำ: actual intake/replaced/late-old-key replay ผ่าน1ข้อ; Delimited/FixedWidth ผ่าน hosted pipelineถึง Informsจริงอีก1ข้อพร้อม API counts/raw Source/metadata/hash pin และ D-80 file time จาก UW file summary; ไม่ใช้ผลนี้แทน full M4.4 gate
+- กำลังทำ: full MTLS2556แถวกับ actualschema/HTTP payload hashes, fault/restart/real429/Retry-After และ runner สำหรับรันซ้ำ; capabilitiesจะเปิดเฉพาะหลังacceptanceผ่าน และยังไม่ติ๊ก M4.4
+- ติด / รอ: full E2E scenarios/check.ps1; Q7/Q5/Q9/M1.2/Q8/Web reviewแยกตามเดิม; ยังไม่ commit/push
+
 ### 2026-11-18 — เตรียม M4.4 กับ Informs จริง
 - เสร็จ: ตรวจ origin/develop ของ Informs พบ `f1eca8d` ใหม่กว่า checkout `6ab23ad`; cloneชั่วคราวแบบอ่านsourceเดิม, buildimagelocalด้วยDockerfileของInforms และรัน HTTP schema preflightได้200พร้อม `fileReceivedAt` ตาม D-80; schema SHA-256 `38b1fc59bf83dda277eb2143e841a1fc34c89ef8f7b245d8a4ba8ab14e7da5bd`; หยุดcontainer preflightแล้วและยังไม่ส่งใบ/ไม่เชื่อม DBในขั้นนี้
 - กำลังทำ: เตรียม [แบบ M4.4/public seams/scenarios/source batch](m4-4-informs-end-to-end-design.md) เพื่อยืนยันก่อนเพิ่ม integration tests; จะทดสอบ fullMTLS2556แถว/3formats/actual201-200-400-409/replaced/replay/real429/Retry-After/lostack/restart พร้อม countsจากAPIs
@@ -574,7 +601,9 @@ last_updated: 2026-11-18
   - คำตอบผู้ใช้ (11-13), Q2.5: Delivery Payload inspection แบบ read-only ตาม M-19; ใช้ payload snapshot ที่บันทึกจริง ไม่ compile ใหม่ และทดสอบว่าเปิดดูแล้ว bytes/hash/key/job state ไม่เปลี่ยน ไม่ส่ง HTTP หรือสร้าง delivery ใหม่
   - คำตอบผู้ใช้ (11-13), Q2.4: Source inspection รายแถวแบบ read-only ตาม M-18; แยกยอดแถวที่อ่านพบ/Source ที่บันทึกและยอดส่งตามสถานะโดยไม่ปน attempts พร้อมแสดง import state เพื่อไม่อ้างว่าอ่านครบขณะ import ยังไม่จบ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 7.1: ชุดข้อมูล delivery log ตาม M-10; ผู้ใช้งาน/ขอบเขต action และ raw inspection แยกยังรอข้อสรุป ไม่ถือว่าปิดทั้ง task
-- [ ] **M4.4** ทดสอบ end-to-end Mapping → Informs บนเครื่อง — เสร็จเมื่อ: fixture ครบ, source/payload/delivery counts กระทบยอดได้, replay/replaced/rejection/throttle/restart ผ่าน, `scripts/check.ps1` ผ่านและบันทึก repo+commit/ผลจริง · เป้า **11-26**
+- [x] **M4.4** ทดสอบ end-to-end Mapping → Informs บนเครื่อง — เสร็จเมื่อ: fixture ครบ, source/payload/delivery counts กระทบยอดได้, replay/replaced/rejection/throttle/restart ผ่าน, `scripts/check.ps1` ผ่านและบันทึก repo+commit/ผลจริง · เป้า **11-26** · ปิด11-18เฉพาะlocalintake acceptanceกับInforms `f1eca8d` ตาม M-37; company/business/Web acceptanceแยกติดตาม
+  - ✅ 11-18 sourcecommit `1b5f2f2` รวม12ไฟล์บนdevelop; unit38/38 integration171/171 external9/9ไม่มีskipและEFmodelผ่าน; แบบ/หลักฐานอยู่ในcommitเอกสารชุดนี้ ยังไม่push
+  - ✅ 11-18 source12ไฟล์บนฐานMapping `3fd48f8`; test-e2e.ps1 -Gateเรียกcheck.ps1ผ่านunit38/38 integration171/171 EFmodel และexternal9/9รันจริงไม่มีskip; FullMTLS2556/3formats/replay/replaced/400/409/real429/503/restart/ครบ6/streamingregressionผ่าน; [หลักฐาน/รายการไฟล์](m4-4-informs-end-to-end-design.md); ยังไม่commit/push
   - 🔄 11-18 [แบบ/public seams/source batch M4.4](m4-4-informs-end-to-end-design.md) พร้อมแล้ว; Informs origin/develop `f1eca8d` รองรับ D-80 และ HTTP schema preflightจริงได้200 (checkoutเดิมยังเก่า); รอยืนยันก่อนเพิ่มtests/runner ไม่มี source editsและยังไม่ส่งใบ จึงยังไม่ปิดtask
 
 ### M5 — ส่งต่อ Web และเตรียม Kubernetes
@@ -891,6 +920,16 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ไม่เลือก:** ไม่รวม attempts เป็นยอด outputs ไม่อ่าน definition/config ล่าสุดเพื่อเปิด Source/payload ไม่ใช้ GET ทำ repair ไม่ส่ง HTTP จาก retry API และไม่เปิด reprocess/business resend/เพิ่มเพดาน/max-parallel editor/Web ในรอบนี้
 - **หลักฐาน/ข้อจำกัด:** check.ps1 ผ่าน unit38/38 integration162/162 และ EF model ด้วย temporary sequential-collection RunSettings ตาม M4.2; [แบบ/contract/รายการไฟล์/ผลตรวจ M4.3](m4-3-delivery-operations-api-design.md); actual Informs Q4/M4.4, dependencies Q7 และ M1.2/Q8/Web review ยังแยกติดตาม; ไม่ commit/push อัตโนมัติ
 
+### M-37 ใช้ Informs images ที่ pin revision สำหรับ local end-to-end acceptance
+- **ตัดสิน (2026-11-18):** ตามชุด M4.4/public seams ที่ผู้ใช้ยืนยัน ใช้ Informs API/migrator images จาก commitเดียวกัน ตรวจ revision label ก่อนเริ่ม และรันกับ isolated PostgreSQL/Kafka; Mapping ใช้ hosted intake/import/transform/delivery และอ่านผลผ่าน API ของ Mapping/Informs
+- **ทำไม:** M4.1–M4.3 พิสูจน์กลไกกับ HTTP stub แล้ว แต่ต้องตรวจ actual intake/response/schema/D-80 และ replay/replaced/409/429 กับบริการเจ้าของจริง; pin dependency ทำให้รันซ้ำได้แม้ remote เปลี่ยนระหว่างงาน
+- **ตัวอย่างสมมติ:** Source1/Delivery1 ส่งถึง Informs commitแล้ว responseหาย → attempt1 OutcomeUnknown; restartใช้bytes/hash/keyเดิม → actual200/replayed/informIdเดิม, outputs1/attempts2/Informs inform1/snapshot1; ไฟล์ใหม่แก้150→180ได้replacedและ late old keyไม่ย้อนข้อมูลกลับ
+- **กลไก:** helper streaming request ถือ permit ของ limiterจริงและส่ง JSON whitespace ระหว่างรอ; probeยืนยัน429/Retry-Afterก่อนให้Mappingส่ง; proxy injectเฉพาะ503ก่อนforward/drop responseหลังactualcommit ไม่ปลอมsuccess; assertionsแยกunique outputs/reservations/dispatchesตาม M-36 และไม่อ่าน non_motorโดยตรง
+- **Gate:** `scripts/test-e2e.ps1 -InformsSource <checkout> -Gate` ตั้งimage/revision/RunSettingsชั่วคราวแล้วเรียกcheck.ps1 และตรวจTRXว่าexternalทุกข้อถูกexecute/Passedทั้งหมด ไม่มีskip; การรันปกติที่ไม่มีimagesจะskipเฉพาะexternaltestsพร้อมเหตุผลและใช้ปิดM4.4ไม่ได้
+- **ผลต่อ capability:** หลังactualacceptanceของ3formats/ApiContractผ่าน ให้ available=true เฉพาะfeatureเหล่านี้; เป็นความสามารถของengine ไม่เปิดworkerอัตโนมัติและไม่รับรองpartnerbindings/UAT/company deployment
+- **ไม่เลือก:** ไม่อ้าง assembly/project ข้าม service ไม่แก้checkout/schemaของInforms ไม่ใช้synthetic D-80 schemaเป็นsuccess ไม่ปรับstate/อ่านDB Informsโดยตรงเพื่อยืนยันผล และไม่ขยายเป็นProducts/Client API validationครบทุกstage
+- **หลักฐาน/ข้อจำกัด:** check.ps1ผ่านunit38/38 integration171/171 EFmodel และexternal9/9ไม่มีskip/abortผ่านscript -Gate; [แบบและผลตรวจ M4.4](m4-4-informs-end-to-end-design.md); dependencyเป้าหมาย `f1eca8d` ตามชุดที่ยืนยัน ไม่อ้างว่าtested remoteใหม่ `6cb5664`; Q7/Q5/Q9/M1.2/Q8/Web และ Kubernetesยังแยกติดตาม; ยังไม่commit/push
+
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
 > ทั้งคู่เพิ่มได้ · เลข `Q1`, `Q2`, … ต่อกันไป · ตอบใต้ข้อนั้น · ตกลงแล้วเขียนผลสั้น ๆ + ย้ายไปที่ที่ถูก (`M-xx` ใน §4 หรือ Dev 1 ลง `rules.md` เป็น `D-xx`) แล้วติ๊ก `[x]`
@@ -932,7 +971,8 @@ Source catalog/การกำหนด fields และสร้าง physical
 - [x] **Q3** (Dev 2, 11-13) Reprocess ด้วย config ใหม่/ส่งใหม่หลังแก้ mapping จะใช้ identity อย่างไร? D-44 key `(fileJobId, sourceRowId, outputKey)` ไม่รวม config version: output ที่เคย Delivered ใช้ key เดิมจะ replay ผลเก่า ส่วน key ใหม่อาจทำให้ข้อมูลเก่าทับฉบับแก้ภายหลัง · เสนอเปิด normal delivery/retry bytes/key เดิมก่อน และปิด changed-payload reprocess/business resend จนตกลง contract/lineage ชัดเจน; แยกคำตอบสำหรับ rejected 400/409, never-delivered และ Delivered
   - คำตอบผู้ใช้ (11-13): เลือก **ยังไม่เปิด changed-payload reprocess/resend ช่วงแรก**; config ใหม่ใช้กับไฟล์ที่รับใหม่ ส่วน retry งานเดิมใช้ bytes/key เดิมภายใน 6 attempts → M-22
   - ผล: ปิดคำถามสำหรับขอบเขตช่วงแรกด้วยการเลื่อน feature ทั้ง never-delivered/rejected/Delivered ไม่ได้อนุมัติสูตร key/lineage สำหรับ resend ในอนาคต; เก็บประเด็น contract นั้นไว้ใน backlog ให้ตกลง Dev 1 ก่อนเปิด
-- [ ] **Q4** (Dev 2, 11-13) ต่อ Q1 ข้อ 6: `sourceRowNo` ใช้ `nSeq` หรือ import record order? ขอระบุกรณี header/blank row, nSeq ว่าง/ซ้ำ/ไม่เรียง/มี gap และเวลารับไฟล์ครั้งแรกที่ต้องคงไว้ตาม D-23 · เก็บ Row Number และ Physical Line Number แยกกันเสมอ ไม่ใช้ลำดับ HTTP arrival
+- [x] **Q4** (Dev 2, 11-13) ต่อ Q1 ข้อ 6: `sourceRowNo` ใช้ `nSeq` หรือ import record order? ขอระบุกรณี header/blank row, nSeq ว่าง/ซ้ำ/ไม่เรียง/มี gap และเวลารับไฟล์ครั้งแรกที่ต้องคงไว้ตาม D-23 · เก็บ Row Number และ Physical Line Number แยกกันเสมอ ไม่ใช้ลำดับ HTTP arrival · ปิดด้านcontract/localreceiver11-18ตาม D-80/M4.4; companydeployแยก Q7
+  - Dev 2 (11-18, ปิดlocalacceptance M4.4): actualInforms `f1eca8d` รับfileReceivedAt/sourceRowNoจากhostedpipelineจริง; FullMTLS2556/Delimited/FixedWidth, HTTPpayloadhashesและUW file summaryยืนยันFileJob.CreatedAtเดิมและลำดับrecordorder; check.ps1ผ่านunit38/38 integration171/171 external9/9ไม่มีskipและEFmodel; [หลักฐาน](m4-4-informs-end-to-end-design.md) ไม่รวมcompanydeployหรือbusinessvalidationทุกstage
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.1: ใช้ลำดับแถวข้อมูลตาม M-06 ไม่ใช้ `nSeq`; header/แถวว่างไม่นับ, แถวข้อมูลเริ่ม 1, `nSeq` ที่ว่าง/ซ้ำ/ไม่เรียง/มี gap เก็บเป็นค่าดิบตาม Source โดยไม่ใช้จัดลำดับ; retry คงเลขเดิม ยังรอรายละเอียดการเก็บเวลารับไฟล์ครั้งแรกตาม D-23 จึงยังไม่ปิด Q4 ทั้งข้อ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.4: ฝั่ง Mapping ใช้เวลารับไฟล์และสร้าง File Job ครั้งแรก คงเดิมเมื่อ resume/retry ตาม M-09
   - คำชี้แจงผู้ใช้ (11-13): ไม่เพิ่ม field เวลาแยก ใช้ **CreatedAt ของ File Job ฝั่ง Mapping** → M-23; ยังไม่ใช่การใช้เวลาสร้างใบฝั่ง Informs และไม่ถือว่าอนุมัติการเพิ่ม field ใน contract แล้ว
