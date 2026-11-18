@@ -30,6 +30,27 @@ last_updated: 2026-11-18
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-18 — Commit/push M4.3
+- เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `3fd48f8` — `feat(mapping): add delivery operations and inspection APIs`; รวม77ไฟล์ของ M4.3 และ push origin/develop สำเร็จ ตรวจ local/remote hash ตรงกันและ working tree สะอาด
+- เสร็จ: บันทึก source commit ใน plan/แบบ M4.3/แบบข้อมูล runtime รวมเอกสาร3ไฟล์ใน commit เอกสารชุดนี้
+- หลักฐาน: check.ps1 ของโค้ดชุดที่ commit ผ่าน Release build, unit38/38, integration162/162 และ EF model ด้วย temporary sequential-collection RunSettings; ไม่มีการแก้ source เพิ่มจากชุดที่ผ่าน gate
+- ติด / รอ: actual Informs Q4/M4.4, company dependencies Q7 และ M1.2/Q8/Web review ยังแยกติดตาม
+- ต่อไป: M4.4 end-to-end กับ Informs จริงบน local เมื่อ Q4 พร้อม
+
+### 2026-11-18 — ปิด M4.3 delivery operations API บน local
+- เสร็จ: ผู้ใช้ยืนยัน contract subset/source batch M4.3 แล้ว; เพิ่ม 12 routes สำหรับ logs/summary/Source/Payload/retry/pause-resume, read-only snapshot reader, atomic audited commands และ pinned-schema safe diagnostics; migration `20261118031413_AddDeliveryDiagnosticsAndLogIndexes`
+- หลักฐาน: `scripts/check.ps1` ผ่าน Release build, unit **38/38**, integration **162/162** และ EF model check; integration ใช้เวลา 8 นาที 31 วินาที มีผล TRX `m4-3-gate-serial.trx` ในทั้ง 2 test projects; ใช้ temporary sequential-collection RunSettings ไม่มี filter/skip และ explicit concurrency tests คงเดิมตามเงื่อนไข M4.2
+- หลักฐาน: เพิ่ม unit6/integration24 ตรวจ mixed 0/หลาย outputs/attempts, snapshot ระหว่าง worker commit, partial/Blocked/Duplicate, pinned Source/NULL/empty/3 formats, actual payload/hash/key/availability/no GET writes, audited retry/pause replay/body/version/race/rollback/ครบ6/Retry-After และ safe pinned-schema diagnostics/400 stall/history immutable; [ผลตรวจ/รายการไฟล์](m4-3-delivery-operations-api-design.md)
+- เสร็จ: source77ไฟล์บนฐาน `aca67c6`, docs3ไฟล์ (plan/แบบM4.3/แบบข้อมูลruntime); ยังไม่ commit/push; sender ยัง default disabled, ไม่มีบริษัท DB write/HTTP และไม่แก้ Informs/Web/demo
+- ติด / รอ: actual Informs Q4/M4.4, company dependencies Q7 และ M1.2/Q8/Web acceptance แยกติดตาม; default parallel gate ยังมีข้อจำกัดเดิม ไม่อ้างว่าแก้ถาวรจากผลรันแบบ sequential
+- ต่อไป: M4.4 end-to-end กับ Informs จริงบน local เมื่อ Q4 พร้อม
+
+### 2026-11-18 — เตรียม M4.3 delivery operations API
+- เสร็จ: ตรวจ draft M1.2/Q8, counts/inspection M-10/M-18/M-19, retry cap M-20/M-22 และ ledger/controls ของ commit aca67c6; เขียน [แบบ M4.3 พร้อม API contract subset/source batch](m4-3-delivery-operations-api-design.md)
+- กำลังทำ: รอ review/ยืนยัน contract เฉพาะ M4.3 พร้อม source batch ก่อนทำ controllers เพราะ Q8 เคยพัก review; รวม file/row/delivery/attempt logs, counts, raw inspections, safe pinned-schema field diagnostics, retry และ pause/resume โดยไม่ถือว่าปิด M1.2/Q8/Web ทั้งชุด
+- ติด / รอ: actual Informs T2.6/Q4 และ company dependencies Q7 ตามเดิม; file/row retry/reprocess/business resend/เพิ่มโควตาเกิน6 ไม่อยู่ในรอบนี้
+- ต่อไป: หลังยืนยัน implement API/repository/domain guards/diagnostics migration/tests และ check.ps1; ยังไม่แก้ source และไม่ commit/push อัตโนมัติ
+
 ### 2026-11-18 — Commit/push M4.1 และ M4.2
 - เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `aca67c6` — `feat(mapping): add durable Informs delivery and bounded retries`; รวม 41 ไฟล์ของ M4.1/M4.2 และ push origin/develop สำเร็จแล้ว พร้อม commit M3.3 `7014c83` ที่ยังค้าง; local/remote source ตรงกันและ working tree สะอาดหลัง push
 - เสร็จ: บันทึก source commit ในแบบ M4.1/M4.2 และ plan พร้อมแบบข้อมูล runtime รวมเอกสาร 4 ไฟล์ใน commit เอกสารชุดนี้ตามคำสั่ง commit/push
@@ -539,7 +560,10 @@ last_updated: 2026-11-18
   - 🔄 11-17 เตรียม [แบบ/source batch M4.2](m4-2-durable-delivery-design.md) แล้ว รอยืนยันก่อนแก้ source; รวม DB attempt ledger/global budget/pause guard/worker/heartbeat/fencing และ recovery โดย sender default disabled; ใช้ typed client/encrypted payload M4.1 เดิมที่ยังไม่ commit; actual Informs acceptance แยก Q4/M4.4
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.2: เริ่ม HTTP concurrency สูงสุด 1 request ไป Informs และปรับผ่าน config ภายหลังตาม M-07; แบบการคุมเพดานหลาย pod ยังต้องระบุใน M1.1/M4.2 ไม่ถือว่าเพดานเพิ่มอัตโนมัติตามจำนวน pod
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 6.3: รวมสูงสุด 6 attempts ต่อ delivery รวมครั้งแรก 1 + retry สูงสุด 5 ตาม M-08; จำนวนครั้งต้อง durable ไม่รีเซ็ตเมื่อ restart/redelivery และไม่ให้ HttpClient retry ซ้อนเพิ่มจำนวนโดยไม่ถูกนับ
-- [ ] **M4.3** Implement delivery log/file summary/retry และ pause controls ที่ตกลง — เสร็จเมื่อ: counts ต่อ unique output ไม่ปน attempts, แยก import/transform/delivery, field reason/history ดูได้, action state guard/audit ผ่าน; changed-payload reprocess/business resend ปิดในช่วงแรกตาม M-22 · เป้า 11-26
+- [x] **M4.3** Implement delivery log/file summary/retry และ pause controls ที่ตกลง — เสร็จเมื่อ: counts ต่อ unique output ไม่ปน attempts, แยก import/transform/delivery, field reason/history ดูได้, action state guard/audit ผ่าน; changed-payload reprocess/business resend ปิดในช่วงแรกตาม M-22 · เป้า 11-26 · ปิด 11-18 เฉพาะ API/local tests ตาม M-36; actual Informs แยก Q4/M4.4 และ M1.2/Q8/Web review ยังไม่ปิด
+  - ✅ 11-18 source commit `3fd48f8` และ push develop แล้ว; unit38/38 integration162/162 และ EF model ผ่านตามเงื่อนไข RunSettings ของ M4.2; แบบ/หลักฐาน M4.3 และ runtime อยู่ใน commit เอกสารชุดนี้
+  - ✅ 11-18 ผู้ใช้ยืนยัน contract subset/source batch; implement12routes/migration `20261118031413_AddDeliveryDiagnosticsAndLogIndexes`; check.ps1 ผ่าน unit38/38 integration162/162 และ EF model ด้วย temporary sequential-collection RunSettings ไม่มี filter/skip; เพิ่ม unit6/integration24 รวม race/rollback/inspection no-side-effects/safe field diagnostics; [หลักฐาน/รายการไฟล์](m4-3-delivery-operations-api-design.md); source/docs ยังไม่ commit/push
+  - 🔄 11-18 เตรียม [แบบ/API contract subset/source batch M4.3](m4-3-delivery-operations-api-design.md) แล้ว; ต้อง review/ยืนยัน subset นี้ก่อน controllers ตาม Q8/M1.2 ที่เคยพักไว้ ไม่ถือว่า prefix หรือ task request เพียงอย่างเดียวปิด route/DTO review แล้ว; source ยังไม่แก้
   - คำตอบผู้ใช้ (11-13), Q2.6: ครบ 6 attempts แล้วไม่เปิด Web retry ตาม M-20; API/worker ต้องปฏิเสธการส่งครั้งที่ 7 ของ delivery เดิมด้วย ไม่ใช่ปิดปุ่มอย่างเดียว ทดสอบ state/concurrent retry ว่าไม่สร้าง attempt/outbox/HTTP เกินเพดาน
   - คำตอบผู้ใช้ (11-13), Q2.5: Delivery Payload inspection แบบ read-only ตาม M-19; ใช้ payload snapshot ที่บันทึกจริง ไม่ compile ใหม่ และทดสอบว่าเปิดดูแล้ว bytes/hash/key/job state ไม่เปลี่ยน ไม่ส่ง HTTP หรือสร้าง delivery ใหม่
   - คำตอบผู้ใช้ (11-13), Q2.4: Source inspection รายแถวแบบ read-only ตาม M-18; แยกยอดแถวที่อ่านพบ/Source ที่บันทึกและยอดส่งตามสถานะโดยไม่ปน attempts พร้อมแสดง import state เพื่อไม่อ้างว่าอ่านครบขณะ import ยังไม่จบ
@@ -851,6 +875,15 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ข้อจำกัด:** default sender ปิด เปิดด้วย Delivery.Enabled อย่างชัดเจน; lease/grace ไม่พิสูจน์ว่า server หยุดรับ HTTP ที่อาจส่งไปแล้ว จึงใช้ D-44/OutcomeUnknown และเพดานเดิม; actual Informs acceptance/deploy T2.6 ตาม Q4/M4.4 และ company dependency Q7 ยังแยกติดตาม ไม่มีบริษัท key generation/DB write/HTTP ในงานนี้
 - **หลักฐาน:** [แบบ/source batch/tests M4.2](m4-2-durable-delivery-design.md), migration `20261117095253_AddDeliveryRuntime`; ไม่มี commit/push อัตโนมัติ และไม่แก้ Informs/Web/demo
 
+### M-36 อ่านผลจาก snapshot และควบคุม delivery ด้วย audited commands
+- **ตัดสิน (2026-11-18):** ตาม contract subset/source batch M4.3 ที่ผู้ใช้ยืนยัน เปิด 12 routes ใน `/api/mapping` ผ่าน MediatR/BaseResponse เดิม; logs/summary แยก rows, unique outputs, reservations และ dispatched attempts ตาม M-10; Source/Payload inspections ตาม M-18/M-19 เป็น read-only ไม่สร้าง jobs/audit/HTTP หรือ regenerate payload
+- **ทำไม:** ทีม Mapping/Dev/Ops ต้องกระทบยอดงาน partial/filtered/blocked/หลาย outputs และตรวจใบที่ Rejected ได้ โดย counts ใน file detail ใช้ read-only repeatable-read snapshot เดียวพร้อมเวลา DB และ duplicate occurrence แสดง canonical ID แยกจากยอดของ occurrence
+- **กลไก:** manual retry ใช้ control→job→audit lock/DB clock ตรวจ body hash และ replay ก่อน rowVersion; เฉพาะ RetryableFailed ที่ไม่มี lease และยังไม่ครบ6, NextAt=max(DB now,ค่าเดิม), เพิ่ม rowVersion/audit ใน transaction เดียว ไม่จอง attempt/ส่ง HTTP/reset bytes-key; pause/resume เปลี่ยน flag/rowVersion พร้อม audit ใช้ fixed actor `mapping-api` และไม่ยกเลิกงานที่เริ่มแล้ว/ไม่เปิด worker ที่ disabled
+- **Diagnostics:** attempts ใหม่เก็บ `safe_diagnostics_json` JSONB array default `[]`, สูงสุด100/JSON text64KiB และ path512; Informs 400 คัดเฉพาะ path ที่ normalize แล้วอยู่ใน pinned schema catalog ไม่มี messageText/raw value/unknown names; malformed/oversized/stalled detail ยังคง Rejected และ completed history immutable
+- **ตัวอย่างข้อมูลสมมติ:** Source3แถว = Filtered1/Blocked1/Transformed1 → outputs2 = Delivered1/Rejected1; reservations3 = Completed2/OutcomeUnknown1 และ dispatched3; retry outputที่ยัง RetryableFailed/NextAtอีก10นาทีคงเวลาเดิมและ attempt count เดิมแม้กดซ้ำ
+- **ไม่เลือก:** ไม่รวม attempts เป็นยอด outputs ไม่อ่าน definition/config ล่าสุดเพื่อเปิด Source/payload ไม่ใช้ GET ทำ repair ไม่ส่ง HTTP จาก retry API และไม่เปิด reprocess/business resend/เพิ่มเพดาน/max-parallel editor/Web ในรอบนี้
+- **หลักฐาน/ข้อจำกัด:** check.ps1 ผ่าน unit38/38 integration162/162 และ EF model ด้วย temporary sequential-collection RunSettings ตาม M4.2; [แบบ/contract/รายการไฟล์/ผลตรวจ M4.3](m4-3-delivery-operations-api-design.md); actual Informs Q4/M4.4, dependencies Q7 และ M1.2/Q8/Web review ยังแยกติดตาม; ไม่ commit/push อัตโนมัติ
+
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
 > ทั้งคู่เพิ่มได้ · เลข `Q1`, `Q2`, … ต่อกันไป · ตอบใต้ข้อนั้น · ตกลงแล้วเขียนผลสั้น ๆ + ย้ายไปที่ที่ถูก (`M-xx` ใน §4 หรือ Dev 1 ลง `rules.md` เป็น `D-xx`) แล้วติ๊ก `[x]`
@@ -919,6 +952,7 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-16): **ใช้ `/api/mapping`** เป็น prefix; บันทึกใน [ร่าง M1.2](mapping-api-contract.md) แล้ว
   - คำตอบผู้ใช้ (11-16): ขอ **review ภายหลัง**; เดินงานแบบข้อมูล/persistence ภายใน Mapping ได้ตาม M1.1 แต่ยังไม่ถือว่า Dev 1 เห็นชอบ route/DTO และไม่ implement API controller จากร่างนี้ก่อน review
   - ยังรอ: Dev 1 review เฉพาะ route/DTO ที่กระทบ Web/contract boundary; prefix ไม่ใช่การอนุมัติ response/error/action contract ทั้งชุด
+  - Dev 2 (11-18, M4.3): ผู้ใช้ยืนยัน [contract subset M4.3 พร้อม request/response/counts/action guards](m4-3-delivery-operations-api-design.md) และ source batch แล้ว จึง implement controllers เฉพาะ subset นี้ได้; ใช้ prefix/BaseResponse เดิม ไม่เปลี่ยน Web/Informs และไม่ถือว่าปิด M1.2/Q8 ทั้งชุดหรือ Dev 1 รับรอง Web integration
 - [ ] **Q9** (Dev 2, 11-16) ผู้ใช้ชี้แจงว่า **MTLS เป็นเพียงตัวอย่างหนึ่ง ไม่ใช่ไฟล์หลัก** และให้ API/หน้า Mapping รองรับหลายงาน/หลายรูปแบบ; เลือกรอบแรก **Excel, Delimited (CSV/TSV), Fixed-width** ที่ใช้งานได้จริงตาม [แบบหลาย format](multi-format-api-web-design.md) · **ข้อเสนอถึง Dev 1/PM:** ให้ทั้งสาม format และ partner อื่นเป็น acceptance ของ API/Web/runtime ใน UAT และตกลงผลต่อวันส่ง/กำลังคนเทียบ D-01/D-70 ซึ่งเดิมกำหนด MTLS เป็น partner แรกและไม่ทำ partner อื่น; ห้ามถือว่าคำตอบผู้ใช้แก้ D-01/D-70 ใน rules แล้ว
   - คำตอบผู้ใช้ (11-16): **partner อื่นจะเปิดใช้ใน UAT**; ไม่ใช่เพียงเตรียม parser/UI กับ synthetic fixtures แล้วเปิดใช้ภายหลัง
   - ยังรอ: Dev 1/PM ลงผลขอบเขต/วันส่งเป็น `D-xx` ใน `rules.md`; partner identities, field bindings และตัวอย่างไฟล์ที่ใช้ทดสอบจริงผู้ใช้จะส่งภายหลังตาม M-24/Q5; ไม่เดาข้อมูลธุรกิจของ partner ใหม่

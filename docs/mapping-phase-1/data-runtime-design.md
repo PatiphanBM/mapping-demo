@@ -308,6 +308,19 @@ Content claim ไม่ถูกล้างเมื่อ job ล้มเห�
 - Manual retry ก่อนครบเพดานต้องผ่าน state guard/expected row version/action request ID และนับรวมเพดาน; หลังครบ API/worker/Web ใช้กติกา M-20 เดียวกัน ไม่ reset counter/key
 - preview/Source/Payload inspection ไม่มีสิทธิ์สร้าง job/attempt หรือเปลี่ยน Source/snapshot; config activate/table version เปลี่ยนไม่เปิด changed-payload resend ตาม M-22
 
+### 8.7 M4.3 delivery operations และ safe diagnostics
+
+- M-36 เพิ่ม `delivery_attempts.safe_diagnostics_json jsonb NOT NULL DEFAULT '[]'`; CHECK เป็น array ไม่เกิน100รายการและ JSON textไม่เกิน65536 bytes; Application/Domain จำกัด code/path และ pathไม่เกิน512 ตัวอักษร; completed/unknown history guard เดิมครอบคลุม column ใหม่นี้ ไม่เติมเหตุผลย้อนหลังจาก schema ล่าสุด
+- `DeliveryContext` ส่ง schema bytes ของ Contract Snapshot ที่ pin ให้ Application สร้าง path allowlist; 400 เก็บเฉพาะ `{code,path}` ที่ปลอดภัย และคง Rejected แม้รายละเอียดผิดรูปแบบ/เกินขนาด/อ่านหมดเวลา; ไม่ persist response body/messageText/unknown property names
+- migration `20261118031413_AddDeliveryDiagnosticsAndLogIndexes` เพิ่มดัชนี `file_jobs(created_at,id)` และ `(config_id,created_at,id)` รองรับ global/config filter พร้อม stable pagination; index config_id เดิมถูกรวมใน composite index ที่มี prefix เดียวกัน ไม่มีตารางใหม่หรือ schema นอก mapping
+- `MappingRuntimeReader` อ่านใน read-only repeatable-read transaction; file summary/counts อยู่ใน snapshot เดียวพร้อม DB asOf; lists ไม่คืน raw fields/ciphertext/paths ของไฟล์ และแยก total Source rows, unique Delivery Jobs, attempt reservations และ dispatched count
+- Source inspection resolve registry/file/pinned Source Definition Version เลือก columns จาก validated server catalogและใช้ parameters ของ row/file/definition; NULL/empty/raw text คงเดิม; Payload inspection decrypt/verify snapshotจริงตาม M-33; HTTP inspection ใช้ Cache-Control no-store และไม่มี GET writes/audit/HTTP/archive
+- `RuntimeInspection` limits (`MaxSourceBytes` default1MiB, `MaxPayloadBytes` default4MiB) เป็น server configuration/environment ไม่มาจาก browser; เกินขนาดคืน TooLarge พร้อม fields/payload null ไม่ truncate ข้อมูล; payloadเปิดไม่ได้แยก KeyUnavailable/IntegrityCheckFailed โดยไม่คืน key bytes/path
+- Retry/pause/resume ใช้ lock control ร่วม workerและ atomic MappingAudits; `(action,request_id)`/canonical request hash คืนผลเดิมก่อนตรวจ rowVersion; FixedActor=`mapping-api`; retryคง state RetryableFailed/identity/bytes/key/budget/epoch และตั้ง NextAt=max(DB now,ค่าเดิม), เพิ่มเฉพาะ rowVersion/UpdatedAt/audit; retryขณะ pausedเป็นการจัดคิวเท่านั้น
+- **ตัวอย่างสมมติ:** Source3แถว = Filtered1/Blocked1/Transformed1 → outputs2 = Delivered1/Rejected1; attempts3 = Completed2/OutcomeUnknown1, dispatched3; duplicate occurrenceมี own counts0และ canonical File Job ID โดยไม่คัดยอดของ canonicalมานับซ้ำ
+- Route/DTO/validation/status codes และรายละเอียด tests อยู่ใน [contract subset M4.3 ที่ผู้ใช้ยืนยัน](m4-3-delivery-operations-api-design.md); ไม่ขยายเป็น file/row retry, reprocess/resend, max-parallel editor, Web หรือ actual Informs acceptance
+- หลักฐาน local 2026-11-18: check.ps1 ผ่าน Release build/unit38/38/integration162/162/EF model ด้วย temporary sequential-collection RunSettings ตาม M4.2; M4.3ปิดใน plan แล้ว source commit `3fd48f8` push developตามคำสั่งผู้ใช้แล้ว และแบบ/หลักฐานอยู่ใน commit เอกสารชุดนี้ ส่วน actual Informs Q4/M4.4, company dependencies Q7 และ M1.2/Q8/Web review แยกติดตาม
+
 ## 9. หลักฐานปิด M1.1 และงานที่ยังแยกติดตาม
 
 **ปิด M1.1 วันที่ 2026-11-16 ตาม M-26:** แบบนี้มีตัวอย่าง lineage, ตาราง/types/keys, immutable version/Source, states/counts และ transaction/lease/budget/attempt guards พร้อม [หลักฐาน 29 checks บน PostgreSQL local](m1-1-validation.md); ไม่ถือว่าเป็นการปิด M1.3/M1.5 หรือ application tests ไปด้วย
