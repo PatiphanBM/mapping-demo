@@ -1,7 +1,7 @@
 ---
 title: กฎและการตัดสินใจที่ mapping ต้องทำตาม
 status: review
-last_updated: 2026-11-16
+last_updated: 2026-11-19
 ---
 
 # กฎและการตัดสินใจที่ mapping ต้องทำตาม
@@ -108,6 +108,8 @@ last_updated: 2026-11-16
 - **ห้าม:** ใส่ field ของ partner อื่นล่วงหน้าโดยไม่มีหลักฐาน · ตั้งชื่อ field ผูกกับ MTLS (เช่น `cPol_no`) — ใช้ชื่อกลาง (`sourceReference`)
 
 ### D-70 UAT 2026-12-15 · mapping อยู่ในขอบเขต
+> **⚠️ แก้โดย D-81 (2026-11-19):** go / no-go **11-30** · เริ่ม UAT **2026-12-01**
+
 - ขอบเขตขั้นต่ำ: อ่านไฟล์ MTLS · config mapping ของ MTLS → JSON `pa-inform/1` · ส่งเข้า `POST /api/pa/informs` + delivery log + retry
 - ไม่ทำ: partner อื่น · แผน modernization แบบ Windows Service
 - **ห้าม:** ใช้ข้อมูลส่วนบุคคลจริงในไฟล์ทดสอบ · รับงานแทรกหลัง 2026-12-04 ที่ไม่บล็อก UAT โดยไม่คุยกับ PM
@@ -123,6 +125,15 @@ last_updated: 2026-11-16
 ### D-78 หน้าเว็บ mapping อยู่ใน repo Web · Angular 21 + PrimeNG 21
 - หน้าเว็บ mapping ทำใน `prjInsuranceValidationWeb` (`features/mapping/`) **ก่อน UAT**
 - **ห้าม:** ขึ้น `primeng` 22+ หรือใช้ version `-lts` (ต้องมี license) · `npm update` ที่ข้าม major
+
+### D-81 พร้อม UAT 2026-11-30 · เริ่ม UAT 2026-12-01 · Kubernetes หลัก สำรองด้วย docker บน server
+- **ตัดสิน (ผู้ใช้ 2026-11-19):** go / no-go จันทร์ **2026-11-30** · เริ่ม UAT อังคาร **2026-12-01** (แทน 12-14 / 12-15 ของ D-70)
+- **ต้องอยู่ใน UAT วันแรก:** mapping อ่านไฟล์ MTLS → ส่งเข้า Informs + delivery log + retry · **หน้าเว็บ mapping** (ขอบเขตย่อ — ดู `plan.md` §5 Q10) · ทุน / plan code `MTL2`
+- **ไปทำระหว่าง UAT:** partner อื่นนอก MTLS (Q9) · login / ยืนยันตัวตน (ใช้ผู้ใช้คงที่ตาม `web.md`) · หน้าเว็บ mapping ส่วนที่ย่อไว้
+- **ที่รัน UAT:** Kubernetes ของบริษัทเป็นทางหลัก · ถ้าได้ cluster + Kafka ไม่ทัน **2026-11-24** → รัน docker compose บน server / VM ของบริษัทไปก่อน (Mapping ใช้ `docker-compose.yml` เดิมของ repo ได้ — project `prjinsurancevalidation` เดียวกับ Informs) แล้วย้ายขึ้น Kubernetes ระหว่าง UAT
+- **ทำไม:** โค้ดส่วนใหญ่เสร็จก่อนแผน (Informs / หน้า UW 11-17 · mapping ส่งเข้า Informs ได้บนเครื่อง 11-18)
+- **ผลที่ยอมรับ:** เผื่อเหลือ ~0.5 วัน (11-30 เช้า) · ถ้าใช้ docker สำรอง UAT ยังไม่ได้ทดสอบบน Kubernetes
+- **ห้าม:** รับงานแทรกที่ไม่บล็อก UAT ก่อน 11-30 · ใช้ข้อมูลส่วนบุคคลจริงในไฟล์ทดสอบ
 
 ## 6. คำถามที่ต้องตกลงตอน kickoff (2026-11-16)
 

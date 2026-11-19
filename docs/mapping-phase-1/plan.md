@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-18
+last_updated: 2026-11-19
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -446,19 +446,19 @@ last_updated: 2026-11-18
 
 ## 2. จุดสังเกต (milestone)
 
-> วันที่มาจากแผนรวมของ Dev 1 (🟡 ทบทวนตอน kickoff) · จะเลื่อนต้องคุยกับ Dev 1 ก่อน แล้วเขียนเหตุผลใน §5
+> วันที่มาจากแผนรวมของ Dev 1 · **ปรับตาม D-81 (2026-11-19): go / no-go 11-30 · เริ่ม UAT 12-01** (เดิม 12-14 / 12-15) · จะเลื่อนต้องคุยกับ Dev 1 ก่อน แล้วเขียนเหตุผลใน §5
 
 | วันที่ | จุดสังเกต | สถานะ |
 |---|---|---|
 | 11-16 | kickoff — ตกลงคำถามใน [rules.md](rules.md) §6 · Dev 2 เขียนงานใน §3 | ⬜ |
 | 11-18 | อ่านไฟล์ทดสอบ MTLS 2,556 แถวครบทุกแถว | ⬜ |
 | 11-23 | JSON ผ่าน schema `pa-inform-1.schema.json` ทุกแถว | ⬜ |
-| **11-26** | **mapping ส่งไฟล์ MTLS เข้า Insurance Validation ได้ (บนเครื่อง)** | ⬜ |
-| **12-03** | **หน้าเว็บ mapping ใช้ได้บนเครื่อง** | ⬜ |
-| 12-04 | พร้อม deploy บน Kubernetes (mount share folder, ConfigMap / Secret) | ⬜ |
-| 12-09 | ทดสอบร่วมบน cluster ผ่าน (ไฟล์ทดสอบเข้าทาง mapping ครบ) | ⬜ |
-| 12-14 | พร้อม UAT | ⬜ |
-| **12-15** | **เริ่ม UAT** | ⬜ |
+| **11-23** (เดิม 11-26) | **mapping ส่งไฟล์ MTLS เข้า Insurance Validation ได้ และผ่านการตรวจครบ (บนเครื่อง — ทดสอบร่วมกับ Dev 1)** | ⬜ |
+| **11-25** (เดิม 12-03) | **หน้าเว็บ mapping แบบย่อใช้ได้บนเครื่อง** (§5 Q10) | ⬜ |
+| 11-26 (เดิม 12-04) | Mapping ขึ้น env UAT (Kubernetes หรือ docker บน server — D-81) · mount share folder · config MTLS ติดตั้งแล้ว | ⬜ |
+| 11-27 (เดิม 12-09) | ทดสอบร่วมบน env UAT ผ่าน (ไฟล์ทดสอบเข้าทาง mapping ครบ) | ⬜ |
+| 11-30 (เดิม 12-14) | พร้อม UAT · go / no-go | ⬜ |
+| **12-01** (เดิม 12-15) | **เริ่ม UAT** | ⬜ |
 
 สถานะ: ⬜ ยังไม่ถึง · 🔄 กำลังทำ · ✅ ผ่าน · ⛔ เสี่ยงไม่ทัน (เขียนเหตุผลใน §1)
 
@@ -569,6 +569,7 @@ last_updated: 2026-11-18
   - คำตอบผู้ใช้ (11-13), Q2.4: Source inspection รายแถวแบบ read-only ตาม M-18; แยกยอดแถวที่อ่านพบ/Source ที่บันทึกและยอดส่งตามสถานะโดยไม่ปน attempts พร้อมแสดง import state เพื่อไม่อ้างว่าอ่านครบขณะ import ยังไม่จบ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 7.1: ชุดข้อมูล delivery log ตาม M-10; ผู้ใช้งาน/ขอบเขต action และ raw inspection แยกยังรอข้อสรุป ไม่ถือว่าปิดทั้ง task
 - [ ] **M4.4** ทดสอบ end-to-end Mapping → Informs บนเครื่อง — เสร็จเมื่อ: fixture ครบ, source/payload/delivery counts กระทบยอดได้, replay/replaced/rejection/throttle/restart ผ่าน, `scripts/check.ps1` ผ่านและบันทึก repo+commit/ผลจริง · เป้า **11-26**
+  - Dev 1: (11-19) **Q4 ไม่บล็อกแล้ว** — Informs รับ `fileReceivedAt` ตั้งแต่ commit `1bc8d1e` (T2.6, 2026-11-16, อยู่ใน `origin/develop` แล้ว) · ให้ pull repo Informs `develop` → `./scripts/up.ps1` ใหม่ → Mapping ดึง schema จาก `GET /api/pa/informs/schema/1` อีกครั้ง (snapshot เดิมน่าจะดึงจาก Informs ก่อน `1bc8d1e`) · Informs + Mapping ใช้ compose project `prjinsurancevalidation` เดียวกัน → `http://informs:8080` ใน container ใช้ได้ · เสนอเป้า M4.4 **11-20** แทน 11-26 (แผนรวมฉบับ 4 ร่าง) แล้ว Dev 1 ทดสอบร่วมด้วยไฟล์ 2,556 แถว 11-23
 
 ### M5 — ส่งต่อ Web และเตรียม Kubernetes
 
@@ -957,3 +958,11 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-16): **partner อื่นจะเปิดใช้ใน UAT**; ไม่ใช่เพียงเตรียม parser/UI กับ synthetic fixtures แล้วเปิดใช้ภายหลัง
   - ยังรอ: Dev 1/PM ลงผลขอบเขต/วันส่งเป็น `D-xx` ใน `rules.md`; partner identities, field bindings และตัวอย่างไฟล์ที่ใช้ทดสอบจริงผู้ใช้จะส่งภายหลังตาม M-24/Q5; ไม่เดาข้อมูลธุรกิจของ partner ใหม่
   - ผลต่อแผน Dev 2: M2.1 เป็น reader core+Excel; เพิ่ม M2.6 Delimited, M2.7 Fixed-width; M1.2/M2.3/M5.3 เปลี่ยนเป็น format-neutral; MTLS 2,556 แถวยังเป็น regression fixture หนึ่ง ไม่ใช้เป็น schema ของ config ทั้งระบบ
+
+- [ ] **Q10** (Dev 1, 11-19) **deadline ใหม่ D-81 — พร้อม UAT 11-30 · เริ่ม UAT 12-01** ([rules.md](rules.md) D-81) · Dev 1 ทวนโค้ด `prjInsuranceValidationMapping` `3fd48f8` แล้ว พบงานที่ต้องเสร็จก่อน 11-30 ที่ยังไม่อยู่ใน §3 — ขอ Dev 2 แตกเป็น bullet ใน §3 + ให้เป้าตามวันใน §2:
+  1. **API จัดการ config** — ตอนนี้มี `IConfigLifecycleRepository` (`SaveVersionAsync` / `ActivateAsync` / `DisableAsync`) แต่ไม่มี command / controller · controller มีแค่ `mapping-configs/{id}/validate` · `preview` · `preview-file` → ยังสร้าง config / activate ใน env ใหม่ไม่ได้ และหน้าเว็บ Configs ไม่มี API ให้เรียก · ต้องมี: รายการ config · สร้าง config · บันทึก version ใหม่ · activate · disable (ตาม M-12) — เป้า **11-20**
+  2. **script ติดตั้ง config MTLS** ใน env ใหม่ (ผ่าน API ข้อ 1) — Program JSON ของ MTLS ตอนนี้อยู่ใน test fixture เท่านั้น — เป้า **11-23**
+  3. **health probe** `/health/live` + `/health/ready` แบบเดียวกับ Informs / Products (ดูหมายเหตุ Dev 1 ใต้ M5.1) — เป้า **11-20**
+  4. **หน้าเว็บ mapping แบบย่อ** — Dev 1 เสนอ (🟡 รอผู้ใช้ยืนยัน): **Jobs** = รายการไฟล์ + counts · รายละเอียดแถว / error / payload / attempts (API M4.3 มีแล้ว) · retry · pause / resume · **Configs** = รายการ · version · activate / disable · แก้ Program เป็น JSON ในช่องข้อความ + validate / preview · **ตัดไปทำระหว่าง UAT:** editor แบบฟอร์มต่อ format (Source fields / Input Layout panel) · แบบหน้าจอใช้ mockup เดิมใน `mapping-demo/web` เป็นแนว — เป้า **11-25**
+  5. **สิ่งที่ต้องขอจากบริษัท (Dev 1 ส่งให้ PM 11-19 — ต้องได้ 11-24):** schema `mapping` บน DB บริษัท + สิทธิ์ `CREATE` ใน schema (Source Table ต่อ config สร้างตอนทำงาน — `SourceStorageRepository.cs` `CREATE TABLE mapping.{table}`) · Kafka 3 topic ของ Mapping · ที่เก็บ key เข้ารหัส payload (Secret) · share folder MTLS — ถ้า Dev 2 เห็นว่ามีอย่างอื่นที่ต้องขออีก เขียนตอบใต้ข้อนี้วันนี้
+  6. M4.4 — Informs รับ `fileReceivedAt` แล้ว (หมายเหตุ Dev 1 ใต้ M4.4) — เป้า **11-19 / 11-20**
