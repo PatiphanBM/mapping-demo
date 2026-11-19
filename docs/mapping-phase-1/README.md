@@ -65,9 +65,9 @@ last_updated: 2026-11-19
 | 11-19 – 11-20 | M4.4 ส่งเข้า Informs ตัวจริงบนเครื่อง · health probe · **API จัดการ config** · Dev 1 review route / DTO (Q8) |
 | **11-23 (จ.)** | **ไฟล์ทดสอบเข้าทาง mapping ผ่านการตรวจครบบนเครื่อง** (ทดสอบร่วมกับ Dev 1) · script ติดตั้ง config MTLS |
 | 11-24 | ตัดสินที่รัน UAT: Kubernetes หรือ docker บน server (D-81) |
-| **11-25 (พ.)** | **หน้าเว็บ mapping แบบย่อใช้ได้บนเครื่อง** (plan.md §5 Q10) |
-| 11-26 (พฤ.) | deploy Mapping บน env UAT + mount share folder |
-| 11-27 (ศ.) | ทดสอบร่วมบน env UAT ครบ (รวมหน้าเว็บ mapping) |
+| 11-25 (พ.) | จุดเช็ค: หน้า Jobs + Configs ใช้ได้บนเครื่อง (ช้า → แจ้ง Dev 1 ทันที) |
+| 11-26 (พฤ.) | deploy Mapping บน env UAT + mount share folder (Dev 1 ทำหลัก Dev 2 ช่วยเช้า) |
+| **11-27 (ศ.)** | **หน้าเว็บ mapping ครบตามแบบใช้ได้บนเครื่อง** (Configs · Config editor · Jobs) · ทดสอบร่วมบน env UAT |
 | 11-30 (จ.) | เช้า: เผื่อ · บ่าย: ตรวจความพร้อม · **go / no-go** |
 | **12-01 (อ.)** | **เริ่ม UAT** — ครบทั้งระบบ รวมหน้าเว็บ mapping |
 

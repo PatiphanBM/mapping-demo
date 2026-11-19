@@ -128,11 +128,11 @@ last_updated: 2026-11-19
 
 ### D-81 พร้อม UAT 2026-11-30 · เริ่ม UAT 2026-12-01 · Kubernetes หลัก สำรองด้วย docker บน server
 - **ตัดสิน (ผู้ใช้ 2026-11-19):** go / no-go จันทร์ **2026-11-30** · เริ่ม UAT อังคาร **2026-12-01** (แทน 12-14 / 12-15 ของ D-70)
-- **ต้องอยู่ใน UAT วันแรก:** mapping อ่านไฟล์ MTLS → ส่งเข้า Informs + delivery log + retry · **หน้าเว็บ mapping** (ขอบเขตย่อ — ดู `plan.md` §5 Q10) · ทุน / plan code `MTL2`
-- **ไปทำระหว่าง UAT:** partner อื่นนอก MTLS (Q9) · login / ยืนยันตัวตน (ใช้ผู้ใช้คงที่ตาม `web.md`) · หน้าเว็บ mapping ส่วนที่ย่อไว้
+- **ต้องอยู่ใน UAT วันแรก:** mapping อ่านไฟล์ MTLS → ส่งเข้า Informs + delivery log + retry · **หน้าเว็บ mapping ครบตามแบบ — ไม่ย่อ** (ผู้ใช้ 2026-11-19: Configs · Config editor ต่อ format + Program editor · Jobs ตาม `multi-format-api-web-design.md` §4) · ทุน / plan code `MTL2`
+- **ไปทำระหว่าง UAT:** partner อื่นนอก MTLS (Q9) · login / ยืนยันตัวตน (ใช้ผู้ใช้คงที่ตาม `web.md`)
 - **ที่รัน UAT:** Kubernetes ของบริษัทเป็นทางหลัก · ถ้าได้ cluster + Kafka ไม่ทัน **2026-11-24** → รัน docker compose บน server / VM ของบริษัทไปก่อน (Mapping ใช้ `docker-compose.yml` เดิมของ repo ได้ — project `prjinsurancevalidation` เดียวกับ Informs) แล้วย้ายขึ้น Kubernetes ระหว่าง UAT
 - **ทำไม:** โค้ดส่วนใหญ่เสร็จก่อนแผน (Informs / หน้า UW 11-17 · mapping ส่งเข้า Informs ได้บนเครื่อง 11-18)
-- **ผลที่ยอมรับ:** เผื่อเหลือ ~0.5 วัน (11-30 เช้า) · ถ้าใช้ docker สำรอง UAT ยังไม่ได้ทดสอบบน Kubernetes
+- **ผลที่ยอมรับ:** Dev 2 ไม่มีวันเผื่อ (หน้าเว็บ mapping ถึง 11-27 · 11-30 เช้าใช้แก้) — ถ้า 11-25 ช้ากว่าแผน แจ้ง Dev 1 ทันที · ถ้าใช้ docker สำรอง UAT ยังไม่ได้ทดสอบบน Kubernetes
 - **ห้าม:** รับงานแทรกที่ไม่บล็อก UAT ก่อน 11-30 · ใช้ข้อมูลส่วนบุคคลจริงในไฟล์ทดสอบ
 
 ## 6. คำถามที่ต้องตกลงตอน kickoff (2026-11-16)
