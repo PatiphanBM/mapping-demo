@@ -30,6 +30,69 @@ last_updated: 2026-11-23
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-23 — Commit/push Source Table และปรับ Source fields
+- เสร็จ: ตามคำสั่งผู้ใช้ commit และ push repo Mapping บน `develop` เป็น **`16ba7e7`** — `feat(mapping): support custom source table names`; รวม 16 ไฟล์สำหรับ create/read metadata, validation/conflict/idempotency, runtime resolve table และ tests; local ตรง `origin/develop`, working tree สะอาด
+- เสร็จ: commit และ push repo Web บน `develop` เป็น **`e455938`** — `feat(mapping): configure source table names and simplify fields` (9 ไฟล์) และ **`00191b0`** — `style(mapping): align source fields table columns` (เฉพาะ `styles.scss` ตามกฎไฟล์ร่วม); local ตรง `origin/develop`, working tree สะอาด
+- หลักฐาน Mapping: `scripts/check.ps1` ผ่าน build, unit **39/39**, integration **178 passed / 9 skipped / 187 total**, เวลา integration **7 นาที 6 วินาที** และ EF model ตรง migration; external E2E 9 ข้อข้ามตามโหมดปกติที่ไม่ได้ตั้งค่า images ไม่อ้างว่ารัน external acceptance ใหม่
+- เงื่อนไขการรัน: รอบปกติมี timeout 1 ข้อ `KafkaFileIntakeTests.HostedPipeline_ShouldReadThreeFormatsQueueThroughKafkaAndArchiveWithoutHttpDelivery` ระหว่างนำเข้า 2,556 แถว (อีก 177 ข้อผ่าน); รันข้อเดี่ยวผ่าน **1/1** ในประมาณ **1 นาที 20 วินาที** (`kafka-intake-isolation.trx`); เครื่องเหลือ RAM ราว 2 GB จึงรัน check เต็มซ้ำด้วย `RunSettingsFilePath` ชี้ไฟล์ชั่วคราวที่มี `xUnit.MaxParallelThreads=2`/`ParallelAlgorithm=conservative` ตาม [เอกสาร xUnit](https://xunit.net/docs/config-runsettings#maxparallelthreads) แล้วผ่าน; ไม่เปลี่ยนโค้ด/timeout ไม่ filter tests ใน check และไม่ commit runsettings ลง repo
+- หลักฐาน Web: source ชุดที่ commit ผ่าน `npm run build` และ `npm run test:ci` **80/80** ใน 9 suites; ไม่มีการแก้ source หลังผลตรวจนี้
+- เอกสารชุดนี้: ปรับ `data-runtime-design.md`, `mapping-api-contract.md` และ `plan.md` ให้ตรง M-38–M-41 พร้อม commit hashes/หลักฐาน โดยไม่แก้ไฟล์ของ Dev 1 หรือ repo Informs
+- กำลังทำ: —
+- ติด / รอ: Q11 ขอ Dev 1 ปรับ D-84 ตามคำยืนยันล่าสุด; timeout เมื่อรันความขนานปกติยังเป็นข้อจำกัดของการทดสอบบนเครื่องนี้ ไม่ได้แก้ถาวรใน runner configuration
+- ต่อไป: ติดตาม Q11 และงาน M5.3 ที่เหลือ; ข้อมูลข้างต้นเป็นหลักฐาน local ไม่ใช่ company deployment
+
+### 2026-11-23 — เอาชื่อที่แสดงออกจาก Source fields ใน wizard
+- เสร็จ: ตามการยืนยันของผู้ใช้ เอาคอลัมน์/ช่องกรอก “ชื่อที่แสดง” ออกจากขั้นที่ 1 และปรับ tour ให้ใช้ Key เป็นชื่ออ้างอิงตาม M-41
+- เสร็จ: wizard ไม่เก็บชื่อที่แสดงจากการกรอก/อ่านไฟล์ตัวอย่าง/คัดลอก config; ส่ง `displayName: null` สำหรับ Source fields ใหม่ ให้ mapper ใช้ Key แทนตามพฤติกรรมเดิม; ปรับจำนวน grid columns ให้ตรงกันทั้ง Excel/Delimited/Fixed-width
+- ไฟล์ Web: `features/mapping/mapping-new.html`, `mapping-new.ts`, `mapping-new-tour.ts` และเฉพาะ `.col-row`/`.col-fixed` ใน `src/styles.scss`
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` ผ่าน **80/80** ใน 9 suites; dev server compile ผ่านและส่ง page reload แล้ว, Web HTTP **200**; `git diff --check` ผ่าน
+- กำลังทำ: —
+- ติด / รอ: —; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจตารางคอลัมน์ในไฟล์ขั้นที่ 1; field ของ config เดิมยังมี metadata เดิมตาม version ที่บันทึกไว้
+
+### 2026-11-23 — เอาคอลัมน์ชนิดออกจาก Source fields ใน wizard
+- เสร็จ: ตามการยืนยันของผู้ใช้ เอาคอลัมน์/ตัวเลือก “ชนิด” ออกจากตารางคอลัมน์ในไฟล์ขั้นที่ 1; แสดงข้อความ “ข้อมูลต้นทางเก็บเป็นข้อความ การแปลงตัวเลขหรือวันที่กำหนดในขั้นที่ 4” และปรับ tour ให้ตรงกันตาม M-40
+- เสร็จ: wizard ไม่เก็บหรือคัดลอก type hint และส่ง `logicalTypeHint: null` เมื่อสร้าง Source fields ใหม่; จับคู่อัตโนมัติตามชื่อด้วย `trim(source)` โดยไม่แปลงชนิดจาก hint ที่ผู้ใช้มองไม่เห็น; การแปลงในขั้นที่ 4 ยังตั้งค่าได้
+- ไฟล์ Web: `features/mapping/mapping-new.html`, `mapping-new.ts`, `mapping-new-tour.ts` และเฉพาะ `.col-row`/`.col-fixed` ของ Mapping ใน `src/styles.scss`; จำนวน grid columns ตรงกับ header/fields ทั้ง Excel/Delimited/Fixed-width
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` ผ่าน **80/80** ใน 9 suites; dev server compile ผ่านและส่ง page reload แล้ว, Web HTTP **200**; `git diff --check` ผ่าน
+- กำลังทำ: —
+- ติด / รอ: Q11 ขอ Dev 1 ปรับข้อความ D-84 ให้ตรงคำยืนยันล่าสุดของผู้ใช้; ไม่แก้ `rules.md` เอง และไม่ถือว่ารอ Q11 เพื่อหยุดงานที่ผู้ใช้ยืนยัน; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจขั้นที่ 1 และกำหนด convert ที่ขั้นที่ 4 ตาม contract
+
+### 2026-11-23 — จัดข้อมูล Mapping ขั้นที่ 1 เป็นสามคอลัมน์
+- เสร็จ: ตามการยืนยันของผู้ใช้ แก้เฉพาะ layout ใน Web `src/app/features/mapping/mapping-new.html` ให้ชื่อ Mapping / Input folder / ชื่อตารางต้นทางอยู่แถวเดียวกันเป็น 3 คอลัมน์กว้างเท่ากัน โดยใช้ grid เดิมและย้ายช่องชื่อตารางเข้าแถวเดียวกัน
+- หลักฐาน: `npm run build` ผ่าน; dev server compile ผ่านและส่ง component update แล้ว; Web local HTTP **200**; `git diff --check` ผ่าน
+- กำลังทำ: —
+- ติด / รอ: —; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจ layout ใน wizard ขั้นที่ 1 ที่เปิดอยู่
+
+### 2026-11-23 — เปิด Docker กลับมาและตรวจ custom Source Table บน local
+- เสร็จ: ตามคำขอผู้ใช้ เปิด Docker Desktop/Engine กลับมา; พบ Desktop/backend ค้างและ WSL `docker-desktop` อยู่สถานะ Stopped, CLI restart timeout จึงปิดเฉพาะ 7 โปรเซสของ Docker ใต้โฟลเดอร์ติดตั้ง แล้ว `wsl --shutdown` และเปิด Desktop ใหม่; Engine **29.8.0** ตอบคำสั่งแล้ว โดยไม่ลบ containers/volumes หรือ reset ข้อมูล
+- เสร็จ: เปิด containers เดิม PostgreSQL/Kafka/Informs/Mapping; PostgreSQL และ Kafka healthy, Mapping/Informs `/health/ready` ตอบ **200 Healthy**
+- หลักฐาน: รัน integration tests ที่เคยติด Docker ใหม่บน PostgreSQL Testcontainers ผ่าน **15/15**, ไม่มี skip (`custom-source-table-integration.trx`): custom name/keyword, invalid names, table conflicts, concurrent ownership, append/idempotency, import→transform และ Source inspection; ผลนี้แทน run ที่ abort ก่อนหน้า
+- เสร็จ: `docker compose build mapping` ผ่านแล้ว และ recreate เฉพาะ Mapping ด้วย `--no-deps --no-build`; ตรวจ app environment และ named volumes ให้ตรงของเดิมก่อนเปลี่ยน container, ไม่รัน migrations; GET Source definitions ของ runtime ใหม่ส่ง `physicalTableName` ครบ **1/1** รายการ และตารางเดิมยังอยู่
+- เสร็จ: เปิด Web dev server local กลับมาที่ **http://127.0.0.1:4200/**, compile ผ่านและ HTTP **200**; ช่องตั้งชื่อตารางจากโค้ด M-39 พร้อมใช้งานกับ API local รุ่นใหม่
+- กำลังทำ: —
+- ติด / รอ: ไม่มีสำหรับ Docker/local API และ integration subset ของ M-39; ยังไม่ได้ตรวจหน้าจอด้วย browser automation, ไม่ถือว่าปิด M5.3 ทั้งข้อหรือผ่าน company deployment; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ทดสอบ wizard ขั้นที่ 1 ด้วยชื่อตารางที่ต้องการ; รัน `scripts/check.ps1` ก่อน commit ตามกฎ repo เมื่อมีคำสั่ง commit
+
+### 2026-11-23 — ให้ผู้ใช้กำหนดชื่อตารางต้นทางเมื่อสร้าง Mapping
+- เสร็จ: ตามชุดไฟล์ที่ผู้ใช้ยืนยัน เพิ่มช่องบังคับ “ชื่อตารางต้นทาง” ใน wizard ขั้นที่ 1 เช่น `partner_d_raw` → `mapping.partner_d_raw`; ส่งผ่าน `physicalTableName` ใน Source definition create API และล็อกหลังสร้างสำเร็จตาม M-39
+- เสร็จ: Domain/validator/repository ตรวจชื่อ 1–48 ตัว; ใช้ชื่อจาก metadata ใน create/append/import/transform/inspection แทนสูตร `src_<ID>`; quote identifiers, กันชื่อชน metadata/relation และ concurrent creation, hash ของ idempotency รวมชื่อ; API รุ่นเดิมที่ไม่ส่งชื่อและตารางเดิมยังใช้ชื่อเดิม ไม่มี migration ใหม่
+- เสร็จ: หากชื่อชนหลังสร้าง config identity แล้ว Web ยังให้เปลี่ยนชื่อตารางและลองใหม่กับ config เดิมได้ ไม่สร้างชื่อ Mapping ซ้ำ; แสดง conflict ข้างช่องกรอก
+- หลักฐาน: Mapping Release build ผ่าน **0 errors**, unit tests **39/39** (`custom-source-table-unit.trx`), EF model ตรง migration; ตรวจ entity/validator เพิ่มแบบไม่ใช้ Docker **15/15** กรณี (ชื่อปกติ/keyword/48 ตัว/ชื่อผิด/SQL fragment/newline/legacy fallback); Web `npm run build` ผ่าน และ `npm run test:ci` **80/80** ใน 9 suites
+- เพิ่ม tests: API ตั้งชื่อเอง/ชื่อซ้ำ/ชื่อชนตารางระบบ/identifier ผิด, repository create+append+idempotency/concurrent names และ import→transform/Source inspection ด้วย custom table; tests compile ผ่าน แต่ยังไม่อ้างว่าผ่าน PostgreSQL
+- ติด / รอ: Docker server ไม่ตอบภายใน 5 วินาทีและ readiness local ไม่ตอบ; integration run `custom-source-table-integration.trx` ถูก abort โดย inactivity timeout 45 วินาทีก่อนมีผล test จึงยังไม่ผ่าน integration gate และยังไม่ได้อัปเดต container local; ไม่แก้ DB บริษัท ไม่ commit/push
+- ต่อไป: เมื่อ Docker local พร้อม รัน integration tests ที่เพิ่ม/แก้และ `scripts/check.ps1`, build/recreate Mapping โดยรักษา runtime config แล้วตรวจ wizard กับ API รุ่นใหม่
+
+### 2026-11-23 — แสดงชื่อตารางต้นทางจริงบนหน้า Mapping
+- เสร็จ: ตามชุดไฟล์ที่ผู้ใช้ยืนยัน เพิ่ม `physicalTableName` ใน Source definition list/detail API โดยอ่านจาก DB; Web แสดง `mapping.<physicalTableName>` แบบ read-only ใน wizard ขั้นที่ 1 ใต้ชื่อ Mapping/Input folder, ขั้นที่ 5, หน้า Config และ Source fields list/detail ตาม M-38
+- เสร็จ: ก่อนสร้าง config แบบร่าง แสดง “ยังไม่ได้สร้างตารางต้นทาง”; ถ้า API รุ่นเก่าไม่ส่งชื่อ แสดง “ยังไม่มีข้อมูลชื่อตาราง” โดยไม่เดาชื่อจาก Key/ชื่อ config/ID; เพิ่ม field ยังคงตารางเดิม ไม่มี migration ใหม่
+- หลักฐาน: Mapping Release build ผ่าน **0 errors**; API integration tests `MappingSourceDefinitionsApiTests` + `MappingConfigsApiTests` บน PostgreSQL Testcontainers ผ่าน **2/2**, ไม่มี skip (`source-table-metadata.trx`); Web `npm run build` ผ่าน และ `npm run test:ci` ผ่าน **78/78** ใน 9 suites รวม metadata list/detail, API รุ่นเก่า และการเลือกตารางตาม Source definition ของ config
+- กำลังทำ: โค้ดพร้อมแล้ว แต่ยังยืนยันหน้าจอกับ API local รุ่นใหม่ไม่ได้
+- ติด / รอ: `docker compose build mapping` ล้มระหว่าง `dotnet publish` ด้วย `Input/output error` / `Read-only file system` ที่ `/app/Mapping.Api`; Docker inspect และ readiness ของ service เดิมไม่ตอบในรอบตรวจถัดมา จึงยังไม่ได้ recreate container หรือ apply migration; ยังไม่ commit/push
+- ต่อไป: เมื่อ Docker local กลับมาพร้อม ให้ build/recreate เฉพาะ Mapping โดยรักษา runtime config เดิม แล้วตรวจ `physicalTableName` ผ่าน API และหน้า Web; ไม่ถือว่าติดตั้งรุ่นใหม่แล้ว
+
 ### 2026-11-23 — แก้ SDK ของ workspace และ C# Dev Kit
 - เสร็จ: ผู้ใช้ขอแก้เส้นแดงของ `ApiContractClientTests.cs`; log ของ C# Dev Kit และคำสั่ง restore ของ solution ชั่วคราวยืนยัน `NETSDK1045` เพราะเลือก SDK 8 สำหรับ projects ที่ target `net10.0`
 - เสร็จ: ติดตั้ง Microsoft .NET SDK **10.0.404** ในตำแหน่งระบบเดียวกับ SDK **8.0.400** หลังตรวจ SHA-512 และลายเซ็น Microsoft; installer exit code **0** และไม่ต้อง restart Windows
@@ -655,6 +718,13 @@ last_updated: 2026-11-23
   - Dev 1: (11-17) Informs + Products ทำ probe แล้ว — ขอให้ Mapping ใช้แบบเดียวกันเพื่อให้ manifest ของ Kubernetes เหมือนกันทั้ง 3 service: package `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore` 10.0.4 ใน `Mapping.Api` · `builder.Services.AddHealthChecks().AddDbContextCheck<MappingDbContext>(tags: ["ready"]);` · `app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });` (ไม่ตรวจอะไร = process ยังตอบ) · `app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });` (ตรวจ DB อย่างเดียว — ไม่ใส่ Kafka / Informs API / share folder เพราะตอนนั้นล่ม งานควร retry ไม่ใช่ตัด pod ออก) · ตอบข้อความธรรมดา `Healthy` / `Unhealthy` (`200` / `503`) ไม่ห่อ `BaseResponse` · test: integration test 2 เคส — DB ปกติ live/ready `200` · connection string ชี้ `Host=127.0.0.1;Port=1` → live `200` ready `503`
 - [ ] **M5.2** ส่ง API contract/OpenAPI/examples ให้ทำ Web — เสร็จเมื่อ: เอกสารตัวอย่าง/DTO/states/counts/action availability ตรง API ที่รันจริง, CORS/base URL พร้อม, ไม่มี docs ใน repo โค้ด · เป้า 11-27
 - [ ] **M5.3** Implement และเชื่อมหน้า mapping หลังได้รับ Web design — เสร็จเมื่อ: scope ที่ตกลงใช้งานบนเครื่องผ่าน `core/mapping-api.ts` + `features/mapping/`, build/unit tests ของ Web ผ่าน, ไม่แก้เมนูอื่นและไม่เพิ่ม package โดยยังไม่บอก Dev 1 · เป้า **12-03** เดิม · [แบบหลาย format](multi-format-api-web-design.md) ให้ Config editor/preview/jobs ใช้กับ Excel/Delimited/FixedWidth โดยไม่มี field MTLS hardcode; ขอบเขต/วันส่งเพิ่มรอ Q9 และ layout รายละเอียดรอ review design
+  - Dev 2 (11-23): เพิ่มการแสดงชื่อตารางต้นทางตาม M-38 แล้ว; Mapping build/API tests 2/2 และ Web build/tests 78/78 ผ่าน; ยังรอตรวจ runtime รุ่นใหม่เพราะ Docker local มี filesystem error ตาม §1 ไม่ปิด M5.3 ทั้งข้อ
+  - Dev 2 (11-23, เพิ่มเติม): ผู้ใช้ยืนยันให้ตั้งชื่อตารางเองตาม M-39; wizard/API/runtime และ tests แก้แล้ว, build ทั้งสอง repo/unit 39/39/Web 80/80/guard smoke 15/15/EF model ผ่าน; PostgreSQL integration gate และการเปิด runtime ใหม่ยังติด Docker ตาม §1
+  - Dev 2 (11-23, หลังเปิด Docker): integration subset ของ M-39 ผ่าน **15/15**, local Mapping recreate เป็นรุ่นใหม่แล้วโดยรักษา environment/volumes เดิม; Mapping/Informs readiness และ Web :4200 ตอบ **200**; ปิดข้อจำกัด Docker ของงานนี้ แต่ไม่ปิด M5.3 ทั้งข้อ
+  - Dev 2 (11-23, layout): ชื่อ Mapping / Input folder / ชื่อตารางต้นทางอยู่แถวเดียวกัน 3 คอลัมน์ตามผู้ใช้ยืนยัน; Web build และ dev-server compile ผ่าน
+  - Dev 2 (11-23, Source fields): ถอดช่องชนิดในขั้นที่ 1 และการใช้ hint ที่ซ่อนอยู่ตาม M-40; ปรับตาราง/tour แล้ว, Web build และ tests **80/80** ผ่าน
+  - Dev 2 (11-23, ชื่อที่แสดง): ถอดช่องชื่อที่แสดงในขั้นที่ 1 ตาม M-41; Source fields ใหม่ใช้ Key แทนและไม่คัดลอก displayName ที่ซ่อนอยู่; Web build/tests **80/80** ผ่าน
+  - Dev 2 (11-23, commit/push): Mapping `16ba7e7` และ Web `e455938`/`00191b0` push `origin/develop` แล้ว; full check ผ่าน unit **39/39**, integration **178 passed / 9 skipped**, EF model ผ่าน เมื่อใช้ runsettings ชั่วคราวจำกัด 2 threads ตามหลักฐาน §1; ไม่ปิด M5.3 ทั้งข้อ
   - คำตอบผู้ใช้ (11-13), Q2.5: รวมการเปิด JSON Delivery Payload แบบ read-only เพื่อเทียบ Source ตาม M-19; แสดงเฉพาะ snapshot ที่มีจริง รวม rejected delivery ถ้ายังไม่มี payload ให้แสดงสถานะ/diagnostic ตามจริง
   - คำตอบผู้ใช้ (11-13), Q2.4: รวมการเปิด Source ดิบรายแถวแบบ read-only จากรายการไฟล์/แถวตาม M-18; ไม่ทำหน้าจัดการใบหรือ business validation ซ้ำกับ Informs/UW
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 8: Config (สร้าง version/validate/preview/activate/disable) + ผลการส่ง (ไฟล์/แถว/attempts) + retry ตามสถานะ ตาม M-12; ยังรอ layout/interaction จาก Web design และต้องยืนยันรายการไฟล์ก่อนแก้ source ตามเดิม
@@ -973,7 +1043,40 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ไม่เลือก:** ไม่อ้าง assembly/project ข้าม service ไม่แก้checkout/schemaของInforms ไม่ใช้synthetic D-80 schemaเป็นsuccess ไม่ปรับstate/อ่านDB Informsโดยตรงเพื่อยืนยันผล และไม่ขยายเป็นProducts/Client API validationครบทุกstage
 - **หลักฐาน/ข้อจำกัด:** check.ps1ผ่านunit38/38 integration171/171 EFmodel และexternal9/9ไม่มีskip/abortผ่านscript -Gate; [แบบและผลตรวจ M4.4](m4-4-informs-end-to-end-design.md); dependencyเป้าหมาย `f1eca8d` ตามชุดที่ยืนยัน ไม่อ้างว่าtested remoteใหม่ `6cb5664`; Q7/Q5/Q9/M1.2/Q8/Web และ Kubernetesยังแยกติดตาม; ยังไม่commit/push
 
+### M-38 แสดงชื่อตารางต้นทางจริงแบบอ่านอย่างเดียว
+- **ตัดสิน (2026-11-23):** ตามคำขอและการยืนยันของผู้ใช้ ให้ Source definition GET API ส่ง `physicalTableName` ที่เก็บใน DB และแสดงพร้อม schema `mapping` ใน wizard ขั้นที่ 1/5, Config detail และ Source fields list/detail
+- **ทำไม:** ผู้ใช้ต้องตรวจได้ว่า field และไฟล์ของ config นี้บันทึกลง physical Source Table ใดตาม M-15/M-16
+- **ตัวอย่างข้อมูลสมมติ:** API คืน `{"id":"<source-definition-id>","configId":"<config-id>","physicalTableName":"src_example"}` → หน้าเว็บแสดง `mapping.src_example`; ก่อนสร้างแบบร่างแสดง “ยังไม่ได้สร้างตารางต้นทาง”
+- **ไม่เลือก:** เดาชื่อตารางจาก Key/ชื่อ config/ID หรือให้ผู้ใช้เปิด DB เพื่อตรวจชื่อทุกครั้ง
+- **ห้าม:** ใช้ชื่อที่แสดงเป็น input SQL/DDL จาก browser หรือเปลี่ยนชื่อตารางผ่านหน้าจอนี้; การรับไฟล์/เพิ่ม field ใช้ตารางตาม M-15/M-17 เดิม
+
+### M-39 กำหนดชื่อตารางต้นทางเองเมื่อสร้าง Source definition
+- **ตัดสิน (2026-11-23):** ผู้ใช้ขอและยืนยันเพิ่มช่อง “ชื่อตารางต้นทาง” ในขั้นที่ 1; รับชื่อ table ที่ไม่มี schema prefix แล้วสร้างใต้ `mapping`; หลังสร้างสำเร็จเปลี่ยนชื่อไม่ได้ การแสดงชื่อจริงตาม M-38 ยังใช้ต่อ
+- **ทำไม:** ผู้ใช้ต้องกำหนดได้ตั้งแต่ตั้งค่า Mapping ว่าข้อมูลดิบจะลงตารางชื่อใด ไม่ใช่แค่ดูชื่อ UUID ที่ระบบตั้งให้
+- **ตัวอย่างข้อมูลสมมติ:** ชื่อ Mapping `partner-d`, Input folder `partner-d/inbox`, ชื่อตาราง `partner_d_raw`, Key `reference`/`amount` → สร้าง `mapping.partner_d_raw`; config นี้รับไฟล์เพิ่มและเพิ่ม fields ตาม M-17 ลงตารางเดิม
+- **ขอบเขต:** ชื่อ `[a-z][a-z0-9_]{0,47}`; ตรวจซ้ำกับ metadata และ relations เดิมใน `mapping` ด้วย transaction/lock และคืน `TableNameConflict`; identity/DDL/version/audit atomic และ request hash รวมชื่อ; runtime resolve จาก catalog ของ Source definition ที่ pin เท่านั้น
+- **ความเข้ากันได้:** ตารางเดิมไม่ rename; client API เดิมที่ไม่ส่ง `physicalTableName` ยังใช้ชื่ออัตโนมัติเดิม ชื่อเป็นข้อมูลที่ผ่าน validation สำหรับ create เท่านั้น ไม่รับ arbitrary SQL/DDL หรือแชร์ตารางที่มีอยู่ข้าม configs
+- **ไม่เลือก:** rename ตารางที่มี Source แล้ว, ต่อชื่อตารางจาก Key/ชื่อ Mapping อัตโนมัติ หรือให้ browser ระบุชื่อตารางตอนอ่าน/นำเข้ารายแถว
+- **แทนข้อจำกัดเดิม:** เพิ่มการรับ identifier ที่ตรวจแล้วตอนสร้างใหม่จากข้อจำกัดการแสดงชื่ออย่างเดียวใน M-38; ไม่เปิดให้เลือก SQL หรือ rename ใน Source inspection
+
+### M-40 ไม่ให้เลือกชนิดข้อมูลต้นทางใน wizard
+- **ตัดสิน (2026-11-23):** ผู้ใช้ยืนยันให้เอาคอลัมน์ “ชนิด” ออกจากขั้นที่ 1 เพื่อไม่ให้เข้าใจว่าเป็นชนิดของคอลัมน์ใน DB; แสดงข้อความว่าข้อมูลต้นทางเก็บเป็นข้อความ และกำหนดการแปลงในขั้นที่ 4
+- **ทำไม:** physical raw columns เป็น `text NULL` ตามแบบเดิม การเลือก hint ในหน้า Source fields ทำให้สับสนว่ากำลังเปลี่ยนชนิด DB
+- **ตัวอย่างข้อมูลสมมติ:** ไฟล์มี `amount="00180"` → Source เก็บ `"00180"` และ definition ใหม่มี `logicalTypeHint: null`; หาก contract ต้องการตัวเลข ผู้ใช้กำหนด `convert` ในขั้นที่ 4 → JSON `amount: 180`
+- **ขอบเขต:** wizard ไม่คัดลอก `logicalTypeHint` จาก config ต้นฉบับ; auto-map ตามชื่อให้ `trim(source.<key>)` โดยไม่สร้าง convert จาก hint; ปรับ header/row grid และ tour ให้ตรงกัน API/ข้อมูล/config versions เก่ายังคงรองรับ metadata เดิม
+- **ไม่เลือก:** ซ่อนช่องเลือกแต่ยังคัดลอกหรือใช้ hint ในการสร้างโปรแกรมโดยที่ผู้ใช้ไม่เห็น
+- **ผลต่อเอกสารกลาง:** ขอ Dev 1 ปรับข้อความ D-84 ตาม Q11 โดยเก็บการตัดสินใจเดิมเป็นประวัติ; รอบนี้ไม่แก้ไฟล์ของ Dev 1
+
+### M-41 ใช้ Key เป็นชื่ออ้างอิงของ field ใน wizard
+- **ตัดสิน (2026-11-23):** ผู้ใช้ยืนยันให้เอาช่อง “ชื่อที่แสดง” ออกจากตารางคอลัมน์ในไฟล์ขั้นที่ 1; Key เป็นทั้งชื่อ field ที่ระบบใช้และชื่ออ้างอิงบนหน้าจอสำหรับรายการใหม่
+- **ทำไม:** ลดช่องกรอกที่ใช้เพื่อแสดงผลอย่างเดียวและไม่กระทบการอ่าน/แปลง/ส่งข้อมูล
+- **ตัวอย่างข้อมูลสมมติ:** Header `เลขอ้างอิง` → Key `reference` → definition ใหม่ส่ง `displayName: null` และหน้าอ่านข้อมูลใช้ชื่อ `reference`; ค่าดิบ `SYNTHETIC-001` และ target path ใน contract เป็นไปตาม mapping เดิม
+- **ขอบเขต:** ไม่เก็บหรือคัดลอก displayName ใน state ของ wizard และไม่เติมจาก header ของไฟล์ตัวอย่าง; ปรับ header/rows/tour ให้ตรงกัน API และ metadata ของ config versions เก่ายังรองรับ displayName เดิม
+- **ไม่เลือก:** ซ่อนช่องกรอกแต่ยังบันทึกชื่อจากไฟล์หรือ config ต้นฉบับโดยที่ผู้ใช้ไม่เห็น
+
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
+
+- [ ] **Q11** (Dev 2, 11-23) ผู้ใช้ยืนยันถอดช่อง “ชนิด” จาก Source fields ใน wizard ตาม M-40 เพราะ raw DB columns เป็น `text NULL`; ขอ Dev 1 ปรับ D-84 ที่ยังระบุช่องชนิดและเสนอ convert จาก hint ให้ตรงพฤติกรรมล่าสุด: ข้อมูลต้นทางเป็นข้อความ, config ใหม่ไม่มี hint และกำหนด convert ในขั้นที่ 4 แทน; API/config เก่ายังรองรับ metadata เดิม
 
 > ทั้งคู่เพิ่มได้ · เลข `Q1`, `Q2`, … ต่อกันไป · ตอบใต้ข้อนั้น · ตกลงแล้วเขียนผลสั้น ๆ + ย้ายไปที่ที่ถูก (`M-xx` ใน §4 หรือ Dev 1 ลง `rules.md` เป็น `D-xx`) แล้วติ๊ก `[x]`
 >

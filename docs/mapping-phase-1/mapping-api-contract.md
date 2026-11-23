@@ -1,7 +1,7 @@
 ---
 title: Mapping API และ DTO contract สำหรับหน้า Mapping
 status: draft
-last_updated: 2026-11-16
+last_updated: 2026-11-23
 ---
 
 # Mapping API และ DTO contract สำหรับหน้า Mapping
@@ -28,8 +28,8 @@ last_updated: 2026-11-16
 | Route | Request / result หลัก |
 |---|---|
 | `GET /capabilities` | `inputLayouts[] {kind,extensions,available,reason,limits}`, `valueExpressions`, `predicates`, `conversionTargets`, `namedTransforms`, `namedLookups`, `destinations[] {kind,available,reason}`; format/extension ที่ยังไม่ทดสอบไม่โฆษณาว่าใช้ได้ |
-| `GET /source-definitions`, `GET /source-definitions/{id}` | list metadata; detail มี `id`, `configId`, `currentVersionId`, `rowVersion`, `fields[] {key,ordinal,displayName,logicalTypeHint}`; ไม่เผยชื่อ physical table เป็นสิทธิ์เลือก SQL |
-| `POST /source-definitions` | `{configId,expectedRowVersion,requestId,reason,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; key ตาม M1.1, physical columns เป็น `text NULL`; transaction metadata+DDL+audit atomic |
+| `GET /source-definitions`, `GET /source-definitions/{id}` | list metadata; detail มี `id`, `configId`, `currentVersionId`, `rowVersion`, `physicalTableName`, `fields[] {key,ordinal,displayName,logicalTypeHint}`; `physicalTableName` อ่านจาก DB เพื่อแสดงอย่างเดียวตาม M-38 ไม่รับชื่อตารางหรือ SQL จาก browser |
+| `POST /source-definitions` | `{configId,expectedRowVersion,requestId,reason,physicalTableName,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; ตาม M-39 Web บังคับชื่อ `[a-z][a-z0-9_]{0,47}` เช่น `partner_d_raw` ใน schema `mapping`; API รองรับการไม่ส่งชื่อสำหรับ client เดิมด้วยชื่ออัตโนมัติเดิม; identifier ผิดคืน `400` messageID `physicalTableName`, ชื่อชน metadata/relation เดิมคืน `409 TableNameConflict`; physical columns เป็น `text NULL` และ metadata+DDL+audit atomic |
 | `POST /source-definitions/{id}/columns` | `{expectedRowVersion,requestId,reason,fields:[...]}` → `201 {sourceDefinitionId,versionId,rowVersion}`; เพิ่ม key ใหม่เท่านั้น; ห้ามลบ/rename/เปลี่ยนชนิดเดิม (M-17) |
 | `GET /contracts/pa-inform/1`, `GET /destination-profiles` | schema hash/path catalog/safe profile metadata + availability; snapshot มาจาก Informs ไม่ส่ง URL/secret |
 | `GET /mapping-configs`, `GET /mapping-configs/{id}` | list/detail: `id,name,enabled,activeVersionId,currentVersionNumber,rowVersion`, input route แบบ relative/safe; ไม่ส่ง credential |

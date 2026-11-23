@@ -1,7 +1,7 @@
 ---
 title: แบบข้อมูลและ runtime กลางของ Mapping
 status: approved
-last_updated: 2026-11-18
+last_updated: 2026-11-23
 ---
 
 # แบบข้อมูลและ runtime กลางของ Mapping
@@ -39,7 +39,7 @@ Module หมายถึงชุดพฤติกรรมที่มี int
 | Informs delivery | ส่ง durable payload ที่ระบุด้วย delivery/attempt identity; คืน classified outcome | decrypt, HTTP bytes, timeout/Retry-After และ safe response parsing | job use case + HTTP adapter กับ fake/local Informs |
 | Inspection | อ่าน file/row/output/attempt/snapshot พร้อม availability | physical table resolution, pinned schema, decrypt และ count aggregation | query interface + DB + ตรวจว่าไม่มี delivery side effects |
 
-คง CQRS/4 layer/`BaseResponse` ตาม repo จริง ไม่เพิ่ม facade ที่ส่งต่อทุก method ของ repository อีกชั้น Controller ส่ง MediatR เท่านั้น; pure transformation ไม่ขึ้นกับ EF/Kafka/ASP.NET ส่วน Source catalog ซ่อน SQL identifiers และ physical table names จากผู้เรียก
+คง CQRS/4 layer/`BaseResponse` ตาม repo จริง ไม่เพิ่ม facade ที่ส่งต่อทุก method ของ repository อีกชั้น Controller ส่ง MediatR เท่านั้น; pure transformation ไม่ขึ้นกับ EF/Kafka/ASP.NET ส่วน Source catalog รับชื่อเมื่อสร้างใหม่ตาม M-39 และคืนชื่อเพื่อแสดงตาม M-38; SQL/DDL และการ resolve ตารางตอนทำงานอยู่ใน Infrastructure
 
 ไม่สร้าง field-specific class หรือ repository ต่อ business field; ไม่สร้าง generic destination plugin framework ให้ JsonFile/DatabaseTable ในช่วงที่ยังเป็น backlog Named Lookup เดิมต้องมี adapter/dependency ที่ตกลงจริงก่อนเปิด capability ตาม M-03/Q7
 
@@ -267,7 +267,10 @@ FK ไม่อนุญาตโยง Source ของไฟล์อื่น
 
 ### 8.3 Raw storage และ immutable definition
 
-- physical table name สร้างจาก Source definition UUID: `src_` + UUID hex lowercase ที่ไม่มีขีด; schema ตายตัว `mapping` ไม่รับ schema/table SQL จาก browser
+- ตาม M-39 ผู้ใช้กรอก physical table name ใน wizard ขั้นที่ 1 เช่น `partner_d_raw` → `mapping.partner_d_raw`; ชื่อเป็น `[a-z][a-z0-9_]{0,47}` และ schema ตายตัว `mapping` ไม่รับ schema prefix หรือ SQL จาก browser; API เดิมที่ไม่ส่งชื่อยังใช้ `src_` + Source definition UUID hex lowercase เพื่อรักษาความเข้ากันได้
+- สร้างใหม่แล้วบันทึกชื่อใน `source_definitions.physical_table_name` พร้อม physical table/definition/audit ใน transaction เดียว; ตรวจทั้ง metadata และ PostgreSQL relation ที่มีอยู่ และ lock ตามชื่อเพื่อกันหลาย config แย่งชื่อเดียวกัน; ชนชื่อคืน `409 TableNameConflict` โดยไม่เปลี่ยนตารางเดิม
+- ชื่อล็อกหลังสร้าง Source definition สำเร็จ ไม่มีคำสั่ง rename หรือผูกกับตารางที่มีอยู่; import/append/transform/inspection อ่านชื่อจาก metadata ของ definition/job ที่ pin และตรวจ identifier ก่อน quote ใช้ใน SQL ไม่คำนวณ `src_<ID>` ใหม่; ตารางเดิมคงชื่อเดิม
+- ตัวอย่างข้อมูลสมมติ: `POST /source-definitions` มี `physicalTableName: "partner_d_raw"`, fields `reference`, `amount` → สร้าง `mapping.partner_d_raw` ที่มี raw columns `reference text NULL`, `amount text NULL`; ไฟล์ถัดไปของ config เดิมเพิ่มแถวในตารางนี้ และเพิ่ม field `note` เป็น nullable column ในตารางเดิมตาม M-17
 - logical field key ใช้ `[a-z][a-z0-9_]{0,47}` ห้ามชน system columns และห้ามซ้ำ; ภาษาไทย/ชื่อ header จริงเก็บเป็น metadata ของ Input Layout ไม่บังคับให้ชื่อ header เป็น SQL identifier
 - Fields metadata เก็บ key, ordinal, input binding/display name และ optional logical type hint; physical raw type เป็น `text NULL` เสมอ การแปลงเป็น 7 target types อยู่ใน Transformation Program จึงเก็บ `-293` หรือค่าที่ไม่ใช่ตัวเลขใน field ที่คาดว่าเป็นตัวเลขได้ตาม D-04
 - เพิ่ม column ด้วย `ALTER TABLE ... ADD COLUMN ... text NULL` โดยไม่มี default/backfill; สร้าง definition version ใหม่พร้อม hash และเปลี่ยน current pointer แบบ expected row version
