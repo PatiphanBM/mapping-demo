@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — อ่านก่อน
 status: review
-last_updated: 2026-11-13
+last_updated: 2026-11-19
 ---
 
 # mapping phase 1
@@ -53,23 +53,23 @@ last_updated: 2026-11-13
 - แผน `plan-mapping-api-modernization.md` (Windows Service / ตาราง FileProcessing)
 - เขียนตารางของ Informs ตรง — ส่งผ่าน API เท่านั้น (D-02)
 
-## วันสำคัญ (ร่างจากแผนของ Dev 1 — 🟡 ทบทวนตอน kickoff 11-16)
+## วันสำคัญ (D-81 — แผนรวมฉบับ 5, 2026-11-19)
 
-> สถานะของแต่ละจุดติดตามที่ [`plan.md`](plan.md) §2
+> สถานะของแต่ละจุดติดตามที่ [`plan.md`](plan.md) §2 · เดิม (D-70) เริ่ม UAT 12-15 → **เลื่อนเข้ามาเป็น 12-01**
 
 | วันที่ | จุดสังเกต |
 |---|---|
-| 11-13 | Dev 1 ส่งไฟล์ทดสอบ MTLS 2,556 แถว (ไม่ใช่ข้อมูลจริง) |
-| **11-16 (จ.)** | **kickoff** Dev 1 + Dev 2 — ตกลงคำถามใน [`rules.md`](rules.md) §คำถามที่ต้องตกลง |
-| 11-18 | อ่านไฟล์ทดสอบครบทุกแถว |
-| 11-23 | JSON ผ่าน schema `pa-inform-1.schema.json` ทุกแถว |
-| **11-26** | **mapping ส่งไฟล์ MTLS เข้า Insurance Validation ได้ (บนเครื่อง)** |
-| **12-03** | **หน้าเว็บ mapping ใช้ได้บนเครื่อง** |
-| 12-04 | เตรียม deploy บน Kubernetes (mount share folder, ConfigMap / Secret) |
-| 12-08 – 12-09 | ทดสอบร่วมบน docker → deploy บน cluster → ทดสอบร่วมบน cluster |
-| 12-11 | เผื่อ · แก้ปัญหาจากทดสอบร่วม |
-| 12-14 | ตรวจความพร้อม UAT |
-| **12-15 (อ.)** | **เริ่ม UAT** — ครบทั้งระบบ รวมหน้าเว็บ mapping |
+| 11-13 | ✅ Dev 1 ส่งไฟล์ทดสอบ MTLS 2,556 แถว (ไม่ใช่ข้อมูลจริง) |
+| 11-16 (จ.) | ✅ kickoff Dev 1 + Dev 2 · ✅ อ่านไฟล์ทดสอบครบ + JSON ผ่าน schema ทุกแถว (M2.4) |
+| 11-18 | ✅ ส่งเข้า Informs + retry + delivery log บนเครื่อง (M4.1–M4.3) |
+| 11-19 – 11-20 | M4.4 ส่งเข้า Informs ตัวจริงบนเครื่อง · health probe · **API จัดการ config** · Dev 1 review route / DTO (Q8) |
+| **11-23 (จ.)** | **ไฟล์ทดสอบเข้าทาง mapping ผ่านการตรวจครบบนเครื่อง** (ทดสอบร่วมกับ Dev 1) · script ติดตั้ง config MTLS |
+| 11-24 | ตัดสินที่รัน UAT: Kubernetes หรือ docker บน server (D-81) |
+| 11-25 (พ.) | จุดเช็ค: หน้า Jobs + Configs ใช้ได้บนเครื่อง (ช้า → แจ้ง Dev 1 ทันที) |
+| 11-26 (พฤ.) | deploy Mapping บน env UAT + mount share folder (Dev 1 ทำหลัก Dev 2 ช่วยเช้า) |
+| **11-27 (ศ.)** | **หน้าเว็บ mapping ครบตามแบบใช้ได้บนเครื่อง** (Configs · Config editor · Jobs) · ทดสอบร่วมบน env UAT |
+| 11-30 (จ.) | เช้า: เผื่อ · บ่าย: ตรวจความพร้อม · **go / no-go** |
+| **12-01 (อ.)** | **เริ่ม UAT** — ครบทั้งระบบ รวมหน้าเว็บ mapping |
 
 ## repo ที่เกี่ยว
 

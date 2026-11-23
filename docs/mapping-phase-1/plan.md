@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-18
+last_updated: 2026-11-23
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -30,6 +30,17 @@ last_updated: 2026-11-18
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-23 — Pull/push โดยรักษางานเดิมและจบ merge ที่ค้าง
+- เสร็จ: ตามคำสั่งผู้ใช้ สำรอง Git history/index/merge state และไฟล์งานค้างพร้อมตรวจ SHA-256 ก่อนรวมงาน; แก้ conflict ของ `plan.md` โดยเก็บหลักฐาน M4.4 ของ Dev 2 และหมายเหตุ Dev 1 ครบ ไม่เปลี่ยนเป้าหมายจากข้อเสนอที่ยังไม่ได้ตกลง
+- เสร็จ: Mapping merge commit `b001dd6` บน `develop` และ push `origin/develop` สำเร็จ; ตรวจว่างานเดิม `1b5f2f2` และ remote `ee462e2` เป็น ancestors ทั้งคู่; local/remote ตรงกันและ working tree สะอาด
+- ไฟล์ที่รวม conflict ตามการยืนยัน: `src/Mapping/Mapping.Application/Capabilities/Queries/GetCapabilitiesQuery.cs`, `tests/Mapping.IntegrationTests/Api/MappingCatalogApiTests.cs`, `tests/Mapping.IntegrationTests/Delivery/ApiContractClientTests.cs`; ใช้ Excel extensions จาก validator และตรวจสถานะ ApiContract โดยตรง เก็บส่วน auto-merge ของทั้งสองฝั่งไว้
+- ไฟล์ที่ปรับเพิ่มตามการยืนยัน: `tests/Mapping.IntegrationTests/EndToEnd/DeliveryAcceptanceEndToEndTests.cs` เปลี่ยนเป็น `IDestinationClient`/`DestinationDeliveryOutcome` และส่ง `DeliveryTarget`; `tests/Mapping.IntegrationTests/EndToEnd/InformsEndToEndFixture.cs` ใช้ `Destinations` ผ่าน helper เดิมแทน `Informs:*` เพื่อให้ E2E scenarios เดิมใช้ interface/config หลัง merge ได้
+- หลักฐาน: `.NET SDK 10.0.404`; `scripts/test-e2e.ps1 -InformsSource <clean temporary checkout at f1eca8d> -NoBuild -Gate` ผ่าน Release build, unit **39/39**, integration **184/184** ใช้เวลา **14 นาที 50 วินาที**, external E2E **9/9** ไม่มี skip และ EF model ตรง migration; TRX `m4-4-gate.trx` ในทั้งสอง test projects; ชุด MTLS 2,556 ใบได้ Received 2,553 / Cancelled 3
+- หลักฐานการรักษางาน: เทียบ backup แล้วไฟล์งานค้าง Mapping **104/107** ไฟล์เหมือนเดิมทุก byte (อีก 3 ไฟล์คือ conflict ที่ยืนยัน); เอกสารเดิม **3/4** ไฟล์เหมือนเดิมทุก byte (อีกไฟล์คือ `plan.md`); tests อีก 2 ไฟล์ที่ปรับมีต้นฉบับใน commit `1b5f2f2` และ bundle สำรองก่อน sync
+- เสร็จ: Web fast-forward จาก `d7820d8` เป็น `a8e1762` และ push ตรวจแล้วตรง origin/develop; repo Informs อ่านอย่างเดียว ไม่แก้ checkout หรือ source; เอกสารรวม remote `19927c2` และงานเดิม `d1ed4f6` ใน merge commit ชุดนี้
+- กำลังทำ: —
+- ติด / รอ: ไม่มีสำหรับ Git sync; ประเด็น acceptance/company deployment เดิมยังติดตามตามหัวข้องาน
+- ต่อไป: ทำงาน mapping ต่อจากแผนที่รวมข้อมูลทั้งสองฝั่งแล้ว
 ### 2026-11-18 — Commit M4.4
 - เสร็จ: ตามคำสั่งผู้ใช้ commit source `prjInsuranceValidationMapping` บน develop เป็น `1b5f2f2` — `feat(mapping): verify Informs delivery and enable capabilities`; รวม12ไฟล์ (E2E tests/runner/capabilities/regressions) และ working tree ของโค้ดสะอาดหลังcommit
 - เสร็จ: บันทึกsourcecommitใน planและแบบ/ผลทดสอบ M4.4 รวมเอกสาร2ไฟล์ในcommitเอกสารชุดนี้; ยังไม่pushทั้งสองrepo
@@ -479,19 +490,19 @@ last_updated: 2026-11-18
 
 ## 2. จุดสังเกต (milestone)
 
-> วันที่มาจากแผนรวมของ Dev 1 (🟡 ทบทวนตอน kickoff) · จะเลื่อนต้องคุยกับ Dev 1 ก่อน แล้วเขียนเหตุผลใน §5
+> วันที่มาจากแผนรวมของ Dev 1 · **ปรับตาม D-81 (2026-11-19): go / no-go 11-30 · เริ่ม UAT 12-01** (เดิม 12-14 / 12-15) · จะเลื่อนต้องคุยกับ Dev 1 ก่อน แล้วเขียนเหตุผลใน §5
 
 | วันที่ | จุดสังเกต | สถานะ |
 |---|---|---|
 | 11-16 | kickoff — ตกลงคำถามใน [rules.md](rules.md) §6 · Dev 2 เขียนงานใน §3 | ⬜ |
 | 11-18 | อ่านไฟล์ทดสอบ MTLS 2,556 แถวครบทุกแถว | ⬜ |
 | 11-23 | JSON ผ่าน schema `pa-inform-1.schema.json` ทุกแถว | ⬜ |
-| **11-26** | **mapping ส่งไฟล์ MTLS เข้า Insurance Validation ได้ (บนเครื่อง)** | ⬜ |
-| **12-03** | **หน้าเว็บ mapping ใช้ได้บนเครื่อง** | ⬜ |
-| 12-04 | พร้อม deploy บน Kubernetes (mount share folder, ConfigMap / Secret) | ⬜ |
-| 12-09 | ทดสอบร่วมบน cluster ผ่าน (ไฟล์ทดสอบเข้าทาง mapping ครบ) | ⬜ |
-| 12-14 | พร้อม UAT | ⬜ |
-| **12-15** | **เริ่ม UAT** | ⬜ |
+| **11-23** (เดิม 11-26) | **mapping ส่งไฟล์ MTLS เข้า Insurance Validation ได้ และผ่านการตรวจครบ (บนเครื่อง — ทดสอบร่วมกับ Dev 1)** | ⬜ |
+| **11-27** (เดิม 12-03) | **หน้าเว็บ mapping ครบตามแบบใช้ได้บนเครื่อง** (Configs · Config editor · Jobs — ไม่ย่อ, §5 Q10) · จุดเช็ค 11-25: Jobs + Configs | ⬜ |
+| 11-26 (เดิม 12-04) | Mapping ขึ้น env UAT (Kubernetes หรือ docker บน server — D-81) · mount share folder · config MTLS ติดตั้งแล้ว | ⬜ |
+| 11-27 (เดิม 12-09) | ทดสอบร่วมบน env UAT ผ่าน (ไฟล์ทดสอบเข้าทาง mapping ครบ) | ⬜ |
+| 11-30 (เดิม 12-14) | พร้อม UAT · go / no-go | ⬜ |
+| **12-01** (เดิม 12-15) | **เริ่ม UAT** | ⬜ |
 
 สถานะ: ⬜ ยังไม่ถึง · 🔄 กำลังทำ · ✅ ผ่าน · ⛔ เสี่ยงไม่ทัน (เขียนเหตุผลใน §1)
 
@@ -541,6 +552,27 @@ last_updated: 2026-11-18
   - ร่าง 11-13: [data-runtime-design.md](data-runtime-design.md) ครอบคลุม Module/interface, Source registry ที่ไม่เก็บ raw กลาง, definition/version pin, transaction/lease/recovery, global budget/attempt cap, row/output counts และ scenarios S01–S36; ยังไม่ปิด M1.1 เพราะ exact DDL/FKs/raw types และประเด็น Q4/Q6/Q7 ที่เกี่ยวต้องได้ข้อสรุป
   - คำตอบผู้ใช้ (11-13), Q2.1: physical Source Table แยกตาม config ตาม M-15 แทนตารางกลาง + JSONB; แบบต้องครอบคลุม table/field metadata, source identity, transaction/constraints และการ pin table definition ให้ config version/งานเดิม รวมถึง schema evolution/วิธีสร้างตารางที่ยังรอคำตอบ
 - [ ] **M1.2** ปิด Mapping API/DTO/error contract สำหรับ Web ภายหลัง — เสร็จเมื่อ: route/field paths/BaseResponse/version conflict/pagination/action states/preview limits มีตัวอย่าง request-response และตกลง prefix ใน Q8 · เป้า 11-17 · 🔄 [ร่าง contract](mapping-api-contract.md) และ [แบบหลาย format](multi-format-api-web-design.md); prefix `/api/mapping` ยืนยันแล้ว, config/preview/jobs/capabilities ต้องใช้กับ Excel/Delimited/FixedWidth โดยไม่มี route เฉพาะ MTLS; ผู้ใช้ขอเลื่อน review route/DTO ที่กระทบ Web/contract boundary จึงยังไม่ติ๊กเสร็จ
+  - **Dev 1 (2026-11-20): Dev 1 ทำ G1 + route ที่ขาดใน repo Mapping แล้ว (ผู้ใช้สั่ง) — Dev 2 ไม่ต้องทำส่วนนี้ซ้ำ ให้ pull `develop` ก่อนแก้โค้ดต่อ** (Mapping `develop` commit `c72ed90` — ผู้ใช้ push เอง) · สิ่งที่เพิ่ม ตาม [ร่าง contract](mapping-api-contract.md) แถว 35–42 / 46:
+    - `GET /mapping-configs` · `GET /mapping-configs/{id}` — คืน `id, name, inputPath, enabled, activeVersionId, activeVersionNumber, latestVersionNumber, inputLayoutKind, extension, sourceDefinitionId, lastFileJob {id, createdAt, importState}, rowVersion` (`inputLayoutKind` / `extension` อ่านจาก version ที่ active หรือล่าสุด)
+    - `POST /mapping-configs` `{name, inputPath, requestId, reason?}` → `201` · `inputPath` ต้องเป็น path ย่อย (ไม่มี `/` นำหน้า, `:`, `..`) · `requestId` ซ้ำ + body เดิม = ได้ผลเดิม · body ต่าง = `409 RequestConflict`
+    - `POST /mapping-configs/{id}/versions` `{expectedRowVersion, sourceDefinitionVersionId, contractSnapshotId, profileSnapshotId, inputLayout, transformationProgram, evaluationSemantics?}` → `201 {id, versionId, versionNumber, rowVersion}` · **ต่างจากร่าง:** ใช้ `contractSnapshotId` + `profileSnapshotId` (แบบเดียวกับ draft ของ preview) แทน `destination` และไม่มี `requestId` (กันซ้ำด้วย `expectedRowVersion`) · ตรวจด้วยกฎเดียวกับ `validate` ก่อน — มี diagnostic → `400 InvalidVersion` + diagnostic ใน `messages[]` ไม่บันทึก
+    - `GET /mapping-configs/{id}/versions` (สรุป ไม่มี program) · `GET /mapping-configs/{id}/versions/{versionId}` (เต็ม: `inputLayout`, `transformationProgram`, `evaluationSemantics`)
+    - `POST /mapping-configs/{id}/activate` `{versionId, expectedRowVersion, requestId, reason}` · `/disable` `{expectedRowVersion, requestId, reason}` — ใช้ `ConfigLifecycleRepository` เดิม · `409` = `RowVersionConflict` / `VersionConflict` / `RouteConflict` / `RequestConflict`
+    - `POST /file-jobs/{id}/retry` · `POST /row-jobs/{id}/retry` `{expectedRowVersion, requestId, reason}` → `202` · **ความหมาย (ผู้ใช้ 2026-11-20): "ทำทันที" เฉพาะงานที่รอ retry อัตโนมัติอยู่** — row `RetryableFailed` / file ที่ `NextAt` ยังไม่ถึง และไม่มี worker ถือ → ดึง `NextAt` มาเป็นตอนนี้ · `Blocked` → `409 NotRetryable` (config เดิมรันกี่ครั้งก็พังเหมือนเดิม) · ไม่รอ retry → `409 InvalidState` · audit ใน `mapping_audits` (`RetryFileJob` / `RetryRowJob`)
+    - `/health/live` + `/health/ready` (ready ตรวจ DB) แบบเดียวกับ Products / Informs
+    - **G2 (script ติดตั้ง config MTLS) ไม่ทำ (ผู้ใช้ 2026-11-20)** — ผู้ใช้ตั้ง config MTLS เองตอน manual test ผ่าน API ข้างบน / หน้าเว็บ · Dev 2 ไม่ต้องทำ G2
+    - **แก้ test เดิม 2 เรื่อง (ผู้ใช้ยืนยัน — ไม่แตะ logic ของ test):** (1) `RowTransformationPipelineTests.PinnedContext_…` ค่าคาดหวังใช้ `ToString("yyyy-MM-dd")` ตาม culture เครื่อง → เครื่องภาษาไทยได้ปี พ.ศ. (`2569`) ทั้งที่ payload ถูก (`2026`) → ใส่ `CultureInfo.InvariantCulture` (2) 3 class ที่ใช้ Kafka (`KafkaFileIntakeTests` · `KafkaOutboxPipelineTests` · `KafkaRowTransformationTests`) ใส่ `[Collection(KafkaCollection.Name)]` (`KafkaCollection.cs` — `DisableParallelization = true`) ให้รันแยกหลัง class อื่น — `check.ps1` แบบขนานเดิม `HostedPipeline…` timeout 3 นาทีเพราะเครื่องโหลด container หลายตัวพร้อมกัน · ไม่ต้องใช้ RunSettings แบบเรียงลำดับเองอีก
+    - **2026-11-20 บ่าย (ผู้ใช้สั่ง Dev 1 ทำ):** (1) **M4.4 ผ่านบน docker** — ไฟล์ MTLS 2,556 แถวผ่าน Mapping เข้า Informs จริงใน docker (ใบคำขอเข้า `non_motor.inform`) — Dev 2 ปิด M4.4 ได้ / ทวนเพิ่มตามแผน (2) `GetCapabilitiesQuery` เปิด `available = true` ให้ Excel / Delimited / FixedWidth / ApiContract (เดิม false รอ Informs จริง) + แก้ `MappingCatalogApiTests` ให้ตรง (3) repo Web: `core/mapping-api.ts` เรียก route จริงทั้งหมดแล้ว · wizard "สร้าง Mapping ใหม่" บันทึกได้จริง — ตัวแก้สูตรแบบเลือกทีละชั้น (ยกแนวจาก `web/components/transformation/value-expression-editor.tsx`) · Preview ครั้งแรก = สร้าง config แบบร่าง (`POST /mapping-configs` + `POST /source-definitions`) แล้ว preview ด้วย draft · ตารางจับคู่ตัดช่องใน `SystemPaths` และช่อง object / array ออก — **Dev 2 ที่ทำหน้าเว็บ mapping ต่อ ให้ pull `develop` ของ Web ก่อน** (Web `f820539` · Mapping `74031b6` — ผู้ใช้ push เอง)
+    - **Dev 1 (2026-11-20 เย็น — D-83, ผู้ใช้สั่ง): Mapping ไม่ fix `pa-inform/1` / Informs แล้ว — pull `develop` ของ Mapping + Web ก่อนแก้** (ยังไม่ commit ตอนเขียน — ดู git log)
+      - config: section **`Informs` → `Destinations` (array)** ดู [rules.md D-83](rules.md) · `appsettings.Local.json` / `docker-compose.yml` แก้แล้ว
+      - `Infrastructure/Informs/` → `Infrastructure/Destinations/` · `InformsClient` → `ApiContractClient` · `InformsSchemaClient` → `ContractSchemaClient` · `IInformsClient` → `IDestinationClient` (`SendAsync(DeliveryTarget, payload, ct, paths)`) · `InformsDelivery*` → `DestinationDelivery*` · `DeliveryOptions.ConnectionKey` ลบ
+      - `IContractCatalog`: `RefreshCurrentAsync()` → `RefreshAsync(contractVersion)` + `ContractVersions` · route ใหม่ `GET /contracts` · `GET /contracts/{**version}`
+      - `RowTransformationService`: ไม่เช็ค `pa-inform/1` · system field เติมเฉพาะที่ contract มี (code `ContractMissingFileReceivedAt` ไม่มีแล้ว)
+      - test: แก้ตามชื่อใหม่ + เพิ่ม `motor-inform/1` / `$id` ไม่ตรง / ส่ง 2 ปลายทาง / contract ไม่มี `fileReceivedAt` · `check.ps1` ผ่าน (unit 38 · integration 169)
+      - Web: wizard ② เลือก contract จาก `GET /contracts` · ③ กรองปลายทางตาม contract · หน้า Contract `?version=` · ข้อความ Informs / pa-inform/1 → ค่าจริง
+      - **รอบ 2 (ไล่ทุกหน้า):** ป้ายหัว wizard ขึ้นหลังผ่านขั้น · ขั้น ④ ไม่เลือก Excel / `cp874` ให้ (extension จาก capabilities · encoding `utf-8`) · header = ชื่อ field · fixed width ต้องกรอกเอง · `value-expression-editor` รับ `[caps]` (ชนิด / convert จาก capabilities) · **array หลายรายการ:** `core/mapping-program.ts` `buildProgram(rows, conditions)` รับ path แบบ `a[1].b` + `emitWhen` ต่อรายการ, `concretePaths` / `displayPath` / `genericPath` · ขั้น ⑤ มีส่วน "รายการใน array" · repo Mapping: Excel `.xlsx` (`ExcelInputLayoutValidator.Extensions`, `ExcelInputReader` เลือก reader + ตรวจ signature ตามนามสกุล)
+      - **D-84 (ผู้ใช้ 2026-11-20):** repo Mapping — `SourceField.Required` · `RequiredFieldRule` (`RequiredFieldBlank`) ใน `RowTransformationService` / `PreviewService` · `IInputReader.InspectAsync` (ทุก reader + stub ใน test ต้องมี) · `POST /api/mapping/inspect-file` (`MappingInspectController`, `InspectFileQuery`) · helper test `IntakeData.SeedAsync(..., requiredFields)` · repo Web — wizard 5 ขั้น ขั้น ① ใหม่ (`ColumnRow`), `mapping-api.ts` `inspectFile()` / `configLayout()`
+      - **tour ทุกขั้น** (ผู้ใช้ 2026-11-20): `mapping-new-tour.ts` แยก tour ตามขั้น · `data-tour` ใหม่ใน `mapping-new.html` — ถ้าย้าย / เปลี่ยนชื่อส่วนไหนของ wizard ให้แก้ `data-tour` ตามด้วย
 - [x] **M1.3** Implement EF persistence, config/version lifecycle และ immutable Source storage — เสร็จเมื่อ: migration/constraints ผ่าน PostgreSQL integration tests, activate พร้อมกันได้ conflict ชัดเจน, version เก่า/Source rows ไม่ถูกแก้ · เป้า 11-18 · ✅ 11-16 Mapping `AddMappingCatalog` + `AddMappingRuntime`, PostgreSQL integration tests 7/7 และ `scripts/check.ps1` ผ่าน; code ยังไม่ commit/push
   - 🔄 11-16 ชุดแรก: Mapping `AddMappingCatalog` migration สร้าง **7 catalog tables** + EF history ใน `mapping`; 4 integration tests ผ่าน (schema/FK owner/version immutability/stale row version) และ `scripts/check.ps1` ผ่าน; โค้ดและเอกสารยังไม่ commit ส่วน File Job/physical Source/activation transaction/concurrent activate ยังรอ batch ถัดไป จึงไม่ติ๊กเสร็จ
   - ✅ 11-16 ชุดสอง: `AddMappingRuntime` เพิ่ม File Job/path+content claim/Source registry/control/audit รวม 6 ตาราง; physical raw Source table + version เพิ่ม columns atomic, raw row/registry/checkpoint atomic, triggers/guards และ config lifecycle transaction; 7 integration tests ผ่านรวม concurrency/immutability/pin/rollback; API/reader/Row Job/outbox แยก milestone ตามแผน
@@ -598,6 +630,7 @@ last_updated: 2026-11-18
   - ✅ 11-18 ผู้ใช้ยืนยัน contract subset/source batch; implement12routes/migration `20261118031413_AddDeliveryDiagnosticsAndLogIndexes`; check.ps1 ผ่าน unit38/38 integration162/162 และ EF model ด้วย temporary sequential-collection RunSettings ไม่มี filter/skip; เพิ่ม unit6/integration24 รวม race/rollback/inspection no-side-effects/safe field diagnostics; [หลักฐาน/รายการไฟล์](m4-3-delivery-operations-api-design.md); source/docs ยังไม่ commit/push
   - 🔄 11-18 เตรียม [แบบ/API contract subset/source batch M4.3](m4-3-delivery-operations-api-design.md) แล้ว; ต้อง review/ยืนยัน subset นี้ก่อน controllers ตาม Q8/M1.2 ที่เคยพักไว้ ไม่ถือว่า prefix หรือ task request เพียงอย่างเดียวปิด route/DTO review แล้ว; source ยังไม่แก้
   - คำตอบผู้ใช้ (11-13), Q2.6: ครบ 6 attempts แล้วไม่เปิด Web retry ตาม M-20; API/worker ต้องปฏิเสธการส่งครั้งที่ 7 ของ delivery เดิมด้วย ไม่ใช่ปิดปุ่มอย่างเดียว ทดสอบ state/concurrent retry ว่าไม่สร้าง attempt/outbox/HTTP เกินเพดาน
+  - Dev 1: (11-19) **ขึ้นโครงหน้าเว็บ mapping ให้แล้ว** ใน repo `prjInsuranceValidationWeb` (`develop` push แล้ว `8e74990`…`2df5e45`) ตาม Web design ของผู้ใช้ (ภาพ design อยู่ใน claude.ai ที่ Dev 2 เปิดไม่ได้ — โค้ดชุดนี้คือ design ฉบับที่ใช้ได้) · เอาเฉพาะส่วนของ phase 1 (ปลายทาง ApiContract → Informs เท่านั้น ไม่มี JsonFile / DB / rollout stage / resend / reprocess) · **ทุกหน้าใช้ข้อมูลสมมติ** จาก `core/mapping-sample.ts` ผ่าน `core/mapping-api.ts` — ต่อ API จริงแล้วแค่ `capabilities()` · method อื่นมี `TODO` บอก route ของ M1.2 ไว้: แทน body ด้วยการเรียกจริง + mapper แล้วลบ block ใน sample (หน้าจอไม่ต้องแก้ เพราะเห็นแค่ model ใน `core/mapping-models.ts`) · หน้า: `/mapping` ภาพรวม · `/mapping/new` สร้างแบบนำทาง 6 ขั้น (Source fields → Contract → ปลายทาง → Config & ไฟล์ → Mapping & preview → ตรวจทาน) · `/mapping/configs` + `/:id` (Versions · Workbench · Activation · File Jobs) · `/mapping/file-jobs` + `/:id` (แถว error · ทุกแถว · Deliveries + ข้อมูลดิบรายแถว + payload) · `/mapping/deliveries` · `/mapping/controls` (pause / resume) · `/mapping/source-definitions` + `/:id` · `/mapping/contracts` · `/mapping/destination-profiles` · `/mapping/capabilities` · ไฟล์กลางที่แก้: `layout/shell.ts` (กลุ่มเมนู Mapping), `app.routes.ts`, `environment.ts` (`mappingApiUrl` :5177), `styles.scss` (class ของ mapping ท้ายไฟล์) · ไม่เพิ่ม package · build + vitest ผ่าน · ปรับ layout / ข้อความได้ตามสะดวก — ถ้าจะเปลี่ยนโครงหน้า (เพิ่ม / ตัดหน้า) บอกใน §5 ก่อน
   - คำตอบผู้ใช้ (11-13), Q2.5: Delivery Payload inspection แบบ read-only ตาม M-19; ใช้ payload snapshot ที่บันทึกจริง ไม่ compile ใหม่ และทดสอบว่าเปิดดูแล้ว bytes/hash/key/job state ไม่เปลี่ยน ไม่ส่ง HTTP หรือสร้าง delivery ใหม่
   - คำตอบผู้ใช้ (11-13), Q2.4: Source inspection รายแถวแบบ read-only ตาม M-18; แยกยอดแถวที่อ่านพบ/Source ที่บันทึกและยอดส่งตามสถานะโดยไม่ปน attempts พร้อมแสดง import state เพื่อไม่อ้างว่าอ่านครบขณะ import ยังไม่จบ
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 7.1: ชุดข้อมูล delivery log ตาม M-10; ผู้ใช้งาน/ขอบเขต action และ raw inspection แยกยังรอข้อสรุป ไม่ถือว่าปิดทั้ง task
@@ -605,6 +638,7 @@ last_updated: 2026-11-18
   - ✅ 11-18 sourcecommit `1b5f2f2` รวม12ไฟล์บนdevelop; unit38/38 integration171/171 external9/9ไม่มีskipและEFmodelผ่าน; แบบ/หลักฐานอยู่ในcommitเอกสารชุดนี้ ยังไม่push
   - ✅ 11-18 source12ไฟล์บนฐานMapping `3fd48f8`; test-e2e.ps1 -Gateเรียกcheck.ps1ผ่านunit38/38 integration171/171 EFmodel และexternal9/9รันจริงไม่มีskip; FullMTLS2556/3formats/replay/replaced/400/409/real429/503/restart/ครบ6/streamingregressionผ่าน; [หลักฐาน/รายการไฟล์](m4-4-informs-end-to-end-design.md); ยังไม่commit/push
   - 🔄 11-18 [แบบ/public seams/source batch M4.4](m4-4-informs-end-to-end-design.md) พร้อมแล้ว; Informs origin/develop `f1eca8d` รองรับ D-80 และ HTTP schema preflightจริงได้200 (checkoutเดิมยังเก่า); รอยืนยันก่อนเพิ่มtests/runner ไม่มี source editsและยังไม่ส่งใบ จึงยังไม่ปิดtask
+  - Dev 1: (11-19) **Q4 ไม่บล็อกแล้ว** — Informs รับ `fileReceivedAt` ตั้งแต่ commit `1bc8d1e` (T2.6, 2026-11-16, อยู่ใน `origin/develop` แล้ว) · ให้ pull repo Informs `develop` → `./scripts/up.ps1` ใหม่ → Mapping ดึง schema จาก `GET /api/pa/informs/schema/1` อีกครั้ง (snapshot เดิมน่าจะดึงจาก Informs ก่อน `1bc8d1e`) · Informs + Mapping ใช้ compose project `prjinsurancevalidation` เดียวกัน → `http://informs:8080` ใน container ใช้ได้ · เสนอเป้า M4.4 **11-20** แทน 11-26 (แผนรวมฉบับ 4 ร่าง) แล้ว Dev 1 ทดสอบร่วมด้วยไฟล์ 2,556 แถว 11-23
 
 ### M5 — ส่งต่อ Web และเตรียม Kubernetes
 
@@ -1005,3 +1039,11 @@ Source catalog/การกำหนด fields และสร้าง physical
   - คำตอบผู้ใช้ (11-16): **partner อื่นจะเปิดใช้ใน UAT**; ไม่ใช่เพียงเตรียม parser/UI กับ synthetic fixtures แล้วเปิดใช้ภายหลัง
   - ยังรอ: Dev 1/PM ลงผลขอบเขต/วันส่งเป็น `D-xx` ใน `rules.md`; partner identities, field bindings และตัวอย่างไฟล์ที่ใช้ทดสอบจริงผู้ใช้จะส่งภายหลังตาม M-24/Q5; ไม่เดาข้อมูลธุรกิจของ partner ใหม่
   - ผลต่อแผน Dev 2: M2.1 เป็น reader core+Excel; เพิ่ม M2.6 Delimited, M2.7 Fixed-width; M1.2/M2.3/M5.3 เปลี่ยนเป็น format-neutral; MTLS 2,556 แถวยังเป็น regression fixture หนึ่ง ไม่ใช้เป็น schema ของ config ทั้งระบบ
+
+- [ ] **Q10** (Dev 1, 11-19) **deadline ใหม่ D-81 — พร้อม UAT 11-30 · เริ่ม UAT 12-01** ([rules.md](rules.md) D-81) · Dev 1 ทวนโค้ด `prjInsuranceValidationMapping` `3fd48f8` แล้ว พบงานที่ต้องเสร็จก่อน 11-30 ที่ยังไม่อยู่ใน §3 — ขอ Dev 2 แตกเป็น bullet ใน §3 + ให้เป้าตามวันใน §2:
+  1. **API จัดการ config** — ตอนนี้มี `IConfigLifecycleRepository` (`SaveVersionAsync` / `ActivateAsync` / `DisableAsync`) แต่ไม่มี command / controller · controller มีแค่ `mapping-configs/{id}/validate` · `preview` · `preview-file` → ยังสร้าง config / activate ใน env ใหม่ไม่ได้ และหน้าเว็บ Configs ไม่มี API ให้เรียก · ต้องมี: รายการ config · สร้าง config · บันทึก version ใหม่ · activate · disable (ตาม M-12) — เป้า **11-20**
+  2. **script ติดตั้ง config MTLS** ใน env ใหม่ (ผ่าน API ข้อ 1) — Program JSON ของ MTLS ตอนนี้อยู่ใน test fixture เท่านั้น — เป้า **11-23**
+  3. **health probe** `/health/live` + `/health/ready` แบบเดียวกับ Informs / Products (ดูหมายเหตุ Dev 1 ใต้ M5.1) — เป้า **11-20**
+  4. **หน้าเว็บ mapping ครบตามแบบ — ผู้ใช้ 11-19 "ไม่ย่อ"** — Configs · Config editor ต่อ format (Source fields · Input Layout · Mapping Program · destination profile · validate / preview · version / activate) · Jobs ตาม [แบบหลาย format §4](multi-format-api-web-design.md) และ M-12 · แบบหน้าจอใช้ mockup เดิมใน `mapping-demo/web` เป็นแนว · ลำดับที่ Dev 1 เสนอ: Jobs → Configs → Config editor · **จุดเช็ค 11-25** (Jobs + Configs ใช้ได้ — ช้าให้บอก Dev 1 ทันที) · **เสร็จ 11-27** · 11-26 เช้า Dev 2 ช่วย Dev 1 deploy Mapping แล้วกลับมาทำหน้าเว็บต่อ (Dev 1 deploy เป็นหลัก)
+  5. **สิ่งที่ต้องขอจากบริษัท (Dev 1 ส่งให้ PM 11-19 — ต้องได้ 11-24):** schema `mapping` บน DB บริษัท + สิทธิ์ `CREATE` ใน schema (Source Table ต่อ config สร้างตอนทำงาน — `SourceStorageRepository.cs` `CREATE TABLE mapping.{table}`) · Kafka 3 topic ของ Mapping · ที่เก็บ key เข้ารหัส payload (Secret) · share folder MTLS — ถ้า Dev 2 เห็นว่ามีอย่างอื่นที่ต้องขออีก เขียนตอบใต้ข้อนี้วันนี้
+  6. M4.4 — Informs รับ `fileReceivedAt` แล้ว (หมายเหตุ Dev 1 ใต้ M4.4) — เป้า **11-19 / 11-20**

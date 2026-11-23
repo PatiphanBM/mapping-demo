@@ -1,7 +1,7 @@
 ---
 title: กฎและการตัดสินใจที่ mapping ต้องทำตาม
 status: review
-last_updated: 2026-11-16
+last_updated: 2026-11-19
 ---
 
 # กฎและการตัดสินใจที่ mapping ต้องทำตาม
@@ -108,6 +108,8 @@ last_updated: 2026-11-16
 - **ห้าม:** ใส่ field ของ partner อื่นล่วงหน้าโดยไม่มีหลักฐาน · ตั้งชื่อ field ผูกกับ MTLS (เช่น `cPol_no`) — ใช้ชื่อกลาง (`sourceReference`)
 
 ### D-70 UAT 2026-12-15 · mapping อยู่ในขอบเขต
+> **⚠️ แก้โดย D-81 (2026-11-19):** go / no-go **11-30** · เริ่ม UAT **2026-12-01**
+
 - ขอบเขตขั้นต่ำ: อ่านไฟล์ MTLS · config mapping ของ MTLS → JSON `pa-inform/1` · ส่งเข้า `POST /api/pa/informs` + delivery log + retry
 - ไม่ทำ: partner อื่น · แผน modernization แบบ Windows Service
 - **ห้าม:** ใช้ข้อมูลส่วนบุคคลจริงในไฟล์ทดสอบ · รับงานแทรกหลัง 2026-12-04 ที่ไม่บล็อก UAT โดยไม่คุยกับ PM
@@ -123,6 +125,33 @@ last_updated: 2026-11-16
 ### D-78 หน้าเว็บ mapping อยู่ใน repo Web · Angular 21 + PrimeNG 21
 - หน้าเว็บ mapping ทำใน `prjInsuranceValidationWeb` (`features/mapping/`) **ก่อน UAT**
 - **ห้าม:** ขึ้น `primeng` 22+ หรือใช้ version `-lts` (ต้องมี license) · `npm update` ที่ข้าม major
+
+### D-81 พร้อม UAT 2026-11-30 · เริ่ม UAT 2026-12-01 · Kubernetes หลัก สำรองด้วย docker บน server
+- **ตัดสิน (ผู้ใช้ 2026-11-19):** go / no-go จันทร์ **2026-11-30** · เริ่ม UAT อังคาร **2026-12-01** (แทน 12-14 / 12-15 ของ D-70)
+- **ต้องอยู่ใน UAT วันแรก:** mapping อ่านไฟล์ MTLS → ส่งเข้า Informs + delivery log + retry · **หน้าเว็บ mapping ครบตามแบบ — ไม่ย่อ** (ผู้ใช้ 2026-11-19: Configs · Config editor ต่อ format + Program editor · Jobs ตาม `multi-format-api-web-design.md` §4) · ทุน / plan code `MTL2`
+- **ไปทำระหว่าง UAT:** partner อื่นนอก MTLS (Q9) · login / ยืนยันตัวตน (ใช้ผู้ใช้คงที่ตาม `web.md`)
+- **ที่รัน UAT:** Kubernetes ของบริษัทเป็นทางหลัก · ถ้าได้ cluster + Kafka ไม่ทัน **2026-11-24** → รัน docker compose บน server / VM ของบริษัทไปก่อน (Mapping ใช้ `docker-compose.yml` เดิมของ repo ได้ — project `prjinsurancevalidation` เดียวกับ Informs) แล้วย้ายขึ้น Kubernetes ระหว่าง UAT
+- **ทำไม:** โค้ดส่วนใหญ่เสร็จก่อนแผน (Informs / หน้า UW 11-17 · mapping ส่งเข้า Informs ได้บนเครื่อง 11-18)
+- **ผลที่ยอมรับ:** Dev 2 ไม่มีวันเผื่อ (หน้าเว็บ mapping ถึง 11-27 · 11-30 เช้าใช้แก้) — ถ้า 11-25 ช้ากว่าแผน แจ้ง Dev 1 ทันที · ถ้าใช้ docker สำรอง UAT ยังไม่ได้ทดสอบบน Kubernetes
+- **ห้าม:** รับงานแทรกที่ไม่บล็อก UAT ก่อน 11-30 · ใช้ข้อมูลส่วนบุคคลจริงในไฟล์ทดสอบ
+
+### D-83 Mapping เป็น platform กลางของทุก product — ห้าม fix contract / ปลายทาง / partner ในโค้ด (ผู้ใช้ 2026-11-20)
+- ขอบเขตใน D-70 / D-81 (MTLS → `pa-inform/1` → Informs) = **สิ่งที่อย่างน้อยต้องทำได้** (test case) **ไม่ใช่แบบของระบบ** · ผู้ใช้ตั้งค่าเองผ่านหน้าเว็บ
+- **ปลายทาง = รายการใน config ของ deployment** section `Destinations` (array): `ProfileKey` · `ProfileVersion` · `ContractVersion` · `ConnectionKey` · `BaseUrl` · `EndpointPath` · `SchemaPath` · `TimeoutSeconds` · `MaxResponseBytes` — แทน section `Informs` เดิม (env `Destinations__0__BaseUrl`)
+- **contract มาจากปลายทาง** มีกี่ตัวก็ได้ · ตรวจ schema แค่ JSON Schema 2020-12 + `$id` ตรง contract version · ไม่มีเงื่อนไขของ product (`insureds[]` เดิมตัดออก)
+- **แปลง / ส่ง อ่านจาก profile ที่ pin ใน config version** · ส่งตาม `connectionKey` · `endpointPath` ไม่ตรง deployment = `NotConfigured` ไม่ส่ง
+- **system field** (`contractVersion`, `fileJobId`, `sourceRowId`, `mappingConfigVersionId`, `outputKey`, `fileName`, `sourceRowNo`, `fileReceivedAt`) **เติมเฉพาะที่ contract ประกาศ** — ไม่มี = ไม่เติม ไม่ block (แทน "ไม่มี `fileReceivedAt` = Blocked")
+- API: `GET /api/mapping/contracts` · `GET /api/mapping/contracts/{version}` (`/` ได้) · `destination-profiles` มี `endpointPath`
+- หน้าเว็บ: wizard ② เลือก contract · ③ ปลายทางที่รับ contract นั้น · ห้ามเขียน "Informs" / "pa-inform/1" ตายตัวในหน้าจอ
+- **ApiContract** = ปลายทางตอบด้วย intake protocol แบบ Informs (`BaseResponse`, 201 / 200 replayed-replaced / 400 / 409 `DUPLICATE_SOURCE_REFERENCE`) — ตอบแบบอื่น = kind ใหม่
+- **หน้าจอห้ามเลือก / แสดงค่าแทนผู้ใช้ก่อนถึงขั้นนั้น และห้ามมีค่าตั้งต้นของ partner ใด** (เช่น Excel `.xls` `cp874`, header ตัวพิมพ์ใหญ่, ตำแหน่ง fixed width สมมติ) · รายการตัวเลือกอ่านจาก `GET /capabilities` · array ทำได้หลายรายการ + `emitWhen` ต่อรายการ · Excel รับ `.xls` + `.xlsx`
+- **แก้ M-21** ("phase 1 มีปลายทางเดียว") — งานใหม่ทุกชิ้นต้องคิดแบบหลาย contract / หลายปลายทาง / หลาย partner ก่อน แล้วค่อยใช้ MTLS เป็นตัวทดสอบ
+
+### D-84 wizard: ไฟล์ & field เป็นขั้นแรก · field มี "บังคับ" (ผู้ใช้ 2026-11-20)
+- wizard 5 ขั้น: ① ไฟล์ & field · ② Contract · ③ ปลายทาง · ④ Mapping & preview · ⑤ ตรวจทาน — ขั้น ① = ชื่อ / folder / รูปแบบ + ตาราง 1 แถว = 1 คอลัมน์ในไฟล์ (Header / ตำแหน่ง · Key · ชื่อที่แสดง · ชนิด · บังคับ)
+- **บังคับว่าง = แถว `Blocked`** row error `RequiredFieldBlank` (stage `Source`) · ข้อมูลดิบยังเก็บ · Preview แสดงเหมือนกัน · เก็บใน `FieldsJson` ของ Source definition (`required` เฉพาะ true)
+- **ชนิด = hint** ไม่ตรวจค่า · ใช้เสนอ `convert` ตอนจับคู่อัตโนมัติ
+- `POST /api/mapping/inspect-file` (multipart `file` + `inputLayout`) คืน `headers` + `samples` ≤ 5 · `IInputReader.InspectAsync` ทั้ง 3 reader
 
 ## 6. คำถามที่ต้องตกลงตอน kickoff (2026-11-16)
 
