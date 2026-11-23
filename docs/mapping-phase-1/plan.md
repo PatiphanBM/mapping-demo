@@ -30,6 +30,15 @@ last_updated: 2026-11-23
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-23 — แก้ SDK ของ workspace และ C# Dev Kit
+- เสร็จ: ผู้ใช้ขอแก้เส้นแดงของ `ApiContractClientTests.cs`; log ของ C# Dev Kit และคำสั่ง restore ของ solution ชั่วคราวยืนยัน `NETSDK1045` เพราะเลือก SDK 8 สำหรับ projects ที่ target `net10.0`
+- เสร็จ: ติดตั้ง Microsoft .NET SDK **10.0.404** ในตำแหน่งระบบเดียวกับ SDK **8.0.400** หลังตรวจ SHA-512 และลายเซ็น Microsoft; installer exit code **0** และไม่ต้อง restart Windows
+- เสร็จ: ปรับ `global.json` ที่ราก workspace เป็น SDK ขั้นต่ำ `10.0.100` พร้อม `rollForward: latestFeature` ให้เลือก SDK 10 ที่ติดตั้งอยู่; ปรับสำเนา `global.json` ใน cache ของ C# Dev Kit ให้ตรงกัน เพราะ extension คัดไฟล์ต้นทางนี้เข้า solution ชั่วคราวทุกครั้งที่เปิด workspace
+- หลักฐาน: `dotnet --version` แบบปกติใน Mapping และโฟลเดอร์ solution ของ IDE ได้ **10.0.404**; Release build ของ Mapping ผ่าน **0 errors**; tests เฉพาะ `ApiContractClientTests` ผ่าน **9/9** ไม่มี skip; `dotnet restore` ของ `mti-mapping (Workspace).sln` ที่ C# Dev Kit ใช้จริงผ่าน exit code **0** หลังแก้ SDK pin (ก่อนแก้ได้ `NETSDK1045`)
+- กำลังทำ: —
+- ติด / รอ: ผู้ใช้กด `Developer: Reload Window` ใน VS Code ให้ C# Dev Kit โหลด project ใหม่; log ของ IDE ที่เปิดอยู่ยังเป็นรอบก่อนติดตั้ง จึงยังไม่ยืนยันว่าเส้นแดงบนหน้าจอหายแล้ว
+- ต่อไป: ตรวจ Problems หลัง reload; ผู้ใช้สั่ง commit/push configuration `global.json` และหลักฐานใน `plan.md` ใน commit ชุดนี้
+
 ### 2026-11-23 — Pull/push โดยรักษางานเดิมและจบ merge ที่ค้าง
 - เสร็จ: ตามคำสั่งผู้ใช้ สำรอง Git history/index/merge state และไฟล์งานค้างพร้อมตรวจ SHA-256 ก่อนรวมงาน; แก้ conflict ของ `plan.md` โดยเก็บหลักฐาน M4.4 ของ Dev 2 และหมายเหตุ Dev 1 ครบ ไม่เปลี่ยนเป้าหมายจากข้อเสนอที่ยังไม่ได้ตกลง
 - เสร็จ: Mapping merge commit `b001dd6` บน `develop` และ push `origin/develop` สำเร็จ; ตรวจว่างานเดิม `1b5f2f2` และ remote `ee462e2` เป็น ancestors ทั้งคู่; local/remote ตรงกันและ working tree สะอาด
