@@ -25,6 +25,10 @@
 - **อ่าน `CLAUDE.md` / `AGENTS.md` ของ repo นั้นก่อนแก้โค้ด** — โครงและวิธีเขียนโค้ดอยู่ที่นั่น (โครงต้องเหมือน Products / Informs — D-77)
 - **ก่อนแก้ source code ทุกครั้ง: บอกว่าจะแก้อะไร (ไฟล์ไหน แก้ / สร้าง / ลบอะไร) แล้วรอยืนยันก่อน** — ใช้คำยืนยันของครั้งก่อนแทนไม่ได้
 - **commit เมื่อสั่งเท่านั้น** (ทั้ง repo โค้ดและ repo นี้) · ก่อน commit repo Mapping ต้องผ่าน `./scripts/check.ps1`
+- **ทดสอบกับ Informs ต้องใช้รุ่นล่าสุดเสมอ** (ผู้ใช้ 2026-11-24): ก่อนปิดงานที่แตะการส่งเข้าปลายทาง / contract / delivery และก่อน commit งานชุดใหญ่ของ Mapping ให้รัน `./scripts/test-e2e.ps1 -InformsSource <checkout Informs> -Gate` โดย
+  1. `git -C <checkout Informs> fetch` แล้วใช้ **`origin/develop` ล่าสุด** (checkout ต้องไม่มีงานค้าง — ถ้ามี ให้ clone ชั่วคราวแทน)
+  2. **ห้ามใช้ `-NoBuild` กับ image ของ Informs รุ่นเก่า** — ใช้ `-NoBuild` ได้เฉพาะเมื่อ tag `m44-<commit>` ตรงกับ `origin/develop` ล่าสุด
+  3. บันทึกเลข commit ของ Informs + ผล (unit / integration / external E2E) ใน `plan.md` §1 — ผลที่ใช้ Informs รุ่นเก่าห้ามนับเป็นหลักฐานของโค้ดรุ่นใหม่
 - **แก้เอกสาร** ใน `docs/mapping-phase-1/` ส่วนที่ Dev 2 ดูแล **ไม่ต้องถามก่อน**
 - **ทุกการแก้ (โค้ดหรือเอกสาร) ต้องสรุปตอนท้ายของคำตอบ ว่าแก้อะไร ที่ไฟล์ไหน**
 - รัน build / test / `scripts/check.ps1` / `scripts/up.ps1` ได้เลย · **คำสั่งที่ลบ / แก้ DB ของบริษัทให้คนรันเอง** · DB ใน docker บนเครื่อง (port 5433) แก้ได้
