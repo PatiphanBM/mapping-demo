@@ -52,6 +52,7 @@ last_updated: 2026-11-13
 | **Idempotency key** | `(fileJobId, sourceRowId, outputKey)` — ส่งซ้ำด้วย key เดิมได้ผลเดิม (`200` + `replayed: true`) · Informs จำทุก key ที่เคยรับ (D-44) |
 | **Replace (แทนที่)** | ส่ง `sourceReference` เดิมขณะใบเดิมยังไม่ผ่าน → Informs แทนที่ด้วยข้อมูลใหม่ (`200` + `replaced: true`) — เป็นทางแก้ข้อมูลผิดของระบบใหม่ (D-05) |
 | **Delivery log** | บันทึกของ mapping ต่อแถว: payload ที่ส่ง, ผล Delivered / Rejected, เหตุผล — ยอดแถวที่ส่งไม่สำเร็จดูที่ mapping |
+| **Mapping Profile** | ชุดตั้งค่า Mapping 1 ชุด = หัวชุด (ชื่อ + folder) + ไฟล์ & field + ปลายทาง & ค่าที่ map + version · **ใช้แทนคำ "Config" ทั้งระบบ** (ผู้ใช้ 2026-11-24) — DB / API ยังชื่อ `mapping_configs` · สร้างหัวชุดก่อน แล้วแก้แต่ละขั้นเป็นร่าง (เก็บที่ server) จนบันทึก version แรก — รายละเอียดยังตกลงอยู่ (ข้อย่อยจะลงใน rules.md เมื่อสรุป) |
 | **`extras`** | ที่เก็บค่าที่ contract ยังไม่มี field · `extras.unparsed` = ค่าดิบจากไฟล์ที่ mapping แปลงชนิดไม่ได้ (ส่ง field นั้นเป็น `null`) — D-04 |
 | **Outbox** | ตารางที่เขียนใน transaction เดียวกับข้อมูล แล้วค่อยส่งขึ้น Kafka — กันข้อมูลกับ message หลุดกัน |
 

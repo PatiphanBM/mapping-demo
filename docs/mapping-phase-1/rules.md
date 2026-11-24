@@ -1,7 +1,7 @@
 ---
 title: กฎและการตัดสินใจที่ mapping ต้องทำตาม
 status: review
-last_updated: 2026-11-19
+last_updated: 2026-11-23
 ---
 
 # กฎและการตัดสินใจที่ mapping ต้องทำตาม
@@ -137,7 +137,7 @@ last_updated: 2026-11-19
 
 ### D-83 Mapping เป็น platform กลางของทุก product — ห้าม fix contract / ปลายทาง / partner ในโค้ด (ผู้ใช้ 2026-11-20)
 - ขอบเขตใน D-70 / D-81 (MTLS → `pa-inform/1` → Informs) = **สิ่งที่อย่างน้อยต้องทำได้** (test case) **ไม่ใช่แบบของระบบ** · ผู้ใช้ตั้งค่าเองผ่านหน้าเว็บ
-- **ปลายทาง = รายการใน config ของ deployment** section `Destinations` (array): `ProfileKey` · `ProfileVersion` · `ContractVersion` · `ConnectionKey` · `BaseUrl` · `EndpointPath` · `SchemaPath` · `TimeoutSeconds` · `MaxResponseBytes` — แทน section `Informs` เดิม (env `Destinations__0__BaseUrl`)
+- ~~**ปลายทาง = รายการใน config ของ deployment** section `Destinations`~~ → **แทนด้วย D-85** (ด้านล่าง)
 - **contract มาจากปลายทาง** มีกี่ตัวก็ได้ · ตรวจ schema แค่ JSON Schema 2020-12 + `$id` ตรง contract version · ไม่มีเงื่อนไขของ product (`insureds[]` เดิมตัดออก)
 - **แปลง / ส่ง อ่านจาก profile ที่ pin ใน config version** · ส่งตาม `connectionKey` · `endpointPath` ไม่ตรง deployment = `NotConfigured` ไม่ส่ง
 - **system field** (`contractVersion`, `fileJobId`, `sourceRowId`, `mappingConfigVersionId`, `outputKey`, `fileName`, `sourceRowNo`, `fileReceivedAt`) **เติมเฉพาะที่ contract ประกาศ** — ไม่มี = ไม่เติม ไม่ block (แทน "ไม่มี `fileReceivedAt` = Blocked")
@@ -166,3 +166,26 @@ last_updated: 2026-11-19
 7. **delivery log** — เก็บอะไร ใครดู (ยอดแถวที่ส่งไม่สำเร็จดูที่ mapping)
 8. **ขอบเขตหน้าเว็บ mapping** — ตั้งค่า mapping / ดูผลการส่ง แค่ไหน
 9. **Kafka topic ของ mapping** (ถ้าใช้) ที่ต้องขอบริษัท · การรันบน Kubernetes (อ่าน folder บน share, worker ทำงานตลอด)
+
+### D-85 ผู้ใช้สร้าง contract เองบนหน้าเว็บ · deployment ตั้งแค่ `Connections` (ผู้ใช้ 2026-11-23 — แทนข้อ "ปลายทาง = รายการใน config" ของ D-83)
+- เหตุ: ล้าง DB แล้วหน้า Contract ยังมี `pa-inform/1` (มาจาก `Destinations` ใน `appsettings.Local.json` + `GET /contracts` ดึง schema เอง) — ระบบกลางต้องเริ่มว่าง ผู้ใช้สร้างเอง
+- **deployment:** section `Connections[]` = `Key` · `BaseUrl` · `TimeoutSeconds` · `MaxResponseBytes` (auth ภายหลัง) · env `Connections__0__BaseUrl` · Local: `informs` → `http://localhost:5176` · docker: `http://informs:8080`
+- **หน้า Contract › "สร้าง contract":** ชื่อ contract (= contract version, ห้ามซ้ำ, เปลี่ยนไม่ได้) · ช่องทางเชื่อมต่อ (เลือกจาก `Connections`) · path ที่ส่ง (POST) · **schema** · เหตุผล
+- **schema กำหนดใน Mapping — ไม่มี path ของ schema / ไม่ดึงจากปลายทาง** (แก้ 11-23: ผู้ใช้ไม่รู้ path · legacy ไม่มี endpoint schema): วางตัวอย่าง JSON → ตาราง field + ติ๊กบังคับ → สร้าง JSON Schema 2020-12 (`$id` = ชื่อ) · หรืออัปโหลดไฟล์ JSON Schema · API รับ `schema` เป็น JSON ตรวจแบบทั่วไป · ไม่ผ่าน = ไม่บันทึก
+- **หน้าเว็บ (แก้รอบ 2):** `/mapping/contracts/new` · `/mapping/contracts/edit?version=…` · **ตาราง field** (Path · ชนิด · บังคับ · ว่างได้ · ค่าที่ยอมรับ · คำอธิบาย · `.` คั่นชั้น · `[]` = รายการ) → สร้าง JSON Schema · ชนิด `text` / `integer` / `number` / `boolean` / `date` / `datetime` · เติมตารางจากตัวอย่าง JSON หรือไฟล์ JSON Schema · ไฟล์ที่ไม่แก้ตาราง = เก็บตามเดิม · `GET /api/mapping/contract-schemas/{name}?revision=n`
+- **1 contract = 1 ปลายทาง** สร้างพร้อมกัน
+- **เมนู "ปลายทาง" เมนูเดียว** (แก้ 11-24): ปลายทาง = contract + ช่องทางเชื่อมต่อ + path ที่ส่ง · ไม่มีหน้า Contract / ปลายทาง แยก (`/mapping/destination-profiles` redirect ไป `/mapping/contracts`) · wizard 3 ขั้น: ① ไฟล์ & field · ② ปลายทาง & mapping (เลือกปลายทางหัวขั้น · เปลี่ยนแล้วค่าของ path ที่ชื่อตรงกันยังอยู่) · ③ ตรวจทาน · "ส่งไปที่" ในขั้น ② = เลือกชนิดก่อน (เปิดแค่ API) แล้ว dropdown ค้นหาได้ (ชื่อ / path / ช่องทาง) · backend ไม่เปลี่ยน · ปลายทางแบบ table รอคำตอบว่าระบบ legacy คืออะไร แล้วค่อยเพิ่มชนิดปลายทาง (kind) · หน้าสร้างปลายทางแสดงการ์ด 3 ชนิด: ส่งเข้า API (`ApiContract`, ใช้ได้) · บันทึกลงตารางของระบบอื่น (`DatabaseTable`) · ตารางของ Mapping (`LegacyTable`) — 2 ตัวหลังปิดไว้ · ไม่เอา `JsonFile`
+- **แก้ได้ = รุ่นใหม่** (แก้ช่องทาง / path ที่ส่ง / schema · ไม่มีปุ่มดึง schema) · รุ่น = snapshot schema + ปลายทาง (`profile_key` = ชื่อ contract, `profile_version` = เลขรุ่น) · config version ผูกรุ่นเดิม · wizard ใช้รุ่นล่าสุด · ไม่มีอะไรเปลี่ยน = ไม่สร้างรุ่น
+- **ลบได้เมื่อไม่มี config version ใช้รุ่นใด** (ซ่อน) · สร้างชื่อเดิมใหม่ = รุ่นถัดไป
+- **Mapping ไม่เรียกปลายทางเรื่อง schema** — ช่องทางใช้ตอนส่งเท่านั้น · DB ใหม่ = หน้า Contract ว่าง
+- **hash ของปลายทางไม่รวม `BaseUrl`** — ส่งจริงหา `BaseUrl` จาก `Connections` ด้วย key ที่ pin · ไม่มี key = `NotConfigured`
+- ทดสอบ MTLS: ผู้ใช้สร้าง `pa-inform/1` เองจากหน้าเว็บ (connection `informs`, ส่ง `/api/pa/informs`, อัปโหลดไฟล์ `pa-inform-1.schema.json` ของ Informs)
+- ยอมรับ: schema อาจไม่ตรงปลายทางจริง → รู้ตอนส่ง (400 → `ContractRejected`) · legacy (ยังไม่รู้ระบบ) = ชนิดปลายทางใหม่ภายหลัง
+
+### D-86 Mapping Profile: หัวชุดก่อน · ร่างเก็บที่ server แก้ทุกขั้นได้จน activate · badge ตรวจข้ามขั้น · ตารางต้นทางสร้างตอน activate ครั้งแรก (ผู้ใช้ 2026-11-24)
+- **"Mapping Profile" แทน "Config" ทั้งระบบ** (คำที่ผู้ใช้เห็น) · DB / API ยังชื่อ `mapping_configs`
+- สร้างหัวชุด (modal ถาม**ชื่อ**อย่างเดียว · ห้ามซ้ำ — แก้ 11-24) → profile สถานะ "ร่าง" ทันที · folder ใส่ในขั้น ① ("" จนกว่าจะใส่ · activate ไม่ได้) · ชื่อ / folder แก้ได้จนกว่าจะ activate (`PUT /mapping-configs/{id}`) · ลบร่าง = ซ่อน (`deleted_at`) · ร่างของทุกขั้นเก็บที่ **server** (บันทึกเมื่อเปลี่ยนขั้น + ปุ่ม "บันทึกร่าง") · เปิดทำต่อ / คนอื่นทำต่อได้
+- แก้ขั้นไหนก็ได้ (① ไฟล์ & field · ② ปลายทาง & mapping · ③ ตรวจทาน) · **badge** จำนวนจุดที่ต้องแก้: ค่าที่ map ใช้ field ที่ถูกลบ / เปลี่ยน key · field บังคับยังไม่ map · เปลี่ยนปลายทางแล้ว path หาย · (field ใหม่ยังไม่ใช้ = แจ้งเฉย ๆ) · มี badge = บันทึก / activate ไม่ได้
+- **ตารางต้นทาง (`CREATE TABLE`) สร้างตอน activate ครั้งแรกเท่านั้น** — ก่อนนั้นเก็บแค่รายการ field แก้ / ลบ / เปลี่ยน key ได้ · Preview / validate ใช้ field จากร่าง · บันทึก version ก่อน activate ได้ (pin รุ่น field) · activate version ที่ pin รุ่น field เก่า = ไม่ให้ · หลัง activate = field เพิ่มได้อย่างเดียว (M-17)
+- ลบ profile ที่ยังไม่เคย activate ได้ (รวมร่างแบบเดิมที่มีตารางว่าง) · ไม่แปลงร่างเก่า
+- งานฝั่ง API ดู `plan.md` §5 **Q12**
