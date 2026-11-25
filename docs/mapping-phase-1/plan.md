@@ -1,7 +1,7 @@
 ---
 title: mapping phase 1 — แผนและความคืบหน้า (ไฟล์กลาง Dev 1 + Dev 2)
 status: draft
-last_updated: 2026-11-23
+last_updated: 2026-11-25
 ---
 
 # mapping phase 1 — แผนและความคืบหน้า
@@ -29,6 +29,124 @@ last_updated: 2026-11-23
 > - ติด / รอ: — (หรือ ติดอะไร รอใคร)
 > - ต่อไป: M2.1
 > ```
+
+### 2026-11-25 — commit/push งาน UI Mapping (M-42–M-45)
+- เสร็จ: ตามคำสั่งผู้ใช้ commit และ push repo Web ขึ้น `origin/develop` แล้ว 2 commits: **`e6349e4`** — `feat(mapping): manage source mappings and destinations in dialogs` (โค้ด/tour/tests 11 ไฟล์) และ **`a85f618`** — `style(mapping): align mapping dialogs and sticky preview layout` (เฉพาะ `src/styles.scss` ตามกฎไฟล์ร่วม)
+- เสร็จ: บันทึกเลข commit ในแผนและแบบ UI 4 ไฟล์ ได้แก่ `map-required-ui-design.md`, `destination-table-ui-design.md`, `destination-modal-ui-design.md`, `source-first-mapping-ui-design.md`; คงผลระหว่างทางไว้เป็นประวัติ ส่วนหลักฐานของ source รุ่นสุดท้ายใช้รายการนี้
+- หลักฐาน: source ชุดที่ commit ผ่าน `npm run build`, `npm run test:ci` **132/132 ใน 13 suites**, `git diff --check` และ Edge browser QA ที่ 1280/1440 px ตามรายละเอียด M-45; ไม่มีการแก้ source หลังผลตรวจสุดท้ายก่อน commit
+- ขอบเขต: commit/push เฉพาะ Web และเอกสาร Mapping; repo service Mapping สะอาดที่ `93be537` จึงไม่มี backend commit ในชุดนี้ และไม่อ้างผล external Informs E2E ใหม่
+- กำลังทำ: —
+- ติด / รอ: — สำหรับชุด UI นี้; M5.3 ทั้งข้อและ dependency อื่นยังคงสถานะเดิม
+- ต่อไป: ผู้ใช้ตรวจ UI จาก branch `develop`; การย้อน UI ทำได้จาก commits แยกข้างต้นโดยไม่เปลี่ยน API/DB
+
+### 2026-11-25 — ตารางจับคู่จากต้นทางและ modal รวม array/เงื่อนไข (M-45)
+- เสร็จ: ตามคำยืนยันและ [แบบจับคู่จากต้นทาง](source-first-mapping-ui-design.md) เปลี่ยนตารางเป็น `ข้อมูลต้นทาง | ปลายทางที่จับคู่ | สถานะ | จัดการ` ไม่มีตัวอย่าง; ค้นหาต้นทาง/target กรองยังไม่ใช้/ต้องแก้ไข และเปิดจัดการจากแต่ละแถวได้ พร้อมค่าอื่น/งานซ่อม/ช่องบังคับที่ยังขาด
+- เสร็จ: Modal เดียวจัดการหนึ่ง source ไปหลาย target, shared expressions, ค่าคงที่/metadata/advanced, เลือก/เพิ่ม/ลบ array รวมกลุ่มซ้อน และเงื่อนไขแถว/รายการ; ใช้ editor เดิมและ program/API รูปเดิม
+- เสร็จ: draft แยกทั้ง assignments/counts/item conditions/sourceWhen ยืนยันทั้งชุดหรือยกเลิกคงของเดิม; เคสเปลี่ยน source หรือลบรายการ array ไม่ทำ assignment อื่นสูญหาย, เงื่อนไขผิดยืนยันไม่ได้; คืน focus เมื่อยกเลิก/Escape และล้าง Preview เฉพาะเมื่อยืนยันค่าที่เปลี่ยน พร้อมคง sticky 60/40
+- ไฟล์ Web: สร้าง `features/mapping/source-mapping-model.ts`, `source-mapping-model.spec.ts`, `source-mapping-editor.ts`, `source-mapping-editor.html`; แก้ `mapping-new.ts`, `mapping-new.html`, `mapping-new.spec.ts`, `mapping-new-tour.ts` และ styles เฉพาะ Mapping ใน `src/styles.scss`; ถอด handlers/editor ของตารางปลายทางเดิมที่ไม่มีผู้เรียกหลังเปลี่ยน UI
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **132/132 ใน 13 suites** (12 model tests + 3 root apply/cancel tests ใหม่); `git diff --check` ผ่าน; Edge QA ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- หลักฐาน browser: headers ไม่มีตัวอย่าง, one-to-many/shared concat/advanced case/literal/metadata, draft cancellation/focus/Escape, arrays/เงื่อนไขทั้งชุด, ยกเลิกหลังลบ array, auto-map, ซ่อม source ที่ถูกลบ, กันเงื่อนไขผิด, ค้นหาตาม target/ตัวกรอง ผ่าน; 1280/1440 px ยังเป็น 3:2 ไม่มี page overflow, Preview **top 16 px**, modal **1120 × 801 px** และ footer อยู่ใน viewport
+- กำลังทำ: —
+- ติด / รอ: — สำหรับ UI นี้; ยังไม่ commit/push และไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ตรวจหน้าหลัก/modal ที่ Local :4200; รอบนี้ตรวจ frontend/โปรแกรมกับข้อมูลสมมติ ไม่ใช่ Preview API ด้วยไฟล์จริงหรือ external delivery E2E
+
+### 2026-11-25 — เตรียมตารางจับคู่จากต้นทางและ modal รวม array
+- ปรับตามผู้ใช้: ตัดคอลัมน์ `ตัวอย่าง` และไม่แสดงค่าตัวอย่างใน modal จับคู่; ตารางเหลือข้อมูลต้นทาง/ปลายทางที่จับคู่/สถานะ/จัดการ รายการไฟล์ที่เสนอเดิมไม่เปลี่ยน
+- เสร็จ: ตรวจโค้ด assignments/expressions/array เดิม และเขียน [แบบจับคู่จากต้นทาง](source-first-mapping-ui-design.md) ตามผู้ใช้ขอ ให้ตารางหลักเริ่มจาก Source fields เปิด modal เลือกปลายทาง/แปลงค่า และจัดการ array/เงื่อนไขจากหน้าต่างเดียว
+- กำลังทำ: ออกแบบรองรับหนึ่งต้นทางไปหลายปลายทาง/หลายต้นทางร่วม expression เดียว/ค่าคงที่และข้อมูลไฟล์ โดยไม่ทำโปรแกรมเดิมสูญหาย; draft ครอบคลุม assignments/counts/item conditions/sourceWhen ยืนยันทั้งชุดหรือยกเลิกคงของเดิม
+- ติด / รอ: คำยืนยันรายการไฟล์ก่อนแก้ source ตาม AGENTS.md; ยังไม่แก้ source หรือรัน build/tests ของ UI จับคู่รอบนี้
+- ต่อไป: หลังยืนยัน implement และตรวจ compatibility กับโปรแกรมเดิม/array/การยกเลิก/Preview sticky; ไม่เปลี่ยน API/กฎธุรกิจและไม่ commit/push จนผู้ใช้สั่ง
+
+### 2026-11-25 — ตารางปลายทาง 5 คอลัมน์แบบ Mapping Profiles
+- เสร็จ: ตามคำยืนยันผู้ใช้ แก้ตารางใน modal เป็น `ชื่อปลายทาง | ช่องทาง | endpoint | สถานะ | จัดการ`; ใช้ `card table-card`/`list-name` และระยะห่างมาตรฐานเหมือน Mapping Profiles แสดงรุ่น/จำนวนช่องใต้ชื่อ มีลิงก์ดูรายละเอียด และปุ่มเลือก/แก้ไขแบบแนวนอน
+- เสร็จ: เปิด pagination เหมือนตาราง Mapping Profiles พร้อมตัวเลือก 10/20/50; เรียงชื่อ ช่องทาง และ endpoint ได้; สถานะว่าง/ค้นหาไม่พบครอบคลุม 5 คอลัมน์; คง staging/ยืนยัน/reload ของ M-44
+- ไฟล์ Web: `features/mapping/mapping-new.html` และเฉพาะ `.dest-table`/`.dest-table-actions` ใน `src/styles.scss`
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; Edge headless QA 1280/1440 px ตรวจหัวตาราง 5 ช่อง ข้อมูลแต่ละคอลัมน์ ลิงก์ดู/แก้ไข กรอบ/pagination sorting ค้นหา/empty colspan เลือกไว้ และ reload ผ่าน; ปุ่มเลือก/แก้ไขอยู่แนวเดียวกัน ไม่มี table/page overflow หรือ runtime exception และไม่มีคำขอเขียน Mapping API
+- กำลังทำ: —
+- ติด / รอ: —; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจหน้าจอ Local :4200; รอบนี้เปลี่ยน template/CSS ไม่รัน unit tests ซ้ำ ผล **117/117** ด้านล่างเป็นหลักฐานของ logic ชุดก่อนหน้า
+
+### 2026-11-25 — จัดการปลายทางใน modal และย่อหน้าหลัก (M-44)
+- เสร็จ: ตามคำยืนยันและ [แบบ modal ปลายทาง](destination-modal-ui-design.md) ย้ายการ์ดชนิด/ตารางค้นหา/reload/สร้าง/แก้ไขเข้า PrimeNG Dialog; หน้าหลักเหลือรายละเอียดรุ่นที่ใช้แบบย่อและปุ่ม `จัดการปลายทาง` พร้อม mapping/Preview sticky 60/40 เดิม
+- เสร็จ: แยกสิ่งที่เลือกไว้ใน modal จากสิ่งที่ใช้จริง ต้องกด `ใช้ปลายทางนี้` ก่อนเปลี่ยน; ยกเลิก/ปิด/Escape คง contract/profile/ค่าที่จับคู่/Preview เดิม; cache applied profile snapshot เมื่อ reload ได้รายการรุ่นใหม่ เพื่อไม่ทำให้ปลายทางที่ใช้อยู่หายไปก่อนยืนยัน
+- เสร็จ: โหลด schema ล้มเหลวแสดง error และลองใหม่ใน modal ได้; ระหว่างยืนยันมี loading/กันกดซ้ำและกันปิดคั่นกลาง; ปิดแล้วคืน focus ให้ปุ่มจัดการปลายทาง; modal/table มี scroll ภายในและ footer ยังเข้าถึงได้
+- ไฟล์ Web: `features/mapping/mapping-new.html`, `mapping-new.ts`, `mapping-new.spec.ts`, `mapping-new-tour.ts` และเฉพาะ styles ของ Mapping ใน `src/styles.scss`
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **117/117 ใน 12 suites** (6 tests ใหม่ของ modal); `git diff --check` ผ่าน; Edge QA staging/cancel/reopen/Escape/focus/reload snapshot/error-retry/confirm/busy guard/edit link/latest revision ผ่าน ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- หลักฐาน layout: viewport 1440/1280 × 1000 px ยังเป็น 60/40, summary สูง **147 px**, modal กว้าง **1100 px** สูง **826.5 px** footer อยู่ใน viewport; หลังเลื่อน Preview อยู่ **top 16 px** ตามเดิม
+- กำลังทำ: —
+- ติด / รอ: — สำหรับ UI รอบนี้; ยังไม่ commit/push และไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ตรวจหน้าหลัก/modal ที่ Local :4200; หลักฐานใช้ข้อมูลสมมติใน browser ไม่ใช่ผลแก้ปลายทางจริงหรือ external delivery E2E
+
+### 2026-11-25 — เตรียมย้ายการจัดการปลายทางเข้า modal
+- เสร็จ: เขียน [แบบ modal ปลายทาง](destination-modal-ui-design.md) ตามคำขอผู้ใช้และภาพแนบ ให้หน้าหลักเหลือรายละเอียดที่ใช้แบบย่อพร้อมปุ่ม `จัดการปลายทาง`; ย้ายการ์ดชนิด/ตารางค้นหา/reload/ลิงก์สร้างและแก้ไขเข้า modal และคง mapping/Preview sticky 60/40
+- กำลังทำ: ออกแบบให้เลือกใน modal แล้วกด `ใช้ปลายทางนี้` ก่อนเปลี่ยนจริง; ยกเลิกคงปลายทาง/การจับคู่/Preview เดิม และ reload ไม่ทำให้ snapshot ที่ใช้อยู่หายไป
+- ติด / รอ: คำยืนยันรายการไฟล์ก่อนแก้ source ตาม AGENTS.md; ยังไม่แก้ source หรือรัน build/tests ของ modal รอบนี้
+- ต่อไป: หลังยืนยัน implement และตรวจการยกเลิก/ยืนยัน/loading/error/focus กับตารางและ sticky Preview; ไม่ commit/push จนผู้ใช้สั่ง
+
+### 2026-11-25 — ตารางเลือกปลายทางพร้อม reload และ sticky Preview 60/40 (M-43)
+- เสร็จ: ตามคำยืนยันผู้ใช้และ [แบบตารางปลายทาง](destination-table-ui-design.md) เปลี่ยน dropdown เป็นตารางใต้ชนิดปลายทาง ค้นหาชื่อ/ช่องทาง/path เรียงชื่อ แบ่งหน้า เลือกใช้ ดูรายละเอียด และเปิดแก้ไขโปรไฟล์ปลายทางที่ `/mapping/contracts/edit?version=...` ในแท็บใหม่; ข้อมูลรุ่นที่เลือกยังแสดงเมื่อค้นหาแล้วแถวนั้นถูกกรองออก
+- เสร็จ: มีปุ่ม `โหลดรายการใหม่` ที่หัวตาราง ดึง catalog/profiles โดยไม่ทิ้ง schema/ค่าที่จับคู่; เห็นปลายทางเพิ่มใหม่และกดใช้รุ่นล่าสุดเองหลังแก้ไขได้; คงค่า path เดิมที่ตรงกัน ผูก profile รุ่นใหม่ และล้าง Preview เก่าหลังเลือกสำเร็จ; โหลดล้มเหลวแสดง error และ retry ได้
+- เสร็จ: จัดฝั่งตั้งค่า 60% รวมชนิด/ตารางปลายทาง/การจับคู่ ข้าง Preview 40% แบบ sticky พร้อม scroll ภายใน; เปลี่ยนเฉพาะ UI/logic หน้า Mapping ไม่แก้ API, DB หรือเมนูอื่น
+- ไฟล์ Web: `features/mapping/mapping-new.html`, `mapping-new.ts`, `mapping-new.spec.ts`, `mapping-new-tour.ts` และ styles เฉพาะ Mapping ใน `src/styles.scss`
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **111/111 ใน 12 suites** (6 tests ใหม่ของงานตาราง); `git diff --check` ผ่าน; Edge QA ค้นหา/เลือก/ลิงก์แก้ไข/reload เพิ่มรายการและคง mapping/error-retry/ใช้ revision ใหม่/pagination ผ่าน ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- หลักฐาน layout: จอ 1440 px ฝั่งซ้าย/ขวา **663/442 px**, จอ 1280 px **567/378 px** เป็น 3:2; เลื่อน `.main` 500 px แล้ว Preview อยู่ **top 16 px** และเลื่อน body ภายในได้ ไม่เกิด page overflow
+- กำลังทำ: —
+- ติด / รอ: — สำหรับ source batch นี้; ยังไม่ commit/push และไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ตรวจหน้า Local :4200; หลักฐานรอบนี้เป็น unit/browser QA กับข้อมูลสมมติ ไม่ใช่การสร้าง/แก้ไขปลายทางจริงหรือ external delivery E2E
+
+### 2026-11-25 — เตรียมตารางเลือกปลายทางและ sticky Preview 60/40
+- เสร็จ: ตรวจข้อมูล/route เดิมและเขียน [แบบตารางปลายทาง](destination-table-ui-design.md) ตามผู้ใช้ขอ: ย้าย dropdown เป็นตารางใต้ชนิดปลายทาง ค้นหา/เลือก/ดูรายละเอียด/เปิดแก้ไขโปรไฟล์ปลายทาง และรวมฝั่งตั้งค่า 60% ข้าง Preview sticky 40%
+- กำลังทำ: รอเริ่ม source batch หลังยืนยัน; หน้าแก้ไขปลายทางเดิมคือ `/mapping/contracts/edit?version=...` ตาม D-85 เปิดแท็บใหม่และกลับมาโหลดรายการใหม่ได้
+- ติด / รอ: คำยืนยันรายการไฟล์ก่อนแก้ source code ตาม AGENTS.md; ยังไม่แก้ source ของคำขอนี้และยังไม่รัน build/tests สำหรับตารางใหม่
+- ต่อไป: ยืนยันแบบ/ไฟล์ แล้ว implement และตรวจ build/tests/browser โดยไม่เปลี่ยน API หรือส่งข้อมูลไปปลายทาง
+
+### 2026-11-25 — เปลี่ยนชนิดปลายทางเป็นการ์ดแบบรูปแบบไฟล์
+- เสร็จ: ตามคำยืนยันผู้ใช้ แก้ Web `features/mapping/mapping-new.html` ให้ชนิดปลายทางใช้ `choice-grid`/`choice-card` เช่นเดียวกับรูปแบบไฟล์ มีชื่อ คำอธิบาย กรอบ/พื้นสีฟ้าของรายการที่เลือก และข้อความพร้อมไอคอน `ยังไม่เปิดใช้` ของอีก 2 ตัวเลือก; ใช้ native button ที่มี `aria-pressed`/`disabled`
+- เสร็จ: ปรับเฉพาะ CSS ของ Mapping ใน `src/styles.scss` ให้การ์ด 3 ใบเรียงในคอลัมน์ซ้ายและตัดคำได้ โดยคงช่องปลายทางไว้คอลัมน์ขวาตามคำขอก่อนหน้า; ถอด CSS ของ segmented buttons ที่ส่วนนี้ไม่ใช้แล้ว
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; Edge headless ตรวจที่ความกว้าง 1440/1280 px พบการ์ด 3 ใบอยู่แถวเดียวกัน มีคำอธิบายครบ `ส่งเข้า API` เลือกอยู่ อีก 2 ใบ disabled และกดแล้วค่าไม่เปลี่ยน; layout 2 คอลัมน์ไม่มี page overflow/runtime exception และไม่มีคำขอเขียน Mapping API ระหว่าง QA
+- กำลังทำ: —
+- ติด / รอ: —; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจหน้าจอ Local :4200; รอบนี้ปรับ template/CSS ไม่รัน unit tests ซ้ำ ผล **105/105** ด้านล่างเป็นหลักฐานของ logic ชุดก่อนหน้า
+
+### 2026-11-25 — จัดชนิดปลายทางและปลายทางเป็น 2 คอลัมน์
+- เสร็จ: ตามคำยืนยันผู้ใช้ ปรับเฉพาะ `.dest-grid` ใน Web `src/styles.scss` เป็น `repeat(2, minmax(0, 1fr))` ให้ชนิดปลายทางอยู่ซ้ายและปลายทางอยู่ขวาในแถวเดียวกัน พร้อมแก้ comment ให้ตรง layout
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; Edge headless ตรวจจอกว้าง 1440/1280 px ช่องทั้งสองเริ่มที่ y เดียวกันและแบ่งกว้างเท่ากัน ไม่มี page overflow หรือ runtime exception; QA ใช้ข้อมูลสมมติใน browser ไม่มีคำขอเขียน Mapping API
+- กำลังทำ: —
+- ติด / รอ: —; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจ layout ที่ Local :4200; รอบนี้เปลี่ยนเฉพาะ CSS ไม่รัน unit tests ซ้ำ ผล **105/105** ด้านล่างเป็นหลักฐานของ logic ชุดก่อนหน้า
+
+### 2026-11-25 — ปรับ Map required เป็นตัวเลือกเงื่อนไขสำหรับผู้ใช้ทั่วไป (M-42)
+- เสร็จ: ตามรายการไฟล์ที่ผู้ใช้ยืนยัน เปลี่ยนช่อง JSON ของเงื่อนไขแถว/รายการเป็นตัวเลือกคอลัมน์ → วิธีตรวจ → ค่า พร้อมกลุ่มครบทุกข้อ/อย่างน้อยหนึ่งข้อแบบซ้อน, เพิ่ม/ลบเงื่อนไข/กลุ่ม, ข้อความ/ตัวเลข และสรุปประโยค; ปรับหัวข้อ/ข้อความตาราง/tour ตาม [แบบ Map required](map-required-ui-design.md)
+- เสร็จ: คงรูปแบบ `sourceWhen`/`emitWhen` และโปรแกรมขั้นสูงเดิมครบถ้วน; JSON ที่นอกแบบฟอร์มยังเปิดแก้ขั้นสูงได้; ตรวจคอลัมน์ที่ถูกลบ/เปลี่ยนชื่อ กลุ่มว่าง ตัวเลขที่ยังไม่กรอก และกัน Preview/ตรวจทานเมื่อเงื่อนไขผิด
+- ไฟล์ Web: แก้ `features/mapping/mapping-new.ts`, `mapping-new.html`, `mapping-new-tour.ts`; สร้าง `predicate-editor.ts`, `predicate-editor-model.ts`, `predicate-editor-model.spec.ts`; ฐานก่อนแก้ `73f89ad`/working tree สะอาด ย้อนเฉพาะชุดนี้ได้ตามที่ผู้ใช้ขอ โดยใช้ข้อมูล/API เดิม
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **105/105 ใน 12 suites** (14 tests ใหม่); `git diff --check` ผ่าน; Edge headless ใช้ข้อมูลสมมติใน browser ตรวจเพิ่ม/ลบและกลุ่มซ้อน, text/number/zero, invalid JSON/Preview guard, สลับ form/JSON คงค่า, renamed field และ item condition ผ่าน ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงาน UI นี้; ยังไม่ commit/push และยังไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ตรวจหน้า Local :4200; หลักฐานรอบนี้ไม่ใช่ Preview API ด้วยไฟล์จริงหรือ external delivery E2E
+
+### 2026-11-25 — เตรียมปรับ Map required สำหรับผู้ใช้ทั่วไป
+- เสร็จ: ตรวจหน้า Web และ predicates ที่ Mapping รองรับ; เขียน [แบบ Map required](map-required-ui-design.md) จากภาพ Rule Editor ที่ผู้ใช้แนบ ให้เลือกคอลัมน์/วิธีตรวจ/ค่า และรวมกลุ่มครบทุกข้อหรืออย่างน้อยหนึ่งข้อ โดยใช้ `sourceWhen`/`emitWhen` เดิม
+- กำลังทำ: เตรียมเปลี่ยนช่อง JSON เป็นตัวเลือกในเงื่อนไขแถวและรายการ พร้อมปรับคำบนหน้าและ tour; แบบยังเป็น draft ไม่ลง M-xx จนสรุปแนวทาง
+- ติด / รอ: คำยืนยันรายการไฟล์ก่อนแก้ source code ตาม AGENTS.md; ยังไม่แก้ source code และยังไม่ได้รัน build/test ของการเปลี่ยนแปลงนี้
+- ต่อไป: หลังยืนยัน ลงมือใน repo Web และตรวจ build/test/ความเข้ากันได้กับเงื่อนไขเดิม; ไม่ commit/push จนกว่าผู้ใช้สั่ง
+
+### 2026-11-25 — เปิด Web และ Mapping API หลัง pull ล่าสุด
+- เสร็จ: เปิด Web `73f89ad` ด้วย `npm start -- --host localhost --port 4200` และ Mapping `93be537` ด้วย `dotnet run --project src/Mapping/Mapping.Api --launch-profile local --no-build` หลัง EF CLI build ผ่าน; เปิดค้างที่ `http://localhost:4200/mapping` และ `http://localhost:5177/scalar/v1`
+- เสร็จ: apply migration `20261123155635_AddContractRegistrations` และ `20261124035222_AddMappingConfigDeletedAt` เฉพาะ PostgreSQL Docker บนเครื่อง โดยตรวจ connection เป็น `localhost:5433` ก่อนรัน; migration ตรงโค้ด **11/11** ไม่มีรายการค้าง
+- หลักฐาน: Web, `/health/live`, `/health/ready`, `/scalar/v1`, `GET /api/mapping/mapping-configs` และ `GET /api/mapping/contracts` ตอบ HTTP **200**; API ทั้งสองรายการ `success: true` และ CORS อนุญาต `http://localhost:4200`; PostgreSQL และ Kafka ใน Docker ทำงานตามเดิม
+- กำลังทำ: —
+- ติด / รอ: —
+- ต่อไป: ผู้ใช้เปิดหน้า Mapping เพื่อตรวจงาน; งานนี้เป็นการเปิดระบบ Local ไม่ได้รัน external E2E หรือแก้ source code; repo Mapping/Web ไม่มีไฟล์แก้ค้าง และไม่ได้ commit/push
+
+### 2026-11-24 — เปิดระบบ Local ตามคำขอผู้ใช้
+- เสร็จ: เปิด Web ด้วย `npm start -- --host localhost --port 4200`; Angular compile ผ่าน และ `http://localhost:4200/mapping` ตอบ HTTP **200**
+- เสร็จ: เปิด Mapping API จากโค้ดล่าสุดด้วย `dotnet run --project src/Mapping/Mapping.Api --launch-profile local` ที่ `http://localhost:5177`; PostgreSQL `:5433` และ Kafka `:9094` ใน Docker healthy; `/health/live`, `/health/ready`, `/scalar/v1` และ `GET /api/mapping/mapping-configs` ตอบ HTTP **200**, API `success: true` และ CORS อนุญาต `http://localhost:4200`; migration ในฐานข้อมูล Local ตรงโค้ด **9/9** ไม่มีรายการค้าง
+- แก้สภาพแวดล้อม: `scripts/up.ps1` build ล้มที่ `dotnet restore` ด้วย `read-only file system`; ตรวจพบไดรฟ์ C เหลือประมาณ **10 MB** และ Docker มี I/O error; กู้ Docker ด้วยการปิด process ของ Docker และ `wsl --shutdown` แล้วเปิดใหม่ (มีเฉพาะ distro `docker-desktop`); รอบนี้ใช้ API บน host แทนการ build image ซ้ำ
+- เสร็จตามคำอนุญาตผู้ใช้: ย้าย NuGet cache ประมาณ **2.13 GB** จาก `C:\Users\ous9741\.nuget\packages` ไป `D:\Caches\NuGet\packages` และสร้าง junction ที่ path เดิม; ตรวจจำนวนไฟล์/ขนาดรวมก่อนและหลังตรงกัน
+- เงื่อนไขการรัน: ใช้ค่าเดิมของ profile `Local` ซึ่ง `Messaging`, `FileIntake`, `RowTransformation` และ `Delivery` เป็น disabled; ผลข้างต้นยืนยัน Web/API/ฐานข้อมูล ไม่ใช่การทดสอบ pipeline นำเข้าและส่งปลายทาง
+- กำลังทำ: —
+- ติด / รอ: —
+- ต่อไป: ผู้ใช้เปิดหน้า Mapping เพื่อตรวจงาน; ไม่มีการแก้ source code หรือ commit/push
 
 ### 2026-11-23 — Commit/push Source Table และปรับ Source fields
 - เสร็จ: ตามคำสั่งผู้ใช้ commit และ push repo Mapping บน `develop` เป็น **`16ba7e7`** — `feat(mapping): support custom source table names`; รวม 16 ไฟล์สำหรับ create/read metadata, validation/conflict/idempotency, runtime resolve table และ tests; local ตรง `origin/develop`, working tree สะอาด
@@ -718,6 +836,7 @@ last_updated: 2026-11-23
   - Dev 1: (11-17) Informs + Products ทำ probe แล้ว — ขอให้ Mapping ใช้แบบเดียวกันเพื่อให้ manifest ของ Kubernetes เหมือนกันทั้ง 3 service: package `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore` 10.0.4 ใน `Mapping.Api` · `builder.Services.AddHealthChecks().AddDbContextCheck<MappingDbContext>(tags: ["ready"]);` · `app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });` (ไม่ตรวจอะไร = process ยังตอบ) · `app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });` (ตรวจ DB อย่างเดียว — ไม่ใส่ Kafka / Informs API / share folder เพราะตอนนั้นล่ม งานควร retry ไม่ใช่ตัด pod ออก) · ตอบข้อความธรรมดา `Healthy` / `Unhealthy` (`200` / `503`) ไม่ห่อ `BaseResponse` · test: integration test 2 เคส — DB ปกติ live/ready `200` · connection string ชี้ `Host=127.0.0.1;Port=1` → live `200` ready `503`
 - [ ] **M5.2** ส่ง API contract/OpenAPI/examples ให้ทำ Web — เสร็จเมื่อ: เอกสารตัวอย่าง/DTO/states/counts/action availability ตรง API ที่รันจริง, CORS/base URL พร้อม, ไม่มี docs ใน repo โค้ด · เป้า 11-27
 - [ ] **M5.3** Implement และเชื่อมหน้า mapping หลังได้รับ Web design — เสร็จเมื่อ: scope ที่ตกลงใช้งานบนเครื่องผ่าน `core/mapping-api.ts` + `features/mapping/`, build/unit tests ของ Web ผ่าน, ไม่แก้เมนูอื่นและไม่เพิ่ม package โดยยังไม่บอก Dev 1 · เป้า **12-03** เดิม · [แบบหลาย format](multi-format-api-web-design.md) ให้ Config editor/preview/jobs ใช้กับ Excel/Delimited/FixedWidth โดยไม่มี field MTLS hardcode; ขอบเขต/วันส่งเพิ่มรอ Q9 และ layout รายละเอียดรอ review design
+  - [x] **M5.3.1** ปรับ Map required ให้ผู้ใช้ทั่วไปเลือกเงื่อนไขได้ — เสร็จเมื่อ: เงื่อนไขแถว/รายการมีตัวเลือกและกลุ่ม all/any ซ้อน, คงโปรแกรมเดิม, กรอกไม่ครบต้องแก้ก่อน Preview/ตรวจทาน, build/tests และ browser QA ผ่าน · เป้า 11-25 · ✅ 11-25 Web `e6349e4` (โค้ด) + `a85f618` (styles), build ผ่าน, tests **132/132**, Edge browser QA ผ่านตาม §1/M-42
   - Dev 2 (11-23): เพิ่มการแสดงชื่อตารางต้นทางตาม M-38 แล้ว; Mapping build/API tests 2/2 และ Web build/tests 78/78 ผ่าน; ยังรอตรวจ runtime รุ่นใหม่เพราะ Docker local มี filesystem error ตาม §1 ไม่ปิด M5.3 ทั้งข้อ
   - Dev 2 (11-23, เพิ่มเติม): ผู้ใช้ยืนยันให้ตั้งชื่อตารางเองตาม M-39; wizard/API/runtime และ tests แก้แล้ว, build ทั้งสอง repo/unit 39/39/Web 80/80/guard smoke 15/15/EF model ผ่าน; PostgreSQL integration gate และการเปิด runtime ใหม่ยังติด Docker ตาม §1
   - Dev 2 (11-23, หลังเปิด Docker): integration subset ของ M-39 ผ่าน **15/15**, local Mapping recreate เป็นรุ่นใหม่แล้วโดยรักษา environment/volumes เดิม; Mapping/Informs readiness และ Web :4200 ตอบ **200**; ปิดข้อจำกัด Docker ของงานนี้ แต่ไม่ปิด M5.3 ทั้งข้อ
@@ -729,6 +848,12 @@ last_updated: 2026-11-23
   - คำตอบผู้ใช้ (11-13), Q2.4: รวมการเปิด Source ดิบรายแถวแบบ read-only จากรายการไฟล์/แถวตาม M-18; ไม่ทำหน้าจัดการใบหรือ business validation ซ้ำกับ Informs/UW
   - คำตอบผู้ใช้ (11-13), Q1 / kickoff ข้อ 8: Config (สร้าง version/validate/preview/activate/disable) + ผลการส่ง (ไฟล์/แถว/attempts) + retry ตามสถานะ ตาม M-12; ยังรอ layout/interaction จาก Web design และต้องยืนยันรายการไฟล์ก่อนแก้ source ตามเดิม
   - คำตอบผู้ใช้ (11-13), Q2.2: รวมการกำหนด fields/สร้าง physical Source Table ผ่านหน้า Mapping ตาม M-16 โดยใช้ API จาก M1.5; layout/interaction และกติกาแก้ schema ยังต้องปิดก่อน implement
+
+  - [x] **M5.3.2** ตารางเลือกปลายทางและ Preview sticky — เสร็จเมื่อ: ค้นหา/เลือก/เปิดแก้ไข/reload รายการใหม่ได้โดยคง mapping, เลือก revision ล่าสุดแล้วรักษา path เดิม, layout 60/40 และ sticky scroll ผ่าน browser, build/tests ผ่าน · เป้า 11-25 · ✅ 11-25 Web `e6349e4` (โค้ด) + `a85f618` (styles), build ผ่าน, tests **132/132**, Edge QA 1280/1440 px ผ่านตาม §1/M-43
+
+  - [x] **M5.3.3** จัดการปลายทางใน modal — เสร็จเมื่อ: หน้าหลักแสดงแบบย่อ, เลือกใน modal แล้วต้องยืนยันก่อนใช้, ยกเลิก/reload ไม่เปลี่ยน applied snapshot/mapping/Preview, error/loading/keyboard/focus และ 60/40 sticky ผ่าน browser, build/tests ผ่าน · เป้า 11-25 · ✅ 11-25 Web `e6349e4` (โค้ด) + `a85f618` (styles), build ผ่าน, tests **132/132**, Edge QA 1280/1440 px ผ่านตาม §1/M-44
+
+  - [x] **M5.3.4** ตารางจับคู่จากต้นทางและ modal รวม array — เสร็จเมื่อ: ตารางไม่มีตัวอย่างและเริ่มจาก Source fields, one-to-many/shared/ค่าอื่น/array/เงื่อนไขแก้ผ่าน draft modal เดียว, ยกเลิกคงของเดิม, build/tests/browser ผ่าน · เป้า 11-25 · ✅ 11-25 Web `e6349e4` (โค้ด) + `a85f618` (styles), build ผ่าน, tests **132/132**, Edge QA 1280/1440 px ผ่านตาม §1/M-45
 
 ### M6 — ทดสอบร่วมและเตรียม UAT
 
@@ -1073,6 +1198,35 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ตัวอย่างข้อมูลสมมติ:** Header `เลขอ้างอิง` → Key `reference` → definition ใหม่ส่ง `displayName: null` และหน้าอ่านข้อมูลใช้ชื่อ `reference`; ค่าดิบ `SYNTHETIC-001` และ target path ใน contract เป็นไปตาม mapping เดิม
 - **ขอบเขต:** ไม่เก็บหรือคัดลอก displayName ใน state ของ wizard และไม่เติมจาก header ของไฟล์ตัวอย่าง; ปรับ header/rows/tour ให้ตรงกัน API และ metadata ของ config versions เก่ายังรองรับ displayName เดิม
 - **ไม่เลือก:** ซ่อนช่องกรอกแต่ยังบันทึกชื่อจากไฟล์หรือ config ต้นฉบับโดยที่ผู้ใช้ไม่เห็น
+
+### M-42 ตั้งเงื่อนไขเลือกแถวและรายการด้วยตัวเลือกแทน JSON เป็นค่าเริ่มต้น
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยัน [แบบ Map required](map-required-ui-design.md) และไฟล์ Web 6 ไฟล์ ให้ใช้ rule rows เลือกคอลัมน์/วิธีตรวจ/ค่า พร้อมกลุ่มครบทุกข้อ (`and`)/อย่างน้อยหนึ่งข้อ (`or`) ซ้อนกันได้ ตามภาพ Rule Editor ที่ผู้ใช้แนบ; ใช้ทั้ง `sourceWhen` และ `emitWhen`
+- **ทำไม:** คนที่ไม่ได้เป็น dev ต้องตั้งเงื่อนไขทั่วไปได้โดยไม่รู้โครงสร้าง JSON และต้องเห็นว่าเงื่อนไขใดอยู่ในกลุ่มใด
+- **ตัวอย่างข้อมูลสมมติ:** `reference="SYNTHETIC-001"` + ตัวเลือก `reference ไม่ว่าง` → `{ "kind": "notBlank", "input": { "kind": "source", "field": "reference" } }`; กลุ่มครบทุกข้อสร้าง `and.operands` และใช้ใน program รูปเดิม
+- **ขอบเขต:** แสดง operators ตาม capabilities; เปรียบเทียบตัวเลขด้วย `convert` เป็น `decimal` อย่างชัดเจนตาม M-40; ตรวจเงื่อนไขที่ยังไม่ครบ/คอลัมน์ที่เปลี่ยนในขั้นที่ 1; รูปแบบที่ฟอร์มสร้างกลับไม่ได้ครบถ้วนให้คงขั้นสูง JSON; ปรับคำบนหน้าและ tour แต่คง anchors เดิม
+- **ไม่เลือก:** บังคับทุกคนเขียน JSON หรือแปลงโปรแกรมซับซ้อนเป็นเงื่อนไขง่ายจนความหมายเปลี่ยน
+- **การย้อนกลับ:** ตามคำถามผู้ใช้ก่อนยืนยัน จำกัด diff เฉพาะ UI ชุดนี้บน Web `73f89ad`, ไม่เพิ่ม package/เปลี่ยน API/DB; ย้อนเป็น UI เดิมได้โดยไม่เปลี่ยนรูปแบบข้อมูลและไม่ทับงานอื่น
+
+### M-43 ตารางเลือกปลายทางและ Preview sticky ในหน้า Mapping
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยัน [แบบตารางปลายทาง](destination-table-ui-design.md) และเพิ่มคำขอปุ่ม reload ให้ตารางโหลดปลายทางที่เพิ่มใหม่ได้; ใช้ตารางแทน dropdown ค้นหา/เลือก/ดูรายละเอียด/เปิดหน้าแก้ไขโปรไฟล์ปลายทางเดิมตาม D-85 และจัดฝั่งตั้งค่า/Preview 60/40 แบบ sticky
+- **ทำไม:** ต้องเห็นรายละเอียดปลายทางก่อนเลือก เพิ่ม/แก้ไขปลายทางในแท็บใหม่แล้วโหลดรายการกลับมาได้ และเห็น Preview ขณะเลื่อนตั้งค่า mapping
+- **ตัวอย่างข้อมูลสมมติ:** เลือก `sample-inform` รุ่น 1 อยู่ → อีกแท็บเพิ่ม `sample-archive` และแก้ `sample-inform` เป็นรุ่น 2 → โหลดรายการใหม่เห็นทั้งสองรายการ แต่ schema/ค่าที่จับคู่ยังเป็นรุ่น 1 จนกด `ใช้รุ่นล่าสุด`; จากนั้นคงค่าของ path ที่ยังตรงกันและเพิ่มช่องใหม่ที่ยังไม่ได้จับคู่
+- **ขอบเขต:** refresh catalog/profiles โดยคงโปรแกรม; เลือก schema สำเร็จจึงรีเซ็ต Preview และผูก profile ใหม่; เงื่อนไข/ข้อความตรวจ/การส่งจริงใช้กลไกเดิม; ปลายทางอื่นนอกจาก ApiContract ยังไม่เปิดใช้ตาม M-21
+- **ไม่เลือก:** เปลี่ยน schema/ทิ้งค่าที่จับคู่ทันทีเมื่อกด reload, เปิดหน้าแก้ไขทับร่างในแท็บเดียวกัน หรือแก้ behavior sticky ของเมนูอื่น
+
+### M-44 จัดการปลายทางใน modal โดยยืนยันก่อนเปลี่ยนรุ่นที่ใช้อยู่
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยัน [แบบ modal ปลายทาง](destination-modal-ui-design.md) ให้ส่วนเลือก/จัดการปลายทางของ M-43 อยู่ใน Dialog; หน้าหลักแสดงชื่อ/รุ่น/ช่องทาง/path แบบย่อพร้อมปุ่มจัดการ และคง mapping/Preview sticky 60/40
+- **ทำไม:** ลดพื้นที่จัดการ catalog บนหน้าที่ใช้จับคู่ข้อมูล และให้ลองเลือก/ค้นหา/โหลดรายการใหม่ได้ก่อนยืนยันเปลี่ยนปลายทาง
+- **ตัวอย่างข้อมูลสมมติ:** ใช้ `sample-inform` รุ่น 2 → เปิด modal เลือก `sample-archive` → ยกเลิก → contract/profile/ค่าที่จับคู่/Preview ยังเป็นชุดเดิม; reload แล้วมี `sample-inform` รุ่น 3 ยังไม่เปลี่ยนจนกดยืนยัน
+- **ขอบเขต:** pending selection แยกจาก applied snapshot, cache profile เดิมเมื่อ refresh รายการ, schema load ล้มเหลวยังไม่เปลี่ยนของเดิม, loading กันปิด/กดซ้ำ และคืน focus เมื่อปิด; สร้าง/แก้ไขปลายทางเปิดหน้าเดิมในแท็บใหม่ตาม D-85 และ reload ผ่านปุ่มใน modal
+- **ไม่เลือก:** ให้การคลิกเลือกแถวหรือ reload เปลี่ยน contract/mapping ทันที หรือปล่อยให้ catalog ใหม่ทำให้ applied profile เดิมหายก่อนผู้ใช้ตัดสินใจ
+
+### M-45 จับคู่จากต้นทางและแก้ mapping/array/เงื่อนไขใน draft modal เดียว
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยัน [แบบจับคู่จากต้นทาง](source-first-mapping-ui-design.md) และให้ตัดตัวอย่างออก; ตารางหลักเริ่มจาก Source fields ส่วนการเลือกปลายทาง/แปลงค่า/array/เงื่อนไขอยู่ใน modal เดียว โดยยืนยัน draft ทั้งชุดก่อนเปลี่ยนค่าที่ใช้จริง
+- **ทำไม:** ผู้ใช้เริ่มจากข้อมูลในไฟล์ แล้วเลือกว่าจะส่งไปช่องใดได้สะดวกขึ้น ลดฟอร์ม array และเงื่อนไขบนหน้าหลัก โดยไม่จำกัด mapping ให้เหลือหนึ่งต่อหนึ่ง
+- **ตัวอย่างสมมติ:** `first_name` + `last_name` ร่วม expression `concat` ไป `inform.fullName` → ตารางแสดง target นี้ในสอง source rows แต่ serialize assignment ครั้งเดียว; `reference` จับคู่ได้ทั้ง `inform.reference` และ `inform.externalId`; เพิ่ม array item 2/emitWhen แล้วกดยกเลิกไม่เปลี่ยนของเดิม
+- **ขอบเขต:** source projection อ่าน nested expressions/case predicates แต่ไม่อ่าน literal data; มีทางจัดการค่าอื่นและ source ที่ถูกลบ; ใช้ schema/Transformation Program เดิม, required targets ยังเป็น gate ของการตรวจทาน/บันทึก, array ว่างไม่ส่งตามกลไกเดิม และคง Preview sticky 60/40
+- **ไม่เลือก:** กลับทิศ program/เปลี่ยน API, duplicate assignments ตามแต่ละ source ที่ expression อ่าน, ซ่อนค่าคงที่/metadata หรือแก้ actual state ทันทีที่เปลี่ยนค่าใน modal
 
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
