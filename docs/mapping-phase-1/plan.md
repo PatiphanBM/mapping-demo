@@ -30,6 +30,106 @@ last_updated: 2026-11-25
 > - ต่อไป: M2.1
 > ```
 
+### 2026-11-25 — commit/push การ์ดจับคู่และรวม array (M-46–M-47)
+- เสร็จ: ตามคำสั่งผู้ใช้ commit และ push Web ขึ้น `origin/develop` แล้ว 2 commits: **`34414e5`** — `feat(mapping): group array mappings in source destination cards` (โค้ด/tour/tests 8 ไฟล์) และ **`0c2bc9e`** — `style(mapping): style grouped destination mapping cards` (เฉพาะ `src/styles.scss` ตามกฎไฟล์ร่วม)
+- เสร็จ: บันทึกเลข commit และสรุปพฤติกรรมรุ่นสุดท้ายในแผนกับ `source-first-mapping-ui-design.md`; รวม array เดียวในการ์ดเดียว คง Index/field/เงื่อนไขแยกรายการ ใช้ source ของแถวใน expression ลูก และถอดปุ่ม/ข้อความซ้ำตามคำยืนยันทั้งหมด
+- หลักฐาน source รุ่นที่ commit: `npm run build` ผ่าน; `npm run test:ci` **141/141 ใน 13 suites**; `git diff --check` ผ่าน; ไม่มีการแก้ source หลัง checks ก่อน commit; หลักฐาน browser QA ของ UI ระหว่างพัฒนาดู §1/M-46/M-47 (600/1280/1440 px, grouping/draft/conditions/ยืนยันและยกเลิก)
+- ขอบเขต: commit/push เฉพาะ Web และเอกสาร Mapping; repo service Mapping สะอาดที่ `93be537` จึงไม่มี backend commit และไม่อ้างผล external Informs E2E ใหม่; คง dev server ที่ผู้ใช้ใช้งาน
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงาน UI ชุดนี้; M5.3 ทั้งข้อและ dependency อื่นยังคงสถานะเดิม
+- ต่อไป: ผู้ใช้ดึง branch `develop` เพื่อใช้งาน UI รุ่นนี้; commit โค้ดและ styles แยกกันเพื่อ review/ย้อนกลับตามขอบเขตได้
+
+### 2026-11-25 — เอาข้อความมีการจับคู่แล้วออกจากตัวเลือก field
+- เสร็จ: ตามคำยืนยันผู้ใช้ แก้เฉพาะ `src/app/features/mapping/source-mapping-editor.ts` ลบข้อความต่อท้าย ` · มีการจับคู่แล้ว` จากรายการปลายทาง/ตัวเลือกปลายทางในการ์ด/ตัวเลือก field ของ array ทั้ง 3 จุด; แสดง path เดิมโดยไม่เปลี่ยน value หรือ assignments
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; ตรวจ source ของหน้าต่างแล้วไม่มีข้อความต่อท้ายนี้เหลือ; Web `localhost:4200/mapping/new` ตอบ **HTTP 200** และคง server ที่ผู้ใช้ใช้งาน
+- ขอบเขตการตรวจ: เปลี่ยนข้อความ label เท่านั้น ไม่รัน unit tests หรือ browser QA ซ้ำรอบนี้; ผล **141/141** ในรายการก่อนหน้าเป็นของชุดรวมการ์ด ไม่ใช่ผลรันใหม่
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ Reload และตรวจข้อความในช่อง field
+
+### 2026-11-25 — รวมรายการของ array เดียวกันในการ์ดเดียว (M-47)
+- เสร็จ: ตามคำยืนยันผู้ใช้และ [แบบรวมการ์ด](source-first-mapping-ui-design.md) เพิ่มรายการของ array เดียวกันภายในการ์ดเดิม คนละ array/concrete parent แยกการ์ด; เปิด assignments เดิมแล้วรวมหลาย Index/field โดยไม่ทำ expressions สูญหาย
+- เสร็จ: รายการย่อยมี Index/field และเงื่อนไขส่งแยก index; ถ้าหลาย field อยู่ index เดียวแสดงเงื่อนไขส่งครั้งเดียว; เลือก array ซ้ำรวมเข้าการ์ดเดิม เปลี่ยนกลุ่ม/ลบรายการหรือการ์ดคง source อื่น และยืนยัน/ยกเลิกผ่าน draft เดิม
+- ไฟล์ Web รอบนี้: `features/mapping/source-mapping-editor.ts`, `source-mapping-editor.html`, `source-mapping-model.ts`, `source-mapping-model.spec.ts` และเฉพาะ Mapping ใน `src/styles.scss`; อัปเดตแบบ UI/แผนใน repo เอกสาร
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **141/141 ใน 13 suites** รวม tests ใหม่ 5 เคส; `git diff --check` ผ่าน; Edge QA array เดียว 3 indices/ต่าง array/เลือกซ้ำ/หลาย field-index/เงื่อนไข/parent ซ้อน/เปิดค่าเดิม/เปลี่ยนกลุ่ม/ลบ/ยืนยันและยกเลิกผ่าน ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- หลักฐาน layout: ตรวจภาพแล้วหลายรายการอยู่ใน card เดียว; จอ 1440/1280 px modal 720 px, จอ 600 px modal 570 px ไม่มี horizontal overflow และ footer อยู่ใน viewport; dev server เดิม PID 32656 ยังทำงาน ไม่หยุดหลัง QA
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push และไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ Reload/ตรวจการเพิ่มรายการ; รอบนี้ตรวจ frontend ด้วยข้อมูลสมมติ ไม่ใช่ external delivery E2E
+
+### 2026-11-25 — เตรียมรวมรายการของ array เดียวกันในการ์ดเดียว
+- เสร็จ: ตรวจ `addCardItem` แล้วพบว่าการเพิ่มรายการสร้าง TargetCard ใหม่ทุกครั้งตามภาพ; เพิ่ม [ข้อกำหนดจัดกลุ่มการ์ด](source-first-mapping-ui-design.md) ให้ array เดียวกันรวมรายการย่อยใน card เดิม คนละ array/concrete parent แยก card และเปิดค่าที่บันทึกไว้เดิมแล้วรวมได้โดยไม่เสีย assignments/เงื่อนไข
+- ตัวอย่างสมมติ: `inform.beneficiaries[]` มี Index 1/2 ใน card เดียว และ `inform.drivers[]` Index 1 อีก card → รวม 2 card; คง source `no` และ concrete paths เดิม
+- กำลังทำ: เตรียม source Web 5 ไฟล์ตามแบบ: `source-mapping-editor.ts`/`.html`, `source-mapping-model.ts`/`.spec.ts` และเฉพาะ Mapping ใน `src/styles.scss`
+- ติด / รอ: คำยืนยันรายการ source รอบนี้ตาม AGENTS.md; ยังไม่แก้ source หรือรัน build/tests ของการรวมการ์ด และยังไม่ commit/push
+- ต่อไป: หลังยืนยัน implement และตรวจ array เดียว/คนละ array/ข้อมูลเดิม/เงื่อนไข/ยืนยันและยกเลิก โดยไม่หยุด dev server ที่ผู้ใช้กำลังใช้งาน
+
+### 2026-11-25 — เปิด Web dev server กลับหลัง localhost:4200 connection refused
+- เสร็จ: ตรวจ URL เดิมของผู้ใช้แล้วพบ `localhost:4200` connection refused และไม่มี listener ที่พอร์ต 4200; สาเหตุคือ dev server ที่ใช้ตรวจ UI ถูกหยุดหลังทดสอบ เปิด Angular dev server แบบ background กลับที่ `http://localhost:4200/` และคง process ไว้ให้ผู้ใช้ใช้งานต่อ
+- หลักฐาน: URL `/mapping/new?config=01a20767-7148-781e-a651-c1f57eca2b44` เปลี่ยนจาก connection refused เป็น **HTTP 200** และมี Angular app root; dev server compile ผ่าน เปิด watch mode และฟังพอร์ต 4200 แล้ว; Mapping API `/health/ready` ตอบ **HTTP 200**
+- ขอบเขต: แก้ที่การรัน process ไม่แก้ source/config/DB และไม่รัน build/unit tests ซ้ำ; HTTP 200 ยืนยันว่า Web กลับมารับการเชื่อมต่อ ไม่ใช่หลักฐานทดสอบ workflow ของ config นั้นทั้งชุด
+- กำลังทำ: —
+- ติด / รอ: — สำหรับการเปิด Web; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ Reload หน้าเดิม; คง dev server ที่เปิดกลับไว้ ไม่หยุดเมื่อจบงานนี้
+
+### 2026-11-25 — ลบปุ่มจัดการการจับคู่ด้านบนตาราง
+- เสร็จ: ตามคำยืนยันผู้ใช้ ลบปุ่ม `จัดการการจับคู่` ด้านบนส่วนจับคู่ข้อมูลจากต้นทางใน `src/app/features/mapping/mapping-new.html` และลบขั้น tour `automap` ใน `mapping-new-tour.ts`; ปุ่มจับคู่/จัดการในแต่ละแถวยังใช้งานผ่าน handler เดิม
+- เสร็จ: แก้ `mapping-new.ts` ให้ค่าเริ่มต้นของจุดคืน focus ใช้ปุ่ม `manage-mapping-arrays` ที่ยังอยู่ และไม่อ้าง `manage-source-mapping` ที่ลบแล้ว; การเปิดจากแถวยังส่ง ID ของปุ่มแถวนั้นเช่นเดิม
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **136/136 ใน 13 suites**; `git diff --check` ผ่าน; ตรวจ source แล้วไม่มี ID ปุ่มที่ลบหรือ anchor `automap` ค้างในสามไฟล์ที่แก้; ไม่รัน browser QA รอบนี้
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจหัวข้อจับคู่ข้อมูลจากต้นทางและเปิดจัดการจากแต่ละแถว
+
+### 2026-11-25 — ลบปุ่มส่งทุกแถวจากส่วนจับคู่ข้อมูลจากต้นทาง
+- เสร็จ: ตามคำยืนยันผู้ใช้ ลบปุ่ม `ส่งทุกแถว` / `มีเงื่อนไขเลือกแถว` (`manage-mapping-conditions`) จากส่วน `จับคู่ข้อมูลจากต้นทาง` ใน `src/app/features/mapping/mapping-new.html` และลบขั้น tour ที่อ้าง `source-when` ใน `mapping-new-tour.ts`
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; ตรวจ source แล้วไม่มี button ID/anchor/ข้อความปุ่มที่ลบเหลือในสองไฟล์นี้; ปุ่มจัดการ array/ตาราง/ตัวกรองเดิมยังอยู่
+- ขอบเขต: เปลี่ยน template และข้อความ tour เท่านั้น ไม่ล้างค่าของ `sourceWhen` หรือแก้โปรแกรม/API; รอบนี้ไม่รัน unit tests หรือ browser QA ซ้ำ
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจส่วนจับคู่ข้อมูลจากต้นทาง
+
+### 2026-11-25 — เอาส่วนเงื่อนไขการจับคู่ใต้กรอบ array ออก
+- เสร็จ: ตามคำยืนยันผู้ใช้ แก้เฉพาะ `src/app/features/mapping/source-mapping-editor.html` ให้การ์ดที่เลือก array ไม่แสดงส่วน `เงื่อนไขการจับคู่` ใต้กรอบ; เหลือ Index/field/checkbox ส่งเมื่อมีเงื่อนไข/เพิ่มรายการตามแบบที่ตกลง ส่วนปลายทางทั่วไปยังมี editor แปลงค่า
+- หลักฐาน: `npm run build` และ `git diff --check` ผ่าน; Edge browser QA ด้วยข้อมูลสมมติผ่านทั้งไม่มีส่วนแปลงค่าของ array/Index/field/เงื่อนไขส่ง/เพิ่มรายการ/ยืนยันและยกเลิก/ปลายทางทั่วไปยังแปลงค่าได้/ค่าแปลง array เดิมไม่ถูกล้าง ไม่มี runtime exception หรือคำขอเขียน Mapping API; ตรวจภาพแล้วว่าส่วนด้านล่างหายจริง
+- ขอบเขตการตรวจ: รอบนี้เปลี่ยนเงื่อนไขแสดงผลใน template อย่างเดียว ไม่รัน unit tests ซ้ำ; ผล **136/136** ในรายการก่อนหน้าเป็นของชุดแก้ expression ลูก ไม่ใช่ผลรันใหม่รอบนี้
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจหน้าต่างกรณี array; เป็นงาน frontend ไม่ใช่ผล external delivery E2E
+
+### 2026-11-25 — เอาช่องเลือก source ซ้ำออกจาก expression ลูกด้วย
+- เสร็จ: ตามคำยืนยันผู้ใช้ แก้ `src/app/features/mapping/value-expression-editor.ts` ให้ส่ง source ของแถวลงไปถึง editor ลูกทุกจุด; ส่วนลูกที่ใช้ source โดยตรงไม่แสดงทั้งชนิด `ค่าจากคอลัมน์` และช่องเลือกชื่อ field รวมถึงไม่เหลือ dropdown ว่างแทนที่; case ที่ใช้ source ของแถวไม่ถามคอลัมน์ซ้ำ
+- เสร็จ: ค่าเริ่มต้นของรายการ expression ที่เพิ่มใหม่ใช้ source ของแถว; คง expression/ค่าที่ต้องกรอกสำหรับการแปลงและ case ซ้อน; โปรแกรมเดิมที่อ่านคอลัมน์อื่นแสดงชื่อเป็นข้อความและไม่เปลี่ยนข้อมูลโดยเงียบ ส่วน editor ที่ไม่มี source ผูกไว้ยังทำงานแบบเดิม
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **136/136 ใน 13 suites**; `git diff --check` ผ่าน; Edge browser QA ด้วยข้อมูลสมมติผ่านทั้งไม่มี source controls ทุกระดับ/trim ใช้ source ของแถว/ใช้และเปิดใหม่/case ซ้อนและ fallback/concat เพิ่มและลบค่า/ยกเลิก/คง shared expression เดิม/โหมดค่าอื่น ไม่มี runtime exception หรือคำขอเขียน Mapping API; ตรวจภาพแล้วว่าสองช่องในรูปผู้ใช้หายจริง
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจหน้าต่างจัดการการจับคู่; เป็นการปรับ frontend ไม่ใช่ผล external delivery E2E
+
+### 2026-11-25 — เอาตัวเลือกค่าจากคอลัมน์ออกจากเงื่อนไขหลัก
+- เสร็จ: ตามคำยืนยันผู้ใช้ เอา `ค่าจากคอลัมน์` ออกจากรายการชนิดระดับหลักของเงื่อนไขพิเศษในหน้าต่างจัดการการจับคู่ที่เลือก source แล้ว; ไม่แสดงตัวเลือกคอลัมน์ซ้ำเมื่อใช้ source ของแถวนั้น และยังเก็บ assignment แบบ source เดิมจนกว่าจะเลือกการแปลงค่า
+- เสร็จ: case ใหม่ใช้คอลัมน์ที่กดจับคู่แทน field แรก; ล้างชนิดการแปลงกลับไปจับคู่จาก source ของแถว; editor ลูกของ case/การแปลงยังเลือกคอลัมน์ได้ และโหมดค่าคงที่/ข้อมูลไฟล์ยังใช้ตัวเลือกเดิม; ค่าเดิมที่อ่าน source อื่นยังเปิดให้ตรวจ/แก้ได้
+- ไฟล์ Web ที่แก้รอบนี้: `src/app/features/mapping/value-expression-editor.ts` และ `source-mapping-editor.html`; เพิ่ม input ระบุ source โดยใช้เฉพาะ editor ระดับหลักของหน้าต่างที่มี source ให้แล้ว
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **136/136 ใน 13 suites**; `git diff --check` ผ่าน; Edge browser QA ด้วยข้อมูลสมมติผ่านทั้งรายการตัวเลือกจริง/จับคู่ตรง/case ใช้ source ที่เลือก/source ใน expression ลูก/ล้างการแปลง/trim/ยืนยันและยกเลิก/โหมดค่าอื่น ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงานนี้; ยังไม่ commit/push
+- ต่อไป: ผู้ใช้ตรวจตัวเลือกในหน้าต่างจัดการการจับคู่; เป็นการปรับ frontend ไม่ใช่ผล external delivery E2E
+
+### 2026-11-25 — การ์ดจับคู่และ checkbox เปิดเงื่อนไขพิเศษ (M-46)
+- เสร็จ: ตามคำยืนยันผู้ใช้และ [แบบ UI](source-first-mapping-ui-design.md) เปลี่ยนหน้าต่างจากแถวต้นทางเป็นการ์ด มีชื่อ source ที่หัว เอาแท็บออก และเพิ่มปุ่มปลายทางแบบเส้นประ; checkbox เปิด editor ภายในการ์ด รองรับ case ซ้อน และ array Index/field/checkbox ส่งเมื่อมีเงื่อนไข
+- เสร็จ: คง draft ทั้งชุด/ใช้/ยกเลิก/Preview/focus; ยุบส่วนพิเศษไม่ล้างค่าเดิม เพิ่มรายการ array ไม่ทำ assignment/เงื่อนไขก่อนหน้าหาย และเลือก target ที่ถูกใช้อยู่แล้วเปิดค่าเดิมให้ตรวจพร้อมข้อความแจ้ง
+- ไฟล์ Web: `features/mapping/source-mapping-editor.html`, `source-mapping-editor.ts`, `source-mapping-model.ts`, `source-mapping-model.spec.ts`, `mapping-new-tour.ts` และเฉพาะ Mapping ใน `src/styles.scss`; อัปเดตแบบ UI และแผนใน repo เอกสาร
+- หลักฐาน: `npm run build` ผ่าน; `npm run test:ci` **136/136 ใน 13 suites**; `git diff --check` ผ่าน; Edge QA checkbox/case ซ้อน/one-to-many/shared/array/emitWhen/เพิ่มรายการ/ปลายทางถูกใช้แล้ว/ยืนยันและยกเลิก/Escape/focus ผ่าน ไม่มี runtime exception หรือคำขอเขียน Mapping API
+- หลักฐาน layout: จอ 1440/1280 px หน้าต่างกว้าง **720 px**, จอ 600 px กว้าง **570 px**, เลื่อนภายในและ footer อยู่ใน viewport ไม่มี horizontal overflow; ตรวจภาพการ์ดปกติ/case ซ้อน/array แล้ว
+- กำลังทำ: —
+- ติด / รอ: — สำหรับงาน UI นี้; ยังไม่ commit/push และไม่ปิด M5.3 ทั้งข้อ
+- ต่อไป: ผู้ใช้ตรวจ UI; หลักฐานรอบนี้เป็น frontend กับข้อมูลสมมติ ไม่ใช่ external delivery E2E และไม่แก้ service/contract
+
+### 2026-11-25 — แบบการ์ดจับคู่และ checkbox เงื่อนไขพิเศษตามภาพ
+- เสร็จ: เพิ่ม [แบบปรับตามภาพ](source-first-mapping-ui-design.md) สำหรับการเปิดจากปุ่มจับคู่ของแถว: เอาแท็บออก แสดงชื่อต้นทาง การ์ดปลายทาง และปุ่มเพิ่มปลายทางแบบเส้นประ; checkbox เปิดส่วนเงื่อนไขการจับคู่แบบซ้อน หรือส่วน array ที่มี Index/field และ checkbox ส่งเมื่อมีเงื่อนไข
+- หลักฐาน: ตรวจโค้ด UI/ValueExpression/array/conditions เดิมแล้ว; ตัวอย่างในแบบใช้ข้อมูลสมมติและ path จาก schema ทดสอบ ไม่เปลี่ยน contract; ยังไม่ได้แก้ source หรือรัน build/tests ของแบบใหม่นี้
+- กำลังทำ: เตรียมรายการ source Web 6 ไฟล์ในแบบเพื่อให้ผู้ใช้ยืนยัน
+- ติด / รอ: คำยืนยันก่อนแก้ source ตาม AGENTS.md; ไม่ใช้คำยืนยัน M-45 แทนรอบนี้ และยังไม่ commit/push
+- ต่อไป: หลังยืนยัน ปรับการ์ดและส่วนขยาย ทดสอบ draft/checkbox/case ซ้อน/array/ยืนยันและยกเลิก แล้วบันทึกผลจริง
+
 ### 2026-11-25 — commit/push งาน UI Mapping (M-42–M-45)
 - เสร็จ: ตามคำสั่งผู้ใช้ commit และ push repo Web ขึ้น `origin/develop` แล้ว 2 commits: **`e6349e4`** — `feat(mapping): manage source mappings and destinations in dialogs` (โค้ด/tour/tests 11 ไฟล์) และ **`a85f618`** — `style(mapping): align mapping dialogs and sticky preview layout` (เฉพาะ `src/styles.scss` ตามกฎไฟล์ร่วม)
 - เสร็จ: บันทึกเลข commit ในแผนและแบบ UI 4 ไฟล์ ได้แก่ `map-required-ui-design.md`, `destination-table-ui-design.md`, `destination-modal-ui-design.md`, `source-first-mapping-ui-design.md`; คงผลระหว่างทางไว้เป็นประวัติ ส่วนหลักฐานของ source รุ่นสุดท้ายใช้รายการนี้
@@ -855,6 +955,16 @@ last_updated: 2026-11-25
 
   - [x] **M5.3.4** ตารางจับคู่จากต้นทางและ modal รวม array — เสร็จเมื่อ: ตารางไม่มีตัวอย่างและเริ่มจาก Source fields, one-to-many/shared/ค่าอื่น/array/เงื่อนไขแก้ผ่าน draft modal เดียว, ยกเลิกคงของเดิม, build/tests/browser ผ่าน · เป้า 11-25 · ✅ 11-25 Web `e6349e4` (โค้ด) + `a85f618` (styles), build ผ่าน, tests **132/132**, Edge QA 1280/1440 px ผ่านตาม §1/M-45
 
+  - [x] **M5.3.5** การ์ดจับคู่และ checkbox เงื่อนไขพิเศษตามภาพ — เสร็จเมื่อ: หน้าต่างจากแถวไม่มีแท็บเดิม มีการ์ด/เพิ่มปลายทาง/checkbox ขยาย case ซ้อนและ array Index/field/emitWhen, draft/ยืนยัน/ยกเลิกและ mapping อื่นคงเดิม, build/tests/browser ผ่าน · เป้า 11-25 · ✅ 11-25 Web `34414e5` (โค้ด) + `0c2bc9e` (styles) push `origin/develop` แล้ว, build ผ่าน, tests รุ่นสุดท้าย **141/141**, Edge QA 600/1280/1440 px ตาม §1/M-46
+    - Dev 2 (11-25, เพิ่มเติมตามคำยืนยัน): ถอดตัวเลือก `ค่าจากคอลัมน์` ระดับหลักในหน้าต่างที่เลือก source แล้ว ใช้ source ของแถวอัตโนมัติ; แก้ `value-expression-editor.ts`/`source-mapping-editor.html`, build/tests **136/136** และ Edge QA ผ่านตาม §1; ยังไม่ commit/push
+    - Dev 2 (11-25, แก้ expression ลูก): ผู้ใช้ยืนยันให้ถอดทั้งชนิด source และตัวเลือกชื่อ field ที่ซ้ำใน editor ลูกด้วย; ส่ง source ลงทุกระดับและไม่แสดง source leaf controls, แก้เฉพาะ `value-expression-editor.ts`, build/tests **136/136** และ Edge QA พร้อมตรวจภาพผ่านตาม §1; ยังไม่ commit/push
+    - Dev 2 (11-25, array): ผู้ใช้ยืนยันให้เอาส่วน `เงื่อนไขการจับคู่` ใต้กรอบ array ออก; แก้เฉพาะ `source-mapping-editor.html`, build/Edge QA/ตรวจภาพผ่านตาม §1 โดย Index/field/เงื่อนไขส่ง/เพิ่มรายการ/ยืนยันและยกเลิกยังใช้งานได้; ไม่รัน unit tests ซ้ำรอบนี้ และยังไม่ commit/push
+    - Dev 2 (11-25, ปุ่มส่งทุกแถว): ตามคำยืนยันผู้ใช้ ลบปุ่ม `ส่งทุกแถว` จากส่วนจับคู่ข้อมูลจากต้นทางและขั้น tour ที่ชี้ปุ่มนี้; แก้ `mapping-new.html`/`mapping-new-tour.ts`, build และ `git diff --check` ผ่านตาม §1; ยังไม่ commit/push
+    - Dev 2 (11-25, ปุ่มจัดการด้านบน): ตามคำยืนยันผู้ใช้ ลบปุ่ม `จัดการการจับคู่` ด้านบนกับ tour `automap` และปรับค่าเริ่มต้นของจุดคืน focus ให้ตรงปุ่มที่ยังอยู่; แก้ `mapping-new.html`/`mapping-new-tour.ts`/`mapping-new.ts`, build/tests **136/136** และ `git diff --check` ผ่านตาม §1; ยังไม่ commit/push
+
+  - [x] **M5.3.6** รวมรายการของ array เดียวกันในการ์ดเดียว — เสร็จเมื่อ: เพิ่ม/เปิดค่าที่บันทึกใน array เดียวรวม card เดียว ต่างกลุ่ม/concrete parent แยก card, expressions/เงื่อนไข/ยืนยันและยกเลิกคงเดิม, build/tests/browser QA ผ่าน · เป้า 11-25 · ✅ 11-25 Web `34414e5` (โค้ด) + `0c2bc9e` (styles) push `origin/develop` แล้ว, build ผ่าน, tests **141/141**, Edge QA 600/1280/1440 px ตาม §1/M-47
+    - Dev 2 (11-25, ข้อความ field): ตามคำยืนยันผู้ใช้ ลบ ` · มีการจับคู่แล้ว` จาก labels ใน `source-mapping-editor.ts` ทั้ง 3 จุด; build/`git diff --check` ผ่านและ Web HTTP 200 ตาม §1; ไม่รัน unit/browser tests ซ้ำสำหรับการแก้ข้อความ และยังไม่ commit/push
+
 ### M6 — ทดสอบร่วมและเตรียม UAT
 
 - [ ] **M6.1** ทดสอบร่วมและ recovery บน cluster — เสร็จเมื่อ: fixture ผ่านเส้นทาง share → Mapping → Informs ครบ, ทดสอบ restart/หลาย consumer/permissions/mount/secrets พร้อมหลักฐาน environment · เป้า 12-09
@@ -1227,6 +1337,20 @@ Source catalog/การกำหนด fields และสร้าง physical
 - **ตัวอย่างสมมติ:** `first_name` + `last_name` ร่วม expression `concat` ไป `inform.fullName` → ตารางแสดง target นี้ในสอง source rows แต่ serialize assignment ครั้งเดียว; `reference` จับคู่ได้ทั้ง `inform.reference` และ `inform.externalId`; เพิ่ม array item 2/emitWhen แล้วกดยกเลิกไม่เปลี่ยนของเดิม
 - **ขอบเขต:** source projection อ่าน nested expressions/case predicates แต่ไม่อ่าน literal data; มีทางจัดการค่าอื่นและ source ที่ถูกลบ; ใช้ schema/Transformation Program เดิม, required targets ยังเป็น gate ของการตรวจทาน/บันทึก, array ว่างไม่ส่งตามกลไกเดิม และคง Preview sticky 60/40
 - **ไม่เลือก:** กลับทิศ program/เปลี่ยน API, duplicate assignments ตามแต่ละ source ที่ expression อ่าน, ซ่อนค่าคงที่/metadata หรือแก้ actual state ทันทีที่เปลี่ยนค่าใน modal
+
+### M-46 แสดงการจับคู่ของต้นทางเป็นการ์ดและขยายเงื่อนไขด้วย checkbox
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยันแบบภาพและรายการ source รอบนี้; หน้าต่างของ source ไม่มีแท็บเดิม แต่ละการ์ดเลือกปลายทางและใช้ checkbox เปิด editor ของเงื่อนไขการจับคู่/array Index/field/เงื่อนไขส่งได้ เพิ่มหลายปลายทางผ่านปุ่มเส้นประ
+- **ทำไม:** แสดงการตั้งค่าที่เกี่ยวกับปลายทางนั้นอยู่ด้วยกัน และให้การจับคู่ตรงมีฟอร์มสั้นตามภาพผู้ใช้
+- **ตัวอย่างสมมติ:** `trn_no` → `inform.trn_no`; array `inform.driver[]` Index 1 / field `inform.driver[1].trn_no` เก็บ path ภายใน `inform.driver[0].trn_no`; เงื่อนไขส่งใช้ `emitWhen` ของรายการเดิม ไม่เพิ่ม contract field ตามภาพ
+- **ขอบเขต:** ใช้ ValueExpressionEditor/PredicateEditor/Transformation Program เดิม; การยุบส่วนพิเศษเก็บค่าที่ตั้งไว้ เพิ่มรายการใหม่คง mapping ก่อนหน้า และ target ที่ถูกใช้อยู่เปิดค่าเดิมให้ตรวจ; ทางเข้าจัดการทั้งชุด/ค่าอื่นยังใช้ได้
+- **ไม่เลือก:** เปลี่ยน API/contract หรือทำให้การยุบการ์ดล้าง expression/เงื่อนไขโดยเงียบ; actual state เปลี่ยนเมื่อยืนยัน draft ทั้งชุดเท่านั้นตาม M-45
+
+### M-47 รวมรายการของ array เดียวกันในหนึ่งการ์ด
+- **ตัดสิน (2026-11-25):** ผู้ใช้ยืนยันให้ `เพิ่มรายการ` ของ array เดียวกันอยู่ภายในการ์ดเดิม และแยกการ์ดเมื่อเป็นคนละ array; ใช้ concrete group path เพื่อแยก array ลูกที่อยู่คนละ parent item
+- **ทำไม:** ผู้ใช้เห็นชื่อกลุ่มครั้งเดียวและแยก Index/field/เงื่อนไขส่งของแต่ละรายการภายในกลุ่มได้ชัดเจนตามภาพที่ขอ
+- **ตัวอย่างสมมติ:** source `no` → `inform.beneficiaries[1].seq` และ `[2].seq` อยู่ card `inform.beneficiaries[]` เดียว; `inform.drivers[1].seq` อีก card; ภายในยังเก็บ zero-based paths เดิม ไม่เพิ่มหรือแก้ contract
+- **ขอบเขต:** จัดกลุ่มเฉพาะ view และคง assignments/expressions/emitWhen เดิม; แสดงเงื่อนไขครั้งเดียวต่อ index แม้จับคู่หลาย field, เลือก array ซ้ำรวม card เดิม, ย้ายกลุ่มและลบเฉพาะ mappings ของ source ที่แก้โดยไม่ล้างข้อมูล source อื่น; scalar ยังแยก card และ array ไม่มีส่วนแปลงค่าใต้กรอบตามคำยืนยันก่อนหน้า
+- **ไม่เลือก:** สร้าง card ใหม่ทุกครั้งที่เพิ่ม index, รวม array ลูกคนละ parent หรือเปลี่ยน Transformation Program/API เพื่อรองรับรูปแบบหน้าจอ; ยืนยัน/ยกเลิกทั้งชุดตาม M-45 และคง dev server ให้ผู้ใช้
 
 ## 5. คำถาม / ข้อเสนอ (Dev 1 ↔ Dev 2)
 
